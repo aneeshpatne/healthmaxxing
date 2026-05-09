@@ -39,3 +39,5 @@ const injestRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 };
+
+export default injestRoutes;
