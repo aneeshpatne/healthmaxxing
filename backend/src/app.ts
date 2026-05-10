@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import injestRoutes from "./routes/injest.ts";
+import ingestRoutes from "./routes/ingest.ts";
 
 export function buildApp() {
   const app = Fastify({
@@ -10,7 +10,7 @@ export function buildApp() {
     return { ok: true };
   });
 
-  app.register(injestRoutes, {
+  app.register(ingestRoutes, {
     prefix: "/ingest",
   });
 
