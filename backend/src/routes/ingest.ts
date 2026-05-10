@@ -1,6 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import { v7 as uuidv7 } from "uuid";
 import websocket from "@fastify/websocket";
+import { RedisClient } from "bun";
+
+const pub = new RedisClient("redis://localhost:6379");
+const sub = new RedisClient("redis://localhost:6379");
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
   await app.register(websocket);
@@ -73,8 +77,22 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
 
     socket.on("message", async (raw: { toString(): string }) => {
       const message = raw.toString();
-      console.log(message);
+      await pub.publish(`job:${jobId}`, message);
     });
+  });
+
+  app.get("/ws/sub/:jobId", { websocket: true }, async (socket, request) => {
+    const { jobId } = request.params as { jobId: string };
+    const channel = `job:${jobId}`;
+    const listener = (message: string) => {
+      socket.send(message);
+    };
+
+    socket.on("close", async () => {
+      await sub.unsubscribe(channel, listener);
+    });
+
+    await sub.subscribe(channel, listener);
   });
 };
 
