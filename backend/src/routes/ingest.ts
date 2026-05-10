@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 
-const injestRoutes: FastifyPluginAsync = async (app) => {
+const ingestRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/",
     {
@@ -40,4 +40,4 @@ const injestRoutes: FastifyPluginAsync = async (app) => {
   );
 };
 
-export default injestRoutes;
+export default ingestRoutes;
