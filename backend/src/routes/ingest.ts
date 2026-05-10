@@ -1,6 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
+import { v7 as uuidv7 } from "uuid";
+import websocket from "@fastify/websocket";
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
+  await app.register(websocket);
+
   app.post(
     "/",
     {
@@ -49,10 +53,13 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       const response = await fetch("http://192.168.0.50/scale");
 
       if (response.ok) {
-        return reply.send({
+        const id = uuidv7();
+
+        app.log.info({ id }, "Started ingest");
+
+        return reply.code(response.status).send({
           ok: true,
-          note: "scale_read_queued",
-          timeoutMs: 60000,
+          id,
         });
       }
 
@@ -61,6 +68,14 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       });
     },
   );
+  app.get("/ws/tool/:jobId", { websocket: true }, (socket, request) => {
+    const { jobId } = request.params as { jobId: string };
+
+    socket.on("message", async (raw: { toString(): string }) => {
+      const message = raw.toString();
+      console.log(message);
+    });
+  });
 };
 
 export default ingestRoutes;
