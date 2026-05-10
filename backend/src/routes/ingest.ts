@@ -38,6 +38,29 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       };
     },
   );
+  app.post(
+    "/start",
+    {
+      schema: {
+        body: false,
+      },
+    },
+    async (_request, reply) => {
+      const response = await fetch("http://192.168.0.50/scale");
+
+      if (response.ok) {
+        return reply.send({
+          ok: true,
+          note: "scale_read_queued",
+          timeoutMs: 60000,
+        });
+      }
+
+      return reply.code(response.status).send({
+        ok: false,
+      });
+    },
+  );
 };
 
 export default ingestRoutes;
