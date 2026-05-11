@@ -3,7 +3,10 @@ import { v7 as uuidv7 } from "uuid";
 import websocket from "@fastify/websocket";
 import { RedisClient } from "bun";
 import {
+  getProfileIdByJobId,
   initJob,
+  jobExists,
+  profileExists,
   registerUser,
   type JobId,
   type ProfileId,
@@ -53,8 +56,18 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         heartbeat: number;
         impedance: number;
       };
+      const profileId = getProfileIdByJobId(id);
+
+      if (profileId === null) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Job id does not exist",
+        });
+      }
+
       app.log.info({
         id,
+        profileId,
         weight,
         heartbeat,
         impedance,
@@ -113,7 +126,22 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       const { profileId } = request.body as {
         profileId: string;
       };
+
+      if (!profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
       const id: JobId = uuidv7();
+
+      if (jobExists(id)) {
+        return reply.code(409).send({
+          ok: false,
+          error: "Job id already exists",
+        });
+      }
 
       const response = await fetch(
         `http://192.168.0.50/scale?id=${encodeURIComponent(id)}`,
