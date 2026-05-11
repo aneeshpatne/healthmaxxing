@@ -5,14 +5,15 @@ export const db = new Database("mydb.sqlite");
 db.run(`
   CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
     status TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at TEXT,
-    expires_at TEXT,
     result TEXT,
-    error TEXT
-  );
+    error TEXT,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id)
+  )
 `);
 
 db.run(`
