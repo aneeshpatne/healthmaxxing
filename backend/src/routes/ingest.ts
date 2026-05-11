@@ -3,6 +3,7 @@ import { v7 as uuidv7 } from "uuid";
 import websocket from "@fastify/websocket";
 import { RedisClient } from "bun";
 import {
+  addMeasurement,
   getProfileIdByJobId,
   initJob,
   jobExists,
@@ -65,8 +66,16 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const measurementId = addMeasurement(
+        profileId,
+        weight,
+        heartbeat,
+        impedance,
+      );
+
       app.log.info({
         id,
+        measurementId,
         profileId,
         weight,
         heartbeat,
@@ -74,6 +83,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       });
       return {
         ok: true,
+        id: measurementId,
       };
     },
   );
