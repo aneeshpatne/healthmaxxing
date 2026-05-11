@@ -63,7 +63,30 @@ export function initJob(jobId: JobId, profileId: ProfileId): void {
 `,
   ).run(jobId, profileId, "created");
 }
+export function addMeasurement(
+  profileId: ProfileId,
+  weight: number,
+  heartbeat: number,
+  impedance: number,
+): string {
+  const id = uuidv7();
 
+  db.prepare(
+    `
+  INSERT INTO measurements (
+    id,
+    profile_id,
+    weight,
+    heart_rate,
+    impedance,
+    created_at
+  )
+  VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+`,
+  ).run(id, profileId, weight, heartbeat, impedance);
+
+  return id;
+}
 export function registerUser(name: string): ProfileId {
   const profileId: ProfileId = uuidv7();
 
