@@ -14,3 +14,11 @@ db.run(`
     error TEXT
   );
 `);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )
+`);
