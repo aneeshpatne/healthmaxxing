@@ -2,7 +2,12 @@ import type { FastifyPluginAsync } from "fastify";
 import { v7 as uuidv7 } from "uuid";
 import websocket from "@fastify/websocket";
 import { RedisClient } from "bun";
-import { initJob, type JobId } from "../db/commands";
+import {
+  initJob,
+  registerUser,
+  type JobId,
+  type ProfileId,
+} from "../db/commands";
 const pub = new RedisClient("redis://localhost:6379");
 const sub = new RedisClient("redis://localhost:6379");
 
@@ -10,9 +15,18 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
   await app.register(websocket);
 
   app.post(
-    "/",
+    "/:id",
     {
       schema: {
+        params: {
+          type: "object",
+          required: ["id"],
+          properties: {
+            id: {
+              type: "string",
+            },
+          },
+        },
         body: {
           type: "object",
           required: ["weight", "heartbeat", "impedance"],
@@ -31,12 +45,16 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
+      const { id } = request.params as {
+        id: string;
+      };
       const { weight, heartbeat, impedance } = request.body as {
         weight: number;
         heartbeat: number;
         impedance: number;
       };
       app.log.info({
+        id,
         weight,
         heartbeat,
         impedance,
@@ -47,23 +65,68 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
     },
   );
   app.post(
+    "/register",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["name"],
+          properties: {
+            name: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { name } = request.body as {
+        name: string;
+      };
+      const id: ProfileId = registerUser(name);
+
+      app.log.info({ id, name }, "Registered user");
+
+      return reply.code(201).send({
+        ok: true,
+        id,
+        name,
+      });
+    },
+  );
+  app.post(
     "/start",
     {
       schema: {
-        body: false,
+        body: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
       },
     },
-    async (_request, reply) => {
-      const response = await fetch("http://192.168.0.50/scale");
+    async (request, reply) => {
+      const { profileId } = request.body as {
+        profileId: string;
+      };
+      const id: JobId = uuidv7();
+
+      const response = await fetch(
+        `http://192.168.0.50/scale?id=${encodeURIComponent(id)}`,
+      );
 
       if (response.ok) {
-        const id: JobId = uuidv7();
-        initJob(id);
-        app.log.info({ id }, "Started ingest");
+        initJob(id, profileId);
+        app.log.info({ id, profileId }, "Started ingest");
 
         return reply.code(response.status).send({
           ok: true,
           id,
+          profileId,
         });
       }
 
