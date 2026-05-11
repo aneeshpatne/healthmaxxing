@@ -2,8 +2,11 @@ import type { FastifyPluginAsync } from "fastify";
 import { v7 as uuidv7 } from "uuid";
 import { RedisClient } from "bun";
 import {
+  addWaistMeasurement,
   initJob,
   jobExists,
+  listUsers,
+  listUserWaist,
   listUserWeight,
   profileExists,
   registerUser,
@@ -41,6 +44,59 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         ok: true,
         id,
         name,
+      });
+    },
+  );
+
+  app.get("/users", async (_request, reply) => {
+    const users = listUsers();
+
+    return reply.send({
+      ok: true,
+      users,
+    });
+  });
+
+  app.post(
+    "/waist",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["profileId", "waist"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+            waist: {
+              type: "number",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId, waist } = request.body as {
+        profileId: string;
+        waist: number;
+      };
+
+      if (!profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const id = addWaistMeasurement(profileId, waist);
+
+      app.log.info({ id, profileId, waist }, "Registered waist measurement");
+
+      return reply.code(201).send({
+        ok: true,
+        id,
+        profileId,
+        waist,
       });
     },
   );
@@ -98,6 +154,43 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
 
       return reply.code(response.status).send({
         ok: false,
+      });
+    },
+  );
+
+  app.get(
+    "/waist/:profileId",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+
+      if (!profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const waists = listUserWaist(profileId);
+
+      return reply.send({
+        ok: true,
+        profileId,
+        waists,
       });
     },
   );
