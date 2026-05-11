@@ -23,3 +23,15 @@ db.run(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )
 `);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS measurements (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    weight REAL,
+    heart_rate INTEGER,
+    impedance REAL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id)
+  )
+`);
