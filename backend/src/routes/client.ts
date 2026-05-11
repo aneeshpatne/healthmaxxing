@@ -4,6 +4,7 @@ import { RedisClient } from "bun";
 import {
   initJob,
   jobExists,
+  listUserWeight,
   profileExists,
   registerUser,
   type JobId,
@@ -97,6 +98,43 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
 
       return reply.code(response.status).send({
         ok: false,
+      });
+    },
+  );
+
+  app.get(
+    "/weight/:profileId",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+
+      if (!profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const weights = listUserWeight(profileId);
+
+      return reply.send({
+        ok: true,
+        profileId,
+        weights,
       });
     },
   );

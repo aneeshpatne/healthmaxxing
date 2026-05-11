@@ -4,6 +4,12 @@ import { db } from "./db";
 export type JobId = string;
 export type ProfileId = string;
 
+export type UserWeight = {
+  id: string;
+  weight: number | null;
+  createdAt: string;
+};
+
 export function jobExists(jobId: JobId): boolean {
   const job = db
     .prepare(
@@ -102,4 +108,20 @@ export function registerUser(name: string): ProfileId {
   ).run(profileId, name);
 
   return profileId;
+}
+
+export function listUserWeight(profileId: ProfileId): UserWeight[] {
+  return db
+    .prepare(
+      `
+  SELECT
+    id,
+    weight,
+    created_at AS createdAt
+  FROM measurements
+  WHERE profile_id = ?
+  ORDER BY created_at DESC
+`,
+    )
+    .all(profileId) as UserWeight[];
 }
