@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { v7 as uuidv7 } from "uuid";
 import websocket from "@fastify/websocket";
 import { RedisClient } from "bun";
-
+import { initJob, type JobId } from "../db/commands";
 const pub = new RedisClient("redis://localhost:6379");
 const sub = new RedisClient("redis://localhost:6379");
 
@@ -57,8 +57,8 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       const response = await fetch("http://192.168.0.50/scale");
 
       if (response.ok) {
-        const id = uuidv7();
-
+        const id: JobId = uuidv7();
+        initJob(id);
         app.log.info({ id }, "Started ingest");
 
         return reply.code(response.status).send({
