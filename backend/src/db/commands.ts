@@ -10,6 +10,18 @@ export type UserWeight = {
   createdAt: string;
 };
 
+export type UserWaist = {
+  id: string;
+  waist: number;
+  createdAt: string;
+};
+
+export type Users = {
+  id: string;
+  name: string;
+  createdAt: string;
+};
+
 export function jobExists(jobId: JobId): boolean {
   const job = db
     .prepare(
@@ -124,4 +136,56 @@ export function listUserWeight(profileId: ProfileId): UserWeight[] {
 `,
     )
     .all(profileId) as UserWeight[];
+}
+
+export function addWaistMeasurement(
+  profileId: ProfileId,
+  waist: number,
+): string {
+  const id = uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO waist_measurements (
+    id,
+    profile_id,
+    waist,
+    created_at
+  )
+  VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+`,
+  ).run(id, profileId, waist);
+
+  return id;
+}
+
+export function listUserWaist(profileId: ProfileId): UserWaist[] {
+  return db
+    .prepare(
+      `
+  SELECT
+    id,
+    waist,
+    created_at AS createdAt
+  FROM waist_measurements
+  WHERE profile_id = ?
+  ORDER BY created_at DESC
+`,
+    )
+    .all(profileId) as UserWaist[];
+}
+
+export function listUsers(): Users[] {
+  return db
+    .prepare(
+      `
+  SELECT
+    id,
+    name,
+    created_at AS createdAt
+  FROM profiles
+  ORDER BY created_at DESC
+`,
+    )
+    .all() as Users[];
 }

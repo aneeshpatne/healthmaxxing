@@ -35,3 +35,13 @@ db.run(`
     FOREIGN KEY(profile_id) REFERENCES profiles(id)
   )
 `);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS waist_measurements (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    waist REAL NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id)
+  )
+`);
