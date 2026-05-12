@@ -105,4 +105,4 @@ export function calculateHealthMetricsV2(
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
-console.log(calculateHealthMetricsV2(77, 385.38, 172, 25, "male"));
+// console.log(calculateHealthMetricsV2(77, 385.38, 172, 25, "male"));
