@@ -1,9 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { RedisClient } from "bun";
-import {
-  addMeasurement,
-  getProfileIdByJobId,
-} from "../db/commands";
+import { addMeasurement, getProfileIdByJobId } from "../db/commands";
+import { calculateHealthMetricsV2 } from "../calculations/metrics";
 const pub = new RedisClient("redis://localhost:6379");
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
@@ -61,6 +59,8 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         heartbeat,
         impedance,
       );
+
+      console.log(calculateHealthMetricsV2(weight, impedance, 172, 25, "male"));
 
       app.log.info({
         id,
