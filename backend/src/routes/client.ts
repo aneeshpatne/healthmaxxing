@@ -2,9 +2,11 @@ import type { FastifyPluginAsync } from "fastify";
 import { v7 as uuidv7 } from "uuid";
 import { RedisClient } from "bun";
 import {
+  addBodyMeasurement,
   addWaistMeasurement,
   initJob,
   jobExists,
+  listUserBodyMeasurements,
   listUsers,
   listUserWaist,
   listUserWeight,
@@ -28,22 +30,32 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
             name: {
               type: "string",
             },
+            heightCm: {
+              type: "number",
+            },
+            dateOfBirth: {
+              type: "string",
+            },
           },
         },
       },
     },
     async (request, reply) => {
-      const { name } = request.body as {
+      const { name, heightCm = null, dateOfBirth = null } = request.body as {
         name: string;
+        heightCm?: number | null;
+        dateOfBirth?: string | null;
       };
-      const id: ProfileId = registerUser(name);
+      const id: ProfileId = registerUser({ name, heightCm, dateOfBirth });
 
-      app.log.info({ id, name }, "Registered user");
+      app.log.info({ id, name, heightCm, dateOfBirth }, "Registered user");
 
       return reply.code(201).send({
         ok: true,
         id,
         name,
+        heightCm,
+        dateOfBirth,
       });
     },
   );
@@ -97,6 +109,96 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         id,
         profileId,
         waist,
+      });
+    },
+  );
+
+  app.post(
+    "/body-measurements",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["profileId"],
+          anyOf: [{ required: ["waistCm"] }, { required: ["neckCm"] }],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+            waistCm: {
+              type: "number",
+            },
+            neckCm: {
+              type: "number",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId, waistCm = null, neckCm = null } = request.body as {
+        profileId: string;
+        waistCm?: number | null;
+        neckCm?: number | null;
+      };
+
+      if (!profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const id = addBodyMeasurement(profileId, { waistCm, neckCm });
+
+      app.log.info(
+        { id, profileId, waistCm, neckCm },
+        "Registered body measurement",
+      );
+
+      return reply.code(201).send({
+        ok: true,
+        id,
+        profileId,
+        waistCm,
+        neckCm,
+      });
+    },
+  );
+
+  app.get(
+    "/body-measurements/:profileId",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+
+      if (!profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const bodyMeasurements = listUserBodyMeasurements(profileId);
+
+      return reply.send({
+        ok: true,
+        profileId,
+        bodyMeasurements,
       });
     },
   );

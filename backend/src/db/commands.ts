@@ -16,10 +16,30 @@ export type UserWaist = {
   createdAt: string;
 };
 
+export type BodyMeasurement = {
+  id: string;
+  waistCm: number | null;
+  neckCm: number | null;
+  createdAt: string;
+};
+
 export type Users = {
   id: string;
-  name: string;
+  name: string | null;
+  heightCm: number | null;
+  dateOfBirth: string | null;
   createdAt: string;
+};
+
+export type RegisterUserInput = {
+  name: string;
+  heightCm?: number | null;
+  dateOfBirth?: string | null;
+};
+
+export type BodyMeasurementInput = {
+  waistCm?: number | null;
+  neckCm?: number | null;
 };
 
 export function jobExists(jobId: JobId): boolean {
@@ -105,7 +125,11 @@ export function addMeasurement(
 
   return id;
 }
-export function registerUser(name: string): ProfileId {
+export function registerUser({
+  name,
+  heightCm = null,
+  dateOfBirth = null,
+}: RegisterUserInput): ProfileId {
   const profileId: ProfileId = uuidv7();
 
   db.prepare(
@@ -113,11 +137,13 @@ export function registerUser(name: string): ProfileId {
   INSERT INTO profiles (
     id,
     name,
+    height_cm,
+    date_of_birth,
     created_at
   )
-  VALUES (?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 `,
-  ).run(profileId, name);
+  ).run(profileId, name, heightCm, dateOfBirth);
 
   return profileId;
 }
@@ -138,25 +164,53 @@ export function listUserWeight(profileId: ProfileId): UserWeight[] {
     .all(profileId) as UserWeight[];
 }
 
-export function addWaistMeasurement(
+export function addBodyMeasurement(
   profileId: ProfileId,
-  waist: number,
+  { waistCm = null, neckCm = null }: BodyMeasurementInput,
 ): string {
+  if (waistCm === null && neckCm === null) {
+    throw new Error("At least one body measurement is required");
+  }
+
   const id = uuidv7();
 
   db.prepare(
     `
-  INSERT INTO waist_measurements (
+  INSERT INTO body_measurements (
     id,
     profile_id,
-    waist,
+    waist_cm,
+    neck_cm,
     created_at
   )
-  VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 `,
-  ).run(id, profileId, waist);
+  ).run(id, profileId, waistCm, neckCm);
 
   return id;
+}
+
+export function addWaistMeasurement(profileId: ProfileId, waist: number): string {
+  return addBodyMeasurement(profileId, { waistCm: waist });
+}
+
+export function listUserBodyMeasurements(
+  profileId: ProfileId,
+): BodyMeasurement[] {
+  return db
+    .prepare(
+      `
+  SELECT
+    id,
+    waist_cm AS waistCm,
+    neck_cm AS neckCm,
+    created_at AS createdAt
+  FROM body_measurements
+  WHERE profile_id = ?
+  ORDER BY created_at DESC
+`,
+    )
+    .all(profileId) as BodyMeasurement[];
 }
 
 export function listUserWaist(profileId: ProfileId): UserWaist[] {
@@ -165,10 +219,11 @@ export function listUserWaist(profileId: ProfileId): UserWaist[] {
       `
   SELECT
     id,
-    waist,
+    waist_cm AS waist,
     created_at AS createdAt
-  FROM waist_measurements
+  FROM body_measurements
   WHERE profile_id = ?
+    AND waist_cm IS NOT NULL
   ORDER BY created_at DESC
 `,
     )
@@ -182,6 +237,8 @@ export function listUsers(): Users[] {
   SELECT
     id,
     name,
+    height_cm AS heightCm,
+    date_of_birth AS dateOfBirth,
     created_at AS createdAt
   FROM profiles
   ORDER BY created_at DESC
