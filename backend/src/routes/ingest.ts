@@ -4,6 +4,29 @@ import { addMeasurement, getProfileIdByJobId } from "../db/commands";
 import { calculateHealthMetricsV2 } from "../calculations/metrics";
 const pub = new RedisClient("redis://localhost:6379");
 
+async function publishJobStatus(jobId: string, status: string): Promise<void> {
+  const statusRaw = await redis.get(`status:${jobId}`);
+
+  if (statusRaw === null) {
+    return;
+  }
+
+  const currentStatus = JSON.parse(statusRaw) as {
+    status?: string;
+    version?: number;
+  };
+  const nextStatus = {
+    ...currentStatus,
+    status,
+    version: (currentStatus.version ?? 0) + 1,
+    updatedAt: Date.now(),
+  };
+  const message = JSON.stringify(nextStatus);
+
+  await redis.set(`status:${jobId}`, message);
+  await pub.publish(`status:${jobId}`, message);
+}
+
 const ingestRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/:id",
@@ -59,6 +82,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         heartbeat,
         impedance,
       );
+      await publishJobStatus(id, "calculating");
 
       console.log(calculateHealthMetricsV2(weight, impedance, 172, 25, "male"));
 
@@ -79,23 +103,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/ws/tool/:jobId", { websocket: true }, async (socket, request) => {
     const { jobId } = request.params as { jobId: string };
-    const statusRaw = await redis.get(`status:${jobId}`);
-
-    if (statusRaw !== null) {
-      const currentStatus = JSON.parse(statusRaw) as {
-        status?: string;
-        version?: number;
-      };
-      const nextStatus = {
-        ...currentStatus,
-        status: "streaming",
-        version: (currentStatus.version ?? 0) + 1,
-        updatedAt: Date.now(),
-      };
-
-      await redis.set(`status:${jobId}`, JSON.stringify(nextStatus));
-      await pub.publish(`status:${jobId}`, JSON.stringify(nextStatus));
-    }
+    await publishJobStatus(jobId, "streaming");
 
     socket.on("message", async (raw: { toString(): string }) => {
       const message = raw.toString();
