@@ -16,6 +16,7 @@ import {
   type ProfileId,
 } from "../db/commands";
 
+const redis = new RedisClient("redis://localhost:6379");
 const sub = new RedisClient("redis://localhost:6379");
 
 const clientRoutes: FastifyPluginAsync = async (app) => {
@@ -247,6 +248,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
+      await redis.set(
+        `status:${id}`,
+        JSON.stringify({
+          status: "starting",
+          version: 1,
+          updatedAt: Date.now(),
+        }),
+      );
       const response = await fetch(
         `http://192.168.0.50/scale?id=${encodeURIComponent(id)}`,
       );
