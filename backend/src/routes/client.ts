@@ -256,6 +256,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
           updatedAt: Date.now(),
         }),
       );
+
       const response = await fetch(
         `http://192.168.0.50/scale?id=${encodeURIComponent(id)}`,
       );
