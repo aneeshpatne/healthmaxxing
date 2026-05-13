@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { RedisClient } from "bun";
+import { redis, RedisClient } from "bun";
 import { addMeasurement, getProfileIdByJobId } from "../db/commands";
 import { calculateHealthMetricsV2 } from "../calculations/metrics";
 const pub = new RedisClient("redis://localhost:6379");
@@ -77,8 +77,25 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  app.get("/ws/tool/:jobId", { websocket: true }, (socket, request) => {
+  app.get("/ws/tool/:jobId", { websocket: true }, async (socket, request) => {
     const { jobId } = request.params as { jobId: string };
+    const statusRaw = await redis.get(`status:${jobId}`);
+
+    if (statusRaw !== null) {
+      const currentStatus = JSON.parse(statusRaw) as {
+        status?: string;
+        version?: number;
+      };
+      const nextStatus = {
+        ...currentStatus,
+        status: "streaming",
+        version: (currentStatus.version ?? 0) + 1,
+        updatedAt: Date.now(),
+      };
+
+      await redis.set(`status:${jobId}`, JSON.stringify(nextStatus));
+      await pub.publish(`status:${jobId}`, JSON.stringify(nextStatus));
+    }
 
     socket.on("message", async (raw: { toString(): string }) => {
       const message = raw.toString();
