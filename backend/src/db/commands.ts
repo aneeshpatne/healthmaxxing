@@ -1,5 +1,6 @@
 import { v7 as uuidv7 } from "uuid";
 import { db } from "./db";
+import { idText } from "typescript";
 
 export type JobId = string;
 export type ProfileId = string;
@@ -54,6 +55,13 @@ export type ProgressMeasurement = {
   value: number;
   unit: string;
   notes: "postWorkOut" | "preWorkOut";
+};
+
+export type profile = {
+  id: number;
+  name: string;
+  heightCm: number;
+  dateOfBirth: string;
 };
 
 export function jobExists(jobId: JobId): boolean {
@@ -302,4 +310,19 @@ export function listUsers(): Users[] {
 `,
     )
     .all() as Users[];
+}
+
+export function getProfileById(id: ProfileId) {
+  return db
+    .prepare(
+      `
+  SELECT
+    id,
+    name,
+    height_cm AS heightCm,
+    date_of_birth AS dateOfBirth,
+  FROM profiles
+  WHERE id = ? `,
+    )
+    .get(id) as profile;
 }

@@ -64,6 +64,8 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
 
       console.log(calculateHealthMetricsV2(weight, impedance, 172, 25, "male"));
 
+      await publishJobStatus(id, "report generated.");
+
       app.log.info({
         id,
         measurementId,
