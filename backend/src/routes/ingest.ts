@@ -2,30 +2,8 @@ import type { FastifyPluginAsync } from "fastify";
 import { redis, RedisClient } from "bun";
 import { addMeasurement, getProfileIdByJobId } from "../db/commands";
 import { calculateHealthMetricsV2 } from "../calculations/metrics";
+import { publishJobStatus } from "../lib/redis";
 const pub = new RedisClient("redis://localhost:6379");
-
-async function publishJobStatus(jobId: string, status: string): Promise<void> {
-  const statusRaw = await redis.get(`status:${jobId}`);
-
-  if (statusRaw === null) {
-    return;
-  }
-
-  const currentStatus = JSON.parse(statusRaw) as {
-    status?: string;
-    version?: number;
-  };
-  const nextStatus = {
-    ...currentStatus,
-    status,
-    version: (currentStatus.version ?? 0) + 1,
-    updatedAt: Date.now(),
-  };
-  const message = JSON.stringify(nextStatus);
-
-  await redis.set(`status:${jobId}`, message);
-  await pub.publish(`status:${jobId}`, message);
-}
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
   app.post(
