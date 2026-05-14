@@ -10,17 +10,22 @@ export type UserWeight = {
   createdAt: string;
 };
 
-export type UserWaist = {
-  id: string;
-  waist: number;
-  createdAt: string;
-};
-
 export type BodyMeasurement = {
   id: string;
   waistCm: number | null;
   neckCm: number | null;
   createdAt: string;
+};
+
+export type BodyCompositionMetrics = {
+  id?: string;
+  profileId: ProfileId;
+  bodyFatPct: number;
+  muscleMassKg: number;
+  waterPct: number;
+  proteinPct: number;
+  fatFreeMassKg: number;
+  fatMassKg: number;
 };
 
 export type Users = {
@@ -40,6 +45,15 @@ export type RegisterUserInput = {
 export type BodyMeasurementInput = {
   waistCm?: number | null;
   neckCm?: number | null;
+};
+
+export type ProgressMeasurement = {
+  id?: string;
+  profile_id: string;
+  name: "bicep" | "chest" | "thigh" | "forearm" | "calf" | "shoulder";
+  value: number;
+  unit: string;
+  notes: "postWorkOut" | "preWorkOut";
 };
 
 export function jobExists(jobId: JobId): boolean {
@@ -190,10 +204,6 @@ export function addBodyMeasurement(
   return id;
 }
 
-export function addWaistMeasurement(profileId: ProfileId, waist: number): string {
-  return addBodyMeasurement(profileId, { waistCm: waist });
-}
-
 export function listUserBodyMeasurements(
   profileId: ProfileId,
 ): BodyMeasurement[] {
@@ -213,21 +223,68 @@ export function listUserBodyMeasurements(
     .all(profileId) as BodyMeasurement[];
 }
 
-export function listUserWaist(profileId: ProfileId): UserWaist[] {
-  return db
-    .prepare(
-      `
-  SELECT
+export function addBodyCompositionMetrics(
+  metrics: BodyCompositionMetrics,
+): string {
+  const id = metrics.id ?? uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO body_composition_metrics (
     id,
-    waist_cm AS waist,
-    created_at AS createdAt
-  FROM body_measurements
-  WHERE profile_id = ?
-    AND waist_cm IS NOT NULL
-  ORDER BY created_at DESC
+    profile_id,
+    body_fat_pct,
+    muscle_mass_kg,
+    water_pct,
+    protein_pct,
+    fat_free_mass_kg,
+    fat_mass_kg,
+    created_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 `,
-    )
-    .all(profileId) as UserWaist[];
+  ).run(
+    id,
+    metrics.profileId,
+    metrics.bodyFatPct,
+    metrics.muscleMassKg,
+    metrics.waterPct,
+    metrics.proteinPct,
+    metrics.fatFreeMassKg,
+    metrics.fatMassKg,
+  );
+
+  return id;
+}
+
+export function addProgressMeasurement(
+  measurement: ProgressMeasurement,
+): string {
+  const id = measurement.id ?? uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO progress_measurements (
+    id,
+    profile_id,
+    name,
+    value,
+    unit,
+    notes,
+    created_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+`,
+  ).run(
+    id,
+    measurement.profile_id,
+    measurement.name,
+    measurement.value,
+    measurement.unit,
+    measurement.notes,
+  );
+
+  return id;
 }
 
 export function listUsers(): Users[] {
