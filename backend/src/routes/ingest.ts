@@ -1,6 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { redis, RedisClient } from "bun";
-import { addMeasurement, getProfileIdByJobId } from "../db/commands";
+import {
+  addMeasurement,
+  getProfileById,
+  getProfileIdByJobId,
+  type profile,
+} from "../db/commands";
 import { calculateHealthMetricsV2 } from "../calculations/metrics";
 import { publishJobStatus } from "../lib/redis";
 const pub = new RedisClient("redis://localhost:6379");
@@ -60,9 +65,26 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         heartbeat,
         impedance,
       );
+
+      const profile: profile = getProfileById(id);
       await publishJobStatus(id, "calculating");
 
-      console.log(calculateHealthMetricsV2(weight, impedance, 172, 25, "male"));
+      // console.log(
+      //   calculateHealthMetricsV2(
+      //     weight,
+      //     impedance,
+      //     profile.heightCm,
+      //     profile.heightCm,
+      //     "male",
+      //   ),
+      // );
+      const metrics = calculateHealthMetricsV2(
+        weight,
+        impedance,
+        profile.heightCm,
+        profile.heightCm,
+        "male",
+      );
 
       await publishJobStatus(id, "report generated.");
 
