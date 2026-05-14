@@ -83,7 +83,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         impedance,
         profile.heightCm,
         profile.heightCm,
-        "male",
+        profile.gender,
       );
 
       await publishJobStatus(id, "report generated.");

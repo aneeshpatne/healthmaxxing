@@ -1,6 +1,5 @@
 import { v7 as uuidv7 } from "uuid";
 import { db } from "./db";
-import { idText } from "typescript";
 
 export type JobId = string;
 export type ProfileId = string;
@@ -34,13 +33,15 @@ export type Users = {
   name: string | null;
   heightCm: number | null;
   dateOfBirth: string | null;
+  gender: "male" | "female" | null;
   createdAt: string;
 };
 
 export type RegisterUserInput = {
   name: string;
-  heightCm?: number | null;
-  dateOfBirth?: string | null;
+  heightCm: number;
+  dateOfBirth: string;
+  gender: "male" | "female";
 };
 
 export type BodyMeasurementInput = {
@@ -58,10 +59,11 @@ export type ProgressMeasurement = {
 };
 
 export type profile = {
-  id: number;
+  id: string;
   name: string;
   heightCm: number;
   dateOfBirth: string;
+  gender: "male" | "female";
 };
 
 export function jobExists(jobId: JobId): boolean {
@@ -149,8 +151,9 @@ export function addMeasurement(
 }
 export function registerUser({
   name,
-  heightCm = null,
-  dateOfBirth = null,
+  heightCm,
+  dateOfBirth,
+  gender,
 }: RegisterUserInput): ProfileId {
   const profileId: ProfileId = uuidv7();
 
@@ -161,11 +164,12 @@ export function registerUser({
     name,
     height_cm,
     date_of_birth,
+    gender,
     created_at
   )
-  VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?, ?,  CURRENT_TIMESTAMP)
 `,
-  ).run(profileId, name, heightCm, dateOfBirth);
+  ).run(profileId, name, heightCm, dateOfBirth, gender);
 
   return profileId;
 }
@@ -304,6 +308,7 @@ export function listUsers(): Users[] {
     name,
     height_cm AS heightCm,
     date_of_birth AS dateOfBirth,
+    gender,
     created_at AS createdAt
   FROM profiles
   ORDER BY created_at DESC
@@ -321,6 +326,7 @@ export function getProfileById(id: ProfileId) {
     name,
     height_cm AS heightCm,
     date_of_birth AS dateOfBirth,
+    gender
   FROM profiles
   WHERE id = ? `,
     )
