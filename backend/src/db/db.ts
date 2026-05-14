@@ -49,3 +49,31 @@ db.run(`
     CHECK (waist_cm IS NOT NULL OR neck_cm IS NOT NULL)
   )
 `);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS body_composition_metrics (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    body_fat_pct REAL NOT NULL,
+    muscle_mass_kg REAL NOT NULL,
+    water_pct REAL NOT NULL,
+    protein_pct REAL NOT NULL,
+    fat_free_mass_kg REAL NOT NULL,
+    fat_mass_kg REAL NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id)
+  )
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS progress_measurements (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit TEXT NOT NULL DEFAULT 'cm',
+    notes TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id)
+  )
+`);
