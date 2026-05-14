@@ -28,6 +28,15 @@ export type BodyCompositionMetrics = {
   fatMassKg: number;
 };
 
+export type CalculatedBodyCompositionMetrics = {
+  body_fat_pct: number;
+  muscle_mass_kg: number;
+  water_pct: number;
+  protein_pct: number;
+  fat_free_mass_kg: number;
+  fat_mass_kg: number;
+};
+
 export type Users = {
   id: string;
   name: string | null;
@@ -267,6 +276,21 @@ export function addBodyCompositionMetrics(
   );
 
   return id;
+}
+
+export function saveBodyCompositionMetrics(
+  profileId: ProfileId,
+  metrics: CalculatedBodyCompositionMetrics,
+): string {
+  return addBodyCompositionMetrics({
+    profileId,
+    bodyFatPct: metrics.body_fat_pct,
+    muscleMassKg: metrics.muscle_mass_kg,
+    waterPct: metrics.water_pct,
+    proteinPct: metrics.protein_pct,
+    fatFreeMassKg: metrics.fat_free_mass_kg,
+    fatMassKg: metrics.fat_mass_kg,
+  });
 }
 
 export function addProgressMeasurement(

@@ -4,11 +4,27 @@ import {
   addMeasurement,
   getProfileById,
   getProfileIdByJobId,
+  saveBodyCompositionMetrics,
   type profile,
 } from "../db/commands";
 import { calculateHealthMetricsV2 } from "../calculations/metrics";
 import { publishJobStatus } from "../lib/redis";
 const pub = new RedisClient("redis://localhost:6379");
+
+function calculateAgeYears(dateOfBirth: string): number {
+  const birthDate = new Date(dateOfBirth);
+  const now = new Date();
+  let age = now.getUTCFullYear() - birthDate.getUTCFullYear();
+  const birthdayThisYear = new Date(
+    Date.UTC(now.getUTCFullYear(), birthDate.getUTCMonth(), birthDate.getUTCDate()),
+  );
+
+  if (now < birthdayThisYear) {
+    age -= 1;
+  }
+
+  return age;
+}
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
   app.post(
@@ -66,7 +82,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         impedance,
       );
 
-      const profile: profile = getProfileById(id);
+      const profile: profile = getProfileById(profileId);
       await publishJobStatus(id, "calculating");
 
       // console.log(
@@ -82,9 +98,10 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         weight,
         impedance,
         profile.heightCm,
-        profile.heightCm,
+        calculateAgeYears(profile.dateOfBirth),
         profile.gender,
       );
+      const metricsId = saveBodyCompositionMetrics(profileId, metrics);
 
       await publishJobStatus(id, "report generated.");
 
@@ -95,6 +112,8 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         weight,
         heartbeat,
         impedance,
+        metricsId,
+        metrics,
       });
       return {
         ok: true,
