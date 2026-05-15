@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "@fastify/websocket": "^11.2.0",
+    "@langchain/core": "^1.1.46",
     "bullmq": "^5.76.8",
     "fastify": "^5.8.5",
+    "langchain": "^1.4.0",
     "uuid": "^14.0.0"
   }
 }
