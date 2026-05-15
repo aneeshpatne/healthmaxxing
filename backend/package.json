@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@fastify/websocket": "^11.2.0",
+    "bullmq": "^5.76.8",
     "fastify": "^5.8.5",
     "uuid": "^14.0.0"
   }
