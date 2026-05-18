@@ -9,6 +9,7 @@
         "@langchain/core": "^1.1.46",
         "@langchain/google": "^0.1.11",
         "@langchain/openai": "^1.4.5",
+        "@langchain/openrouter": "^0.2.4",
         "bullmq": "^5.76.8",
         "dotenv": "^17.4.2",
         "fastify": "^5.8.5",
@@ -53,6 +54,8 @@
     "@langchain/langgraph-sdk": ["@langchain/langgraph-sdk@1.9.2", "", { "dependencies": { "@langchain/core": "^1.1.44", "@langchain/protocol": "^0.0.15", "@types/json-schema": "^7.0.15", "p-queue": "^9.0.1", "p-retry": "^7.1.1", "uuid": "^13.0.0" }, "peerDependencies": { "react": "^18 || ^19", "react-dom": "^18 || ^19", "svelte": "^4.0.0 || ^5.0.0", "vue": "^3.0.0" }, "optionalPeers": ["react", "react-dom", "svelte", "vue"] }, "sha512-1kDPjR0VH/39q2h8k0Sxi35KxOvEQPModVCepxGLlRkbZmuWUH+zfICuJd3rmD1ByeOKQBZEaB7Y+VCYmSMt1w=="],
 
     "@langchain/openai": ["@langchain/openai@1.4.5", "", { "dependencies": { "js-tiktoken": "^1.0.12", "openai": "^6.34.0", "zod": "^3.25.76 || ^4" }, "peerDependencies": { "@langchain/core": "^1.1.42" } }, "sha512-bQ2WMIZfSh02trJLYSAtiIcD3j6EBCiAm9nw0dZWQsVaUxmWc3JJqs8uUte6AkMazmLHzcUIw+14UkXO5fRJvQ=="],
+
+    "@langchain/openrouter": ["@langchain/openrouter@0.2.4", "", { "dependencies": { "@langchain/openai": "1.4.5", "eventsource-parser": "^3.0.6", "openai": "^6.22.0" }, "peerDependencies": { "@langchain/core": "^1.0.0" } }, "sha512-FzoHUwIM4eE3rcMKZ1dL9a3vgVrz+6WiS5ygIMyHagNlPDUxpdg1V5LnA+ZVWosNyAtAkFYmz+DQZys9nM9oQQ=="],
 
     "@langchain/protocol": ["@langchain/protocol@0.0.15", "", {}, "sha512-MllvbpMjqHevUm+v94M422mH7XKN+wGCvJRBVROTWBotEDOATYB4Ktk2UheYP859y9o2LlhtPek5t1T9eyfAbQ=="],
 
