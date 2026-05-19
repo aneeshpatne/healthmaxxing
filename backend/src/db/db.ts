@@ -22,6 +22,7 @@ db.run(`
     name TEXT,
     height_cm REAL,
     date_of_birth TEXT,
+    peopleType TEXT,
     gender TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )
