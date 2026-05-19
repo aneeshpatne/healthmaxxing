@@ -24,7 +24,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         body: {
           type: "object",
-          required: ["name", "heightCm", "dateOfBirth", "gender"],
+          required: ["name", "heightCm", "dateOfBirth", "peopleType", "gender"],
           properties: {
             name: {
               type: "string",
@@ -34,6 +34,10 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
             },
             dateOfBirth: {
               type: "string",
+            },
+            peopleType: {
+              type: "string",
+              enum: ["standard", "athlete"],
             },
             gender: {
               type: "string",
@@ -48,21 +52,27 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         name,
         heightCm,
         dateOfBirth,
+        peopleType,
         gender,
       } = request.body as {
         name: string;
         heightCm: number;
         dateOfBirth: string;
+        peopleType: "standard" | "athlete";
         gender: "male" | "female";
       };
       const id: ProfileId = registerUser({
         name,
         heightCm,
         dateOfBirth,
+        peopleType,
         gender,
       });
 
-      app.log.info({ id, name, heightCm, dateOfBirth, gender }, "Registered user");
+      app.log.info(
+        { id, name, heightCm, dateOfBirth, peopleType, gender },
+        "Registered user",
+      );
 
       return reply.code(201).send({
         ok: true,
@@ -70,6 +80,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         name,
         heightCm,
         dateOfBirth,
+        peopleType,
         gender,
       });
     },
