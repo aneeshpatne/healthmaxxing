@@ -42,6 +42,7 @@ export type Users = {
   name: string | null;
   heightCm: number | null;
   dateOfBirth: string | null;
+  peopleType: "standard" | "athlete" | null;
   gender: "male" | "female" | null;
   createdAt: string;
 };
@@ -50,6 +51,7 @@ export type RegisterUserInput = {
   name: string;
   heightCm: number;
   dateOfBirth: string;
+  peopleType: "standard" | "athlete";
   gender: "male" | "female";
 };
 
@@ -72,6 +74,7 @@ export type profile = {
   name: string;
   heightCm: number;
   dateOfBirth: string;
+  peopleType: "standard" | "athlete";
   gender: "male" | "female";
 };
 
@@ -162,6 +165,7 @@ export function registerUser({
   name,
   heightCm,
   dateOfBirth,
+  peopleType,
   gender,
 }: RegisterUserInput): ProfileId {
   const profileId: ProfileId = uuidv7();
@@ -173,12 +177,13 @@ export function registerUser({
     name,
     height_cm,
     date_of_birth,
+    peopleType,
     gender,
     created_at
   )
-  VALUES (?, ?, ?, ?, ?,  CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 `,
-  ).run(profileId, name, heightCm, dateOfBirth, gender);
+  ).run(profileId, name, heightCm, dateOfBirth, peopleType, gender);
 
   return profileId;
 }
@@ -332,6 +337,7 @@ export function listUsers(): Users[] {
     name,
     height_cm AS heightCm,
     date_of_birth AS dateOfBirth,
+    peopleType,
     gender,
     created_at AS createdAt
   FROM profiles
@@ -350,6 +356,7 @@ export function getProfileById(id: ProfileId) {
     name,
     height_cm AS heightCm,
     date_of_birth AS dateOfBirth,
+    peopleType,
     gender
   FROM profiles
   WHERE id = ? `,
