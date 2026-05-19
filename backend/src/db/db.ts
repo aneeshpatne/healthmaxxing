@@ -68,6 +68,32 @@ db.run(`
 `);
 
 db.run(`
+  CREATE TABLE IF NOT EXISTS body_composition_metrics_new (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    bmi REAL NOT NULL,
+    body_fat_pct REAL NOT NULL,
+    fat_mass_kg REAL NOT NULL,
+    fat_free_mass_kg REAL NOT NULL,
+    body_score INTEGER NOT NULL,
+    body_age_years INTEGER NOT NULL,
+    water_pct REAL NOT NULL,
+    muscle_mass_kg REAL NOT NULL,
+    muscle_rate_pct REAL NOT NULL,
+    bmr_kcal INTEGER NOT NULL,
+    ideal_weight_kg REAL NOT NULL,
+    protein_mass_kg REAL NOT NULL,
+    protein_pct REAL NOT NULL,
+    skeletal_muscle_kg REAL NOT NULL,
+    subcutaneous_fat_pct REAL NOT NULL,
+    subcutaneous_fat_mass_kg REAL NOT NULL,
+    predicted_lean_mass_kg REAL NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id)
+  )
+`);
+
+db.run(`
   CREATE TABLE IF NOT EXISTS progress_measurements (
     id TEXT PRIMARY KEY,
     profile_id TEXT NOT NULL,
