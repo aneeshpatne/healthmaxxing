@@ -7,7 +7,7 @@ import {
   saveBodyCompositionMetrics,
   type profile,
 } from "../db/commands";
-import { calculateHealthMetricsV2 } from "../calculations/metrics";
+import { calculateProprietaryMetrics } from "../calculations/proprietaryMetrics";
 import { publishJobStatus } from "../lib/redis";
 const pub = new RedisClient("redis://localhost:6379");
 
@@ -94,13 +94,14 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       //     "male",
       //   ),
       // );
-      const metrics = calculateHealthMetricsV2(
-        weight,
-        impedance,
-        profile.heightCm,
-        calculateAgeYears(profile.dateOfBirth),
-        profile.gender,
-      );
+      const metrics = calculateProprietaryMetrics({
+        weight_kg: weight,
+        impedance_ohms: impedance,
+        height_cm: profile.heightCm,
+        age_years: calculateAgeYears(profile.dateOfBirth),
+        sex: profile.gender,
+        people_type: profile.peopleType,
+      });
       const metricsId = saveBodyCompositionMetrics(profileId, metrics);
 
       await publishJobStatus(id, "report generated.");
