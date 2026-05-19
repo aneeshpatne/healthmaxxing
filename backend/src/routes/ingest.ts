@@ -2,9 +2,9 @@ import type { FastifyPluginAsync } from "fastify";
 import { redis, RedisClient } from "bun";
 import {
   addMeasurement,
+  addProprietaryBodyCompositionMetrics,
   getProfileById,
   getProfileIdByJobId,
-  saveBodyCompositionMetrics,
   type profile,
 } from "../db/commands";
 import { calculateProprietaryMetrics } from "../calculations/proprietaryMetrics";
@@ -102,7 +102,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         sex: profile.gender,
         people_type: profile.peopleType,
       });
-      const metricsId = saveBodyCompositionMetrics(profileId, metrics);
+      const metricsId = addProprietaryBodyCompositionMetrics(profileId, metrics);
 
       await publishJobStatus(id, "report generated.");
 
