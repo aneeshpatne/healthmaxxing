@@ -1,5 +1,6 @@
 import { v7 as uuidv7 } from "uuid";
 import { db } from "./db";
+import type { ProprietaryBodyCompositionMetrics } from "../calculations/proprietaryMetrics";
 
 export type JobId = string;
 export type ProfileId = string;
@@ -296,6 +297,63 @@ export function saveBodyCompositionMetrics(
     fatFreeMassKg: metrics.fat_free_mass_kg,
     fatMassKg: metrics.fat_mass_kg,
   });
+}
+
+export function addProprietaryBodyCompositionMetrics(
+  profileId: ProfileId,
+  metrics: ProprietaryBodyCompositionMetrics,
+): string {
+  const id = uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO body_composition_metrics_new (
+    id,
+    profile_id,
+    bmi,
+    body_fat_pct,
+    fat_mass_kg,
+    fat_free_mass_kg,
+    body_score,
+    body_age_years,
+    water_pct,
+    muscle_mass_kg,
+    muscle_rate_pct,
+    bmr_kcal,
+    ideal_weight_kg,
+    protein_mass_kg,
+    protein_pct,
+    skeletal_muscle_kg,
+    subcutaneous_fat_pct,
+    subcutaneous_fat_mass_kg,
+    predicted_lean_mass_kg,
+    created_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+`,
+  ).run(
+    id,
+    profileId,
+    metrics.bmi,
+    metrics.body_fat_pct,
+    metrics.fat_mass_kg,
+    metrics.fat_free_mass_kg,
+    metrics.body_score,
+    metrics.body_age_years,
+    metrics.water_pct,
+    metrics.muscle_mass_kg,
+    metrics.muscle_rate_pct,
+    metrics.bmr_kcal,
+    metrics.ideal_weight_kg,
+    metrics.protein_mass_kg,
+    metrics.protein_pct,
+    metrics.skeletal_muscle_kg,
+    metrics.subcutaneous_fat_pct,
+    metrics.subcutaneous_fat_mass_kg,
+    metrics.predicted_lean_mass_kg,
+  );
+
+  return id;
 }
 
 export function addProgressMeasurement(
