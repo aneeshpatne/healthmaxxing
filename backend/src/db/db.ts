@@ -81,6 +81,7 @@ db.run(`
     muscle_mass_kg REAL NOT NULL,
     muscle_rate_pct REAL NOT NULL,
     bmr_kcal INTEGER NOT NULL,
+    visceral_fat INTEGER NOT NULL,
     ideal_weight_kg REAL NOT NULL,
     protein_mass_kg REAL NOT NULL,
     protein_pct REAL NOT NULL,

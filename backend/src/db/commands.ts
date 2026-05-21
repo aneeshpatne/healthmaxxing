@@ -320,6 +320,7 @@ export function addProprietaryBodyCompositionMetrics(
     muscle_mass_kg,
     muscle_rate_pct,
     bmr_kcal,
+    visceral_fat,
     ideal_weight_kg,
     protein_mass_kg,
     protein_pct,
@@ -329,7 +330,7 @@ export function addProprietaryBodyCompositionMetrics(
     predicted_lean_mass_kg,
     created_at
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 `,
   ).run(
     id,
@@ -344,6 +345,7 @@ export function addProprietaryBodyCompositionMetrics(
     metrics.muscle_mass_kg,
     metrics.muscle_rate_pct,
     metrics.bmr_kcal,
+    metrics.visceral_fat,
     metrics.ideal_weight_kg,
     metrics.protein_mass_kg,
     metrics.protein_pct,

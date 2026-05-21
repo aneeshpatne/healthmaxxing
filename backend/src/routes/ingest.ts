@@ -16,7 +16,11 @@ function calculateAgeYears(dateOfBirth: string): number {
   const now = new Date();
   let age = now.getUTCFullYear() - birthDate.getUTCFullYear();
   const birthdayThisYear = new Date(
-    Date.UTC(now.getUTCFullYear(), birthDate.getUTCMonth(), birthDate.getUTCDate()),
+    Date.UTC(
+      now.getUTCFullYear(),
+      birthDate.getUTCMonth(),
+      birthDate.getUTCDate(),
+    ),
   );
 
   if (now < birthdayThisYear) {
@@ -102,20 +106,25 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         sex: profile.gender,
         people_type: profile.peopleType,
       });
-      const metricsId = addProprietaryBodyCompositionMetrics(profileId, metrics);
+      const metricsId = addProprietaryBodyCompositionMetrics(
+        profileId,
+        metrics,
+      );
 
       await publishJobStatus(id, "report generated.");
 
-      app.log.info({
-        id,
-        measurementId,
-        profileId,
-        weight,
-        heartbeat,
-        impedance,
-        metricsId,
-        metrics,
-      });
+      console.log(metrics);
+
+      // app.log.info({
+      //   id,
+      //   measurementId,
+      //   profileId,
+      //   weight,
+      //   heartbeat,
+      //   impedance,
+      //   metricsId,
+      //   metrics,
+      // });
       return {
         ok: true,
         id: measurementId,
