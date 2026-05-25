@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package objectstore;
+
+service ObjectStore {
+  rpc UploadPdf(UploadPdfRequest) returns (UploadPdfResponse);
+}
+
+message UploadPdfRequest {
+  string server_name = 1;
+  string job_name = 2;
+  bytes data = 3;
+  string content_type = 4;
+}
+
+message UploadPdfResponse {
+  bool success = 1;
+}

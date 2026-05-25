@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@fastify/websocket": "^11.2.0",
+    "@grpc/grpc-js": "^1.14.4",
+    "@grpc/proto-loader": "^0.8.1",
     "@langchain/core": "^1.1.46",
     "@langchain/google": "^0.1.11",
     "@langchain/openai": "^1.4.5",
