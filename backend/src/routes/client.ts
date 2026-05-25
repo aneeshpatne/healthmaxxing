@@ -16,8 +16,124 @@ import {
 
 const redis = new RedisClient("redis://localhost:6379");
 const sub = new RedisClient("redis://localhost:6379");
+const LONG_POLL_TIMEOUT_MS = 25_000;
+
+type JobStatusState = {
+  status?: string;
+  version?: number;
+  updatedAt?: number;
+};
+
+function parseJobStatus(raw: string): JobStatusState | null {
+  try {
+    return JSON.parse(raw) as JobStatusState;
+  } catch {
+    return null;
+  }
+}
 
 const clientRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/state/:id/poll", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { version } = req.query as { version: string };
+    const clientVersion = Number(version ?? 0);
+    const stateKey = `status:${id}`;
+    const channel = `status:${id}`;
+
+    const currentRaw = await redis.get(stateKey);
+
+    if (currentRaw === null) {
+      return reply.code(404).send({
+        ok: false,
+        error: "Job status does not exist",
+      });
+    }
+
+    const currentState = parseJobStatus(currentRaw);
+
+    if (currentState === null) {
+      return reply.code(500).send({
+        ok: false,
+        error: "Job status is invalid",
+      });
+    }
+
+    if ((currentState.version ?? 0) > clientVersion) {
+      return reply.send({
+        ok: true,
+        changed: true,
+        state: currentState,
+      });
+    }
+
+    const nextState = await new Promise<JobStatusState | null>(
+      (resolve, reject) => {
+        let settled = false;
+        let timeout: ReturnType<typeof setTimeout>;
+
+        const settle = (state: JobStatusState | null) => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+          clearTimeout(timeout);
+          sub.unsubscribe(channel, listener).catch((error) => {
+            app.log.warn({ error, channel }, "Failed to unsubscribe long poll");
+          });
+          resolve(state);
+        };
+
+        const listener = (message: string) => {
+          const state = parseJobStatus(message);
+
+          if (state !== null && (state.version ?? 0) > clientVersion) {
+            settle(state);
+          }
+        };
+
+        timeout = setTimeout(() => {
+          settle(null);
+        }, LONG_POLL_TIMEOUT_MS);
+
+        sub
+          .subscribe(channel, listener)
+          .then(async () => {
+            const latestRaw = await redis.get(stateKey);
+            const latestState =
+              latestRaw === null ? null : parseJobStatus(latestRaw);
+
+            if (
+              latestState !== null &&
+              (latestState.version ?? 0) > clientVersion
+            ) {
+              settle(latestState);
+            }
+          })
+          .catch((error) => {
+            if (!settled) {
+              settled = true;
+              clearTimeout(timeout);
+              reject(error);
+            }
+          });
+      },
+    );
+
+    if (nextState === null) {
+      return reply.send({
+        ok: true,
+        changed: false,
+        state: currentState,
+      });
+    }
+
+    return reply.send({
+      ok: true,
+      changed: true,
+      state: nextState,
+    });
+  });
   app.post(
     "/register",
     {
@@ -48,19 +164,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
-      const {
-        name,
-        heightCm,
-        dateOfBirth,
-        peopleType,
-        gender,
-      } = request.body as {
-        name: string;
-        heightCm: number;
-        dateOfBirth: string;
-        peopleType: "standard" | "athlete";
-        gender: "male" | "female";
-      };
+      const { name, heightCm, dateOfBirth, peopleType, gender } =
+        request.body as {
+          name: string;
+          heightCm: number;
+          dateOfBirth: string;
+          peopleType: "standard" | "athlete";
+          gender: "male" | "female";
+        };
       const id: ProfileId = registerUser({
         name,
         heightCm,
