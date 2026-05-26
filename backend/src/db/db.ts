@@ -3,6 +3,28 @@ import { Database } from "bun:sqlite";
 export const db = new Database("mydb.sqlite");
 
 db.run(`
+  CREATE TABLE IF NOT EXISTS profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    mail_address TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS profile_metadata (
+    profile_id TEXT PRIMARY KEY,
+    height_cm REAL,
+    date_of_birth TEXT,
+    people_type TEXT,
+    gender TEXT,
+    profile_image TEXT,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id)
+  )
+`);
+
+db.run(`
   CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY,
     profile_id TEXT NOT NULL,
@@ -13,18 +35,6 @@ db.run(`
     result TEXT,
     error TEXT,
     FOREIGN KEY(profile_id) REFERENCES profiles(id)
-  )
-`);
-
-db.run(`
-  CREATE TABLE IF NOT EXISTS profiles (
-    id TEXT PRIMARY KEY,
-    name TEXT,
-    height_cm REAL,
-    date_of_birth TEXT,
-    peopleType TEXT,
-    gender TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )
 `);
 

@@ -9,6 +9,7 @@ import {
   listUsers,
   listUserWeight,
   profileExists,
+  registerProfileMetadata,
   registerUser,
   type JobId,
   type ProfileId,
@@ -140,9 +141,54 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         body: {
           type: "object",
-          required: ["name", "heightCm", "dateOfBirth", "peopleType", "gender"],
+          required: ["name", "mailAddress"],
           properties: {
             name: {
+              type: "string",
+            },
+            mailAddress: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { name, mailAddress } = request.body as {
+        name: string;
+        mailAddress: string;
+      };
+      const id: ProfileId = registerUser({
+        name,
+        mailAddress,
+      });
+
+      app.log.info({ id, name, mailAddress }, "Registered user");
+
+      return reply.code(201).send({
+        ok: true,
+        id,
+        name,
+        mailAddress,
+      });
+    },
+  );
+
+  app.post(
+    "/register/metadata",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: [
+            "profileId",
+            "heightCm",
+            "dateOfBirth",
+            "peopleType",
+            "gender",
+          ],
+          properties: {
+            profileId: {
               type: "string",
             },
             heightCm: {
@@ -159,40 +205,60 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
               type: "string",
               enum: ["male", "female"],
             },
+            profileImage: {
+              type: "string",
+              nullable: true,
+            },
           },
         },
       },
     },
     async (request, reply) => {
-      const { name, heightCm, dateOfBirth, peopleType, gender } =
-        request.body as {
-          name: string;
-          heightCm: number;
-          dateOfBirth: string;
-          peopleType: "standard" | "athlete";
-          gender: "male" | "female";
-        };
-      const id: ProfileId = registerUser({
-        name,
+      const {
+        profileId,
         heightCm,
         dateOfBirth,
         peopleType,
         gender,
+        profileImage = null,
+      } = request.body as {
+        profileId: string;
+        heightCm: number;
+        dateOfBirth: string;
+        peopleType: "standard" | "athlete";
+        gender: "male" | "female";
+        profileImage?: string | null;
+      };
+
+      if (!profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      registerProfileMetadata({
+        profileId,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage,
       });
 
       app.log.info(
-        { id, name, heightCm, dateOfBirth, peopleType, gender },
-        "Registered user",
+        { profileId, heightCm, dateOfBirth, peopleType, gender, profileImage },
+        "Registered profile metadata",
       );
 
       return reply.code(201).send({
         ok: true,
-        id,
-        name,
+        profileId,
         heightCm,
         dateOfBirth,
         peopleType,
         gender,
+        profileImage,
       });
     },
   );

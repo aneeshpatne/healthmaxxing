@@ -41,19 +41,27 @@ export type CalculatedBodyCompositionMetrics = {
 export type Users = {
   id: string;
   name: string | null;
+  mailAddress: string | null;
   heightCm: number | null;
   dateOfBirth: string | null;
   peopleType: "standard" | "athlete" | null;
   gender: "male" | "female" | null;
+  profileImage: string | null;
   createdAt: string;
 };
 
 export type RegisterUserInput = {
   name: string;
-  heightCm: number;
+  mailAddress: string;
+};
+
+export type RegisterProfileMetadataInput = {
+  profileId: ProfileId;
   dateOfBirth: string;
-  peopleType: "standard" | "athlete";
   gender: "male" | "female";
+  heightCm: number;
+  peopleType: "standard" | "athlete";
+  profileImage?: string | null;
 };
 
 export type BodyMeasurementInput = {
@@ -73,10 +81,12 @@ export type ProgressMeasurement = {
 export type profile = {
   id: string;
   name: string;
+  mailAddress: string;
   heightCm: number;
   dateOfBirth: string;
   peopleType: "standard" | "athlete";
   gender: "male" | "female";
+  profileImage: string | null;
 };
 
 export function jobExists(jobId: JobId): boolean {
@@ -164,10 +174,7 @@ export function addMeasurement(
 }
 export function registerUser({
   name,
-  heightCm,
-  dateOfBirth,
-  peopleType,
-  gender,
+  mailAddress,
 }: RegisterUserInput): ProfileId {
   const profileId: ProfileId = uuidv7();
 
@@ -176,17 +183,45 @@ export function registerUser({
   INSERT INTO profiles (
     id,
     name,
-    height_cm,
-    date_of_birth,
-    peopleType,
-    gender,
+    mail_address,
     created_at
   )
-  VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 `,
-  ).run(profileId, name, heightCm, dateOfBirth, peopleType, gender);
+  ).run(profileId, name, mailAddress);
 
   return profileId;
+}
+
+export function registerProfileMetadata({
+  profileId,
+  dateOfBirth,
+  gender,
+  heightCm,
+  peopleType,
+  profileImage = null,
+}: RegisterProfileMetadataInput): void {
+  db.prepare(
+    `
+  INSERT INTO profile_metadata (
+    profile_id,
+    height_cm,
+    date_of_birth,
+    people_type,
+    gender,
+    profile_image,
+    updated_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  ON CONFLICT(profile_id) DO UPDATE SET
+    height_cm = excluded.height_cm,
+    date_of_birth = excluded.date_of_birth,
+    people_type = excluded.people_type,
+    gender = excluded.gender,
+    profile_image = excluded.profile_image,
+    updated_at = CURRENT_TIMESTAMP
+`,
+  ).run(profileId, heightCm, dateOfBirth, peopleType, gender, profileImage);
 }
 
 export function listUserWeight(profileId: ProfileId): UserWeight[] {
@@ -393,15 +428,19 @@ export function listUsers(): Users[] {
     .prepare(
       `
   SELECT
-    id,
-    name,
-    height_cm AS heightCm,
-    date_of_birth AS dateOfBirth,
-    peopleType,
-    gender,
-    created_at AS createdAt
+    profiles.id,
+    profiles.name,
+    profiles.mail_address AS mailAddress,
+    profile_metadata.height_cm AS heightCm,
+    profile_metadata.date_of_birth AS dateOfBirth,
+    profile_metadata.people_type AS peopleType,
+    profile_metadata.gender,
+    profile_metadata.profile_image AS profileImage,
+    profiles.created_at AS createdAt
   FROM profiles
-  ORDER BY created_at DESC
+  LEFT JOIN profile_metadata
+    ON profile_metadata.profile_id = profiles.id
+  ORDER BY profiles.created_at DESC
 `,
     )
     .all() as Users[];
@@ -412,14 +451,18 @@ export function getProfileById(id: ProfileId) {
     .prepare(
       `
   SELECT
-    id,
-    name,
-    height_cm AS heightCm,
-    date_of_birth AS dateOfBirth,
-    peopleType,
-    gender
+    profiles.id,
+    profiles.name,
+    profiles.mail_address AS mailAddress,
+    profile_metadata.height_cm AS heightCm,
+    profile_metadata.date_of_birth AS dateOfBirth,
+    profile_metadata.people_type AS peopleType,
+    profile_metadata.gender,
+    profile_metadata.profile_image AS profileImage
   FROM profiles
-  WHERE id = ? `,
+  LEFT JOIN profile_metadata
+    ON profile_metadata.profile_id = profiles.id
+  WHERE profiles.id = ? `,
     )
     .get(id) as profile;
 }
