@@ -3,6 +3,7 @@ import { db } from "./db";
 import type { ProprietaryBodyCompositionMetrics } from "../calculations/proprietaryMetrics";
 
 export type JobId = string;
+export type AccountId = string;
 export type ProfileId = string;
 
 export type UserWeight = {
@@ -40,8 +41,10 @@ export type CalculatedBodyCompositionMetrics = {
 
 export type Users = {
   id: string;
+  accountId: string;
   name: string | null;
   mailAddress: string | null;
+  isPrimary: boolean;
   heightCm: number | null;
   dateOfBirth: string | null;
   peopleType: "standard" | "athlete" | null;
@@ -50,9 +53,18 @@ export type Users = {
   createdAt: string;
 };
 
+type UserRow = Omit<Users, "isPrimary"> & {
+  isPrimary: number;
+};
+
 export type RegisterUserInput = {
-  name: string;
   mailAddress: string;
+};
+
+export type RegisterProfileInput = {
+  accountId: AccountId;
+  name: string;
+  isPrimary?: boolean;
 };
 
 export type RegisterProfileMetadataInput = {
@@ -80,13 +92,19 @@ export type ProgressMeasurement = {
 
 export type profile = {
   id: string;
+  accountId: string;
   name: string;
   mailAddress: string;
+  isPrimary: boolean;
   heightCm: number;
   dateOfBirth: string;
   peopleType: "standard" | "athlete";
   gender: "male" | "female";
   profileImage: string | null;
+};
+
+type ProfileRow = Omit<profile, "isPrimary"> & {
+  isPrimary: number;
 };
 
 export function jobExists(jobId: JobId): boolean {
@@ -117,6 +135,21 @@ export function profileExists(profileId: ProfileId): boolean {
     .get(profileId);
 
   return profile !== null;
+}
+
+export function accountExists(accountId: AccountId): boolean {
+  const account = db
+    .prepare(
+      `
+  SELECT 1
+  FROM accounts
+  WHERE id = ?
+  LIMIT 1
+`,
+    )
+    .get(accountId);
+
+  return account !== null;
 }
 
 export function getProfileIdByJobId(jobId: JobId): ProfileId | null {
@@ -173,22 +206,43 @@ export function addMeasurement(
   return id;
 }
 export function registerUser({
-  name,
   mailAddress,
-}: RegisterUserInput): ProfileId {
+}: RegisterUserInput): AccountId {
+  const accountId: AccountId = uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO accounts (
+    id,
+    mail_address,
+    created_at
+  )
+  VALUES (?, ?, CURRENT_TIMESTAMP)
+`,
+  ).run(accountId, mailAddress);
+
+  return accountId;
+}
+
+export function registerProfile({
+  accountId,
+  name,
+  isPrimary = false,
+}: RegisterProfileInput): ProfileId {
   const profileId: ProfileId = uuidv7();
 
   db.prepare(
     `
   INSERT INTO profiles (
     id,
+    account_id,
     name,
-    mail_address,
+    is_primary,
     created_at
   )
-  VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 `,
-  ).run(profileId, name, mailAddress);
+  ).run(profileId, accountId, name, isPrimary ? 1 : 0);
 
   return profileId;
 }
@@ -424,13 +478,15 @@ export function addProgressMeasurement(
 }
 
 export function listUsers(): Users[] {
-  return db
+  const rows = db
     .prepare(
       `
   SELECT
     profiles.id,
+    profiles.account_id AS accountId,
     profiles.name,
-    profiles.mail_address AS mailAddress,
+    accounts.mail_address AS mailAddress,
+    profiles.is_primary AS isPrimary,
     profile_metadata.height_cm AS heightCm,
     profile_metadata.date_of_birth AS dateOfBirth,
     profile_metadata.people_type AS peopleType,
@@ -438,31 +494,47 @@ export function listUsers(): Users[] {
     profile_metadata.profile_image AS profileImage,
     profiles.created_at AS createdAt
   FROM profiles
+  INNER JOIN accounts
+    ON accounts.id = profiles.account_id
   LEFT JOIN profile_metadata
     ON profile_metadata.profile_id = profiles.id
   ORDER BY profiles.created_at DESC
 `,
     )
-    .all() as Users[];
+    .all() as UserRow[];
+
+  return rows.map((row) => ({
+    ...row,
+    isPrimary: row.isPrimary === 1,
+  }));
 }
 
 export function getProfileById(id: ProfileId) {
-  return db
+  const row = db
     .prepare(
       `
   SELECT
     profiles.id,
+    profiles.account_id AS accountId,
     profiles.name,
-    profiles.mail_address AS mailAddress,
+    accounts.mail_address AS mailAddress,
+    profiles.is_primary AS isPrimary,
     profile_metadata.height_cm AS heightCm,
     profile_metadata.date_of_birth AS dateOfBirth,
     profile_metadata.people_type AS peopleType,
     profile_metadata.gender,
     profile_metadata.profile_image AS profileImage
   FROM profiles
+  INNER JOIN accounts
+    ON accounts.id = profiles.account_id
   LEFT JOIN profile_metadata
     ON profile_metadata.profile_id = profiles.id
   WHERE profiles.id = ? `,
     )
-    .get(id) as profile;
+    .get(id) as ProfileRow;
+
+  return {
+    ...row,
+    isPrimary: row.isPrimary === 1,
+  };
 }
