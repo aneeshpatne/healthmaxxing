@@ -3,11 +3,21 @@ import { Database } from "bun:sqlite";
 export const db = new Database("mydb.sqlite");
 
 db.run(`
-  CREATE TABLE IF NOT EXISTS profiles (
+  CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
-    name TEXT,
     mail_address TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS profiles (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    name TEXT,
+    is_primary INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(account_id) REFERENCES accounts(id)
   )
 `);
 
