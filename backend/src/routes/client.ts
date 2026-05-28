@@ -3,6 +3,7 @@ import { v7 as uuidv7 } from "uuid";
 import { RedisClient } from "bun";
 import {
   addBodyMeasurement,
+  accountExists,
   initJob,
   jobExists,
   listUserBodyMeasurements,
@@ -10,7 +11,9 @@ import {
   listUserWeight,
   profileExists,
   registerProfileMetadata,
+  registerProfile,
   registerUser,
+  type AccountId,
   type JobId,
   type ProfileId,
 } from "../db/commands";
@@ -141,11 +144,8 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         body: {
           type: "object",
-          required: ["name", "mailAddress"],
+          required: ["mailAddress"],
           properties: {
-            name: {
-              type: "string",
-            },
             mailAddress: {
               type: "string",
             },
@@ -154,22 +154,72 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
-      const { name, mailAddress } = request.body as {
-        name: string;
+      const { mailAddress } = request.body as {
         mailAddress: string;
       };
-      const id: ProfileId = registerUser({
-        name,
+      const id: AccountId = registerUser({
         mailAddress,
       });
 
-      app.log.info({ id, name, mailAddress }, "Registered user");
+      app.log.info({ id, mailAddress }, "Registered account");
 
       return reply.code(201).send({
         ok: true,
         id,
-        name,
         mailAddress,
+      });
+    },
+  );
+
+  app.post(
+    "/register/profiles",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["accountId", "name"],
+          properties: {
+            accountId: {
+              type: "string",
+            },
+            name: {
+              type: "string",
+            },
+            isPrimary: {
+              type: "boolean",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { accountId, name, isPrimary = false } = request.body as {
+        accountId: string;
+        name: string;
+        isPrimary?: boolean;
+      };
+
+      if (!accountExists(accountId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Account id does not exist",
+        });
+      }
+
+      const id: ProfileId = registerProfile({
+        accountId,
+        name,
+        isPrimary,
+      });
+
+      app.log.info({ id, accountId, name, isPrimary }, "Registered profile");
+
+      return reply.code(201).send({
+        ok: true,
+        id,
+        accountId,
+        name,
+        isPrimary,
       });
     },
   );
