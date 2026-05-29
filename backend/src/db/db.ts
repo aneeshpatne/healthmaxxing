@@ -5,7 +5,7 @@ export const db = new Database("mydb.sqlite");
 db.run(`
   CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
-    mail_address TEXT,
+    mail_address TEXT UNIQUE,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )
 `);
