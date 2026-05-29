@@ -1,14 +1,13 @@
 import type { FastifyPluginAsync } from "fastify";
-import { redis, RedisClient } from "bun";
+import { RedisClient } from "bun";
 import {
   addMeasurement,
   addProprietaryBodyCompositionMetrics,
   getProfileById,
-  getProfileIdByJobId,
+  profileExists,
   type profile,
 } from "../db/commands";
 import { calculateProprietaryMetrics } from "../calculations/proprietaryMetrics";
-import { publishJobStatus } from "../lib/redis";
 const pub = new RedisClient("redis://localhost:6379");
 
 function calculateAgeYears(dateOfBirth: string): number {
@@ -32,22 +31,16 @@ function calculateAgeYears(dateOfBirth: string): number {
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
   app.post(
-    "/:id",
+    "/add_measurement",
     {
       schema: {
-        params: {
-          type: "object",
-          required: ["id"],
-          properties: {
-            id: {
-              type: "string",
-            },
-          },
-        },
         body: {
           type: "object",
-          required: ["weight", "heartbeat", "impedance"],
+          required: ["profileId", "weight", "heartbeat", "impedance"],
           properties: {
+            profileId: {
+              type: "string",
+            },
             weight: {
               type: "number",
             },
@@ -62,20 +55,17 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
-      const { id } = request.params as {
-        id: string;
-      };
-      const { weight, heartbeat, impedance } = request.body as {
+      const { profileId, weight, heartbeat, impedance } = request.body as {
+        profileId: string;
         weight: number;
         heartbeat: number;
         impedance: number;
       };
-      const profileId = getProfileIdByJobId(id);
 
-      if (profileId === null) {
+      if (!profileExists(profileId)) {
         return reply.code(404).send({
           ok: false,
-          error: "Job id does not exist",
+          error: "Profile id does not exist",
         });
       }
 
@@ -87,7 +77,6 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       );
 
       const profile: profile = getProfileById(profileId);
-      await publishJobStatus(id, "calculating");
 
       // console.log(
       //   calculateHealthMetricsV2(
@@ -111,12 +100,9 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         metrics,
       );
 
-      await publishJobStatus(id, "report generated.");
-
       console.log(metrics);
 
       // app.log.info({
-      //   id,
       //   measurementId,
       //   profileId,
       //   weight,
@@ -134,7 +120,6 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/ws/tool/:jobId", { websocket: true }, async (socket, request) => {
     const { jobId } = request.params as { jobId: string };
-    await publishJobStatus(jobId, "streaming");
 
     socket.on("message", async (raw: { toString(): string }) => {
       const message = raw.toString();
