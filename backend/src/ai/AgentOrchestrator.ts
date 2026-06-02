@@ -28,4 +28,3 @@ export async function runHealthAgent(profileId = defaultProfileId) {
 }
 
 export const response = await runHealthAgent();
-console.log(response);
