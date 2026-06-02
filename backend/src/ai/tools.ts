@@ -22,3 +22,19 @@ export const ai_overview = tool(
     }),
   },
 );
+
+export const body_analysis = tool(
+  ({ foundation, momentum, biggest_lever, physique_archetype }) => {
+    console.log({ foundation, momentum, biggest_lever, physique_archetype });
+  },
+  {
+    name: "body_analysis",
+    description: "analysis of body",
+    schema: z.object({
+      foundation: z.string().describe("Current physique quality"),
+      momentum: z.string().describe("What's changing?"),
+      biggest_lever: z.string().describe("Biggest Lever"),
+      physique_archetype: z.string().describe(""),
+    }),
+  },
+);
