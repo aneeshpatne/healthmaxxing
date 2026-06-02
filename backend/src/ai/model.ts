@@ -12,6 +12,6 @@ export const model = await initChatModel("deepseek:deepseek-v4-flash", {
   apiKey,
 });
 
-const response = await model.invoke("Why do parrots talk?");
+// const response = await model.invoke("Why do parrots talk?");
 
-console.log(response);
+// console.log(response);
