@@ -2,37 +2,16 @@ import { HumanMessage, initChatModel, SystemMessage } from "langchain";
 import { ChatGoogle } from "@langchain/google";
 import { ChatOpenRouter } from "@langchain/openrouter";
 
-export const apiKey = process.env.OPENAI_API_KEY;
+export const apiKey = process.env.DEEPSEEK_API_KEY;
 
 if (!apiKey) {
-  throw new Error("OPENAI_API_KEY is not set");
+  throw new Error("API KEY is not set");
 }
 
-export const googleApiKey = process.env.GOOGLE_API_KEY;
-
-if (!googleApiKey) {
-  throw new Error("GOOGLE_API_KEY is not set");
-}
-
-export const openRouterApiKey = process.env.OPENROUTER_API_KEY;
-
-if (!openRouterApiKey) {
-  throw new Error("OPENROUTER_API_KEY is not set");
-}
-
-export const model = await initChatModel("openai:gpt-5.4-nano", {
+export const model = await initChatModel("deepseek:deepseek-v4-flash", {
   apiKey,
-  reasoningEffort: "low",
 });
 
-export const secondaryModel = new ChatOpenRouter({
-  model: "deepseek/deepseek-v4-flash",
-  apiKey: openRouterApiKey,
-});
+const response = await model.invoke("Why do parrots talk?");
 
-const llm = new ChatGoogle({
-  apiKey: googleApiKey,
-  model: "gemma-4-31b-it",
-  //   model: "gemini-3.1-flash-lite",
-  maxRetries: 2,
-});
+console.log(response);
