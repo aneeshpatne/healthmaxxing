@@ -60,15 +60,33 @@ db.run(`
   )
 `);
 
+db.run("DROP TABLE IF EXISTS body_measurements");
 db.run(`
-  CREATE TABLE IF NOT EXISTS body_measurements (
+  CREATE TABLE body_measurements (
     id TEXT PRIMARY KEY,
     profile_id TEXT NOT NULL,
-    waist_cm REAL,
     neck_cm REAL,
+    shoulder_cm REAL,
+    chest_cm REAL,
+    stomach_cm REAL,
+    waist_cm REAL,
+    calf_cm REAL,
+    thigh_cm REAL,
+    bicep_cm REAL,
+    forearm_cm REAL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(profile_id) REFERENCES profiles(id),
-    CHECK (waist_cm IS NOT NULL OR neck_cm IS NOT NULL)
+    CHECK (
+      neck_cm IS NOT NULL OR
+      shoulder_cm IS NOT NULL OR
+      chest_cm IS NOT NULL OR
+      stomach_cm IS NOT NULL OR
+      waist_cm IS NOT NULL OR
+      calf_cm IS NOT NULL OR
+      thigh_cm IS NOT NULL OR
+      bicep_cm IS NOT NULL OR
+      forearm_cm IS NOT NULL
+    )
   )
 `);
 

@@ -14,8 +14,15 @@ export type UserWeight = {
 
 export type BodyMeasurement = {
   id: string;
-  waistCm: number | null;
   neckCm: number | null;
+  shoulderCm: number | null;
+  chestCm: number | null;
+  stomachCm: number | null;
+  waistCm: number | null;
+  calfCm: number | null;
+  thighCm: number | null;
+  bicepCm: number | null;
+  forearmCm: number | null;
   createdAt: string;
 };
 
@@ -77,8 +84,20 @@ export type RegisterProfileMetadataInput = {
 };
 
 export type BodyMeasurementInput = {
-  waistCm?: number | null;
   neckCm?: number | null;
+  shoulderCm?: number | null;
+  chestCm?: number | null;
+  stomachCm?: number | null;
+  waistCm?: number | null;
+  calfCm?: number | null;
+  thighCm?: number | null;
+  bicepCm?: number | null;
+  forearmCm?: number | null;
+};
+
+export type BodyMeasurementCreateResult = {
+  id: string;
+  createdAt: string;
 };
 
 export type ProgressMeasurement = {
@@ -205,9 +224,7 @@ export function addMeasurement(
 
   return id;
 }
-export function registerUser({
-  mailAddress,
-}: RegisterUserInput): AccountId {
+export function registerUser({ mailAddress }: RegisterUserInput): AccountId {
   const accountId: AccountId = uuidv7();
 
   db.prepare(
@@ -296,9 +313,29 @@ export function listUserWeight(profileId: ProfileId): UserWeight[] {
 
 export function addBodyMeasurement(
   profileId: ProfileId,
-  { waistCm = null, neckCm = null }: BodyMeasurementInput,
-): string {
-  if (waistCm === null && neckCm === null) {
+  {
+    neckCm = null,
+    shoulderCm = null,
+    chestCm = null,
+    stomachCm = null,
+    waistCm = null,
+    calfCm = null,
+    thighCm = null,
+    bicepCm = null,
+    forearmCm = null,
+  }: BodyMeasurementInput,
+): BodyMeasurementCreateResult {
+  if (
+    neckCm === null &&
+    shoulderCm === null &&
+    chestCm === null &&
+    stomachCm === null &&
+    waistCm === null &&
+    calfCm === null &&
+    thighCm === null &&
+    bicepCm === null &&
+    forearmCm === null
+  ) {
     throw new Error("At least one body measurement is required");
   }
 
@@ -309,15 +346,48 @@ export function addBodyMeasurement(
   INSERT INTO body_measurements (
     id,
     profile_id,
-    waist_cm,
     neck_cm,
+    shoulder_cm,
+    chest_cm,
+    stomach_cm,
+    waist_cm,
+    calf_cm,
+    thigh_cm,
+    bicep_cm,
+    forearm_cm,
     created_at
   )
-  VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 `,
-  ).run(id, profileId, waistCm, neckCm);
+  ).run(
+    id,
+    profileId,
+    neckCm,
+    shoulderCm,
+    chestCm,
+    stomachCm,
+    waistCm,
+    calfCm,
+    thighCm,
+    bicepCm,
+    forearmCm,
+  );
 
-  return id;
+  const created = db
+    .prepare(
+      `
+  SELECT created_at AS createdAt
+  FROM body_measurements
+  WHERE id = ?
+  LIMIT 1
+`,
+    )
+    .get(id) as { createdAt: string } | null;
+
+  return {
+    id,
+    createdAt: created?.createdAt ?? new Date().toISOString(),
+  };
 }
 
 export function listUserBodyMeasurements(
@@ -328,8 +398,15 @@ export function listUserBodyMeasurements(
       `
   SELECT
     id,
-    waist_cm AS waistCm,
     neck_cm AS neckCm,
+    shoulder_cm AS shoulderCm,
+    chest_cm AS chestCm,
+    stomach_cm AS stomachCm,
+    waist_cm AS waistCm,
+    calf_cm AS calfCm,
+    thigh_cm AS thighCm,
+    bicep_cm AS bicepCm,
+    forearm_cm AS forearmCm,
     created_at AS createdAt
   FROM body_measurements
   WHERE profile_id = ?
