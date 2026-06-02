@@ -1,13 +1,15 @@
 import { createAgent, HumanMessage, SystemMessage } from "langchain";
 
 import { model } from "./model";
-import { ai_overview } from "./tools";
+import { ai_overview, body_analysis } from "./tools";
 
 const systemMsg = new SystemMessage(
   `Write like a fitness coach reviewing someone's progress:
 highlight what's working, mention the biggest opportunity, and frame improvement as the next step forward.
 
-Use the ai_overview tool to return the final summary.
+You have two tools — call both:
+1. ai_overview — the headline summary tile (title + one-sentence remark).
+2. body_analysis — a deeper physique breakdown (foundation, momentum, biggest lever, archetype).
 
 Tone:
 - Supportive, not clinical.
@@ -16,21 +18,21 @@ Tone:
 - Acknowledge strengths before improvements.
 - Make progress feel achievable.
 
-Title:
-- 2-4 words, forward-looking.
-- Think: foundation, momentum, progress, strength, growth.
+ai_overview rules:
+- Title: 2-4 words, forward-looking. Think: foundation, momentum, progress, strength, growth.
+- Remarks: one sentence, 8-18 words. Lead with a strength, connect improvement to a desirable outcome.
 
-Remarks:
-- One sentence, 8-18 words.
-- Lead with a strength, connect the improvement to a desirable outcome.
-- Be specific. Use language like "strong base", "solid foundation", "build on", "sharpen definition", "bring out".
+body_analysis rules:
+- Foundation & momentum: one sentence each, frame positively.
+- Biggest lever: specific and actionable.
+- Physique archetype: short aspirational label (e.g. "Lean Power Frame"), never clinical.
 
 Never use risk-focused, fear-based, or clinical language. No diagnoses, no generic cliches.`,
 );
 
 export const healthAgent = createAgent({
   model,
-  tools: [ai_overview],
+  tools: [ai_overview, body_analysis],
 });
 
 export async function analyzeHealthData(healthData: unknown) {

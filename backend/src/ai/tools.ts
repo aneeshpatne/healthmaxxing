@@ -29,12 +29,29 @@ export const body_analysis = tool(
   },
   {
     name: "body_analysis",
-    description: "analysis of body",
+    description:
+      "Structured body composition analysis: where the user stands, what's trending, and the single highest-impact next move.",
     schema: z.object({
-      foundation: z.string().describe("Current physique quality"),
-      momentum: z.string().describe("What's changing?"),
-      biggest_lever: z.string().describe("Biggest Lever"),
-      physique_archetype: z.string().describe(""),
+      foundation: z
+        .string()
+        .describe(
+          "One sentence on current physique quality — frame it as a base to build on, not a judgment.",
+        ),
+      momentum: z
+        .string()
+        .describe(
+          "One sentence on what's actively changing or trending — recent progress, shifts in composition, or emerging patterns.",
+        ),
+      biggest_lever: z
+        .string()
+        .describe(
+          "The single most impactful change they could make next. Be specific and actionable.",
+        ),
+      physique_archetype: z
+        .string()
+        .describe(
+          "A short, aspirational archetype label for their current build (e.g. 'Athletic Endomorph', 'Lean Power Frame'). Positive and descriptive, never clinical.",
+        ),
     }),
   },
 );
