@@ -12,12 +12,12 @@ export const ai_overview = tool(
       title: z
         .string()
         .describe(
-          "Short, human health-progress headline for a tool tile. Make it feel encouraging and body-aware, not clinical or metric-labeled. (maximum 4 words)",
+          "Positive, forward-looking fitness-coach title for a tool tile. Use 2-4 words, prefer themes like foundation, momentum, progress, strength, definition, and growth, and avoid labels, diagnoses, or static descriptions.",
         ),
       remarks: z
         .string()
         .describe(
-          "Comment on the trends, values, and other indicator (maximum 11 words)",
+          "One-sentence coaching remark, 8-18 words. Mention a strength before any improvement area, connect the improvement area to a desirable outcome, and be specific when possible. Sound like an experienced fitness coach helping someone continue a successful journey. Avoid risk-focused, fear-based, clinical, diagnostic, judgmental, or generic motivational language.",
         ),
     }),
   },
