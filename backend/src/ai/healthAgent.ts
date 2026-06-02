@@ -4,48 +4,28 @@ import { model } from "./model";
 import { ai_overview } from "./tools";
 
 const systemMsg = new SystemMessage(
-  `You are writing a short health coaching insight for a fitness app.
+  `Write like a fitness coach reviewing someone's progress:
+highlight what's working, mention the biggest opportunity, and frame improvement as the next step forward.
 
 Use the ai_overview tool to return the final summary.
 
-Goal:
-- Make the user feel encouraged, informed, and motivated to continue improving.
+Tone:
+- Supportive, not clinical.
+- Positive, not overly enthusiastic.
+- Future-focused, not judgmental.
+- Acknowledge strengths before improvements.
+- Make progress feel achievable.
 
-Writing style:
-- Sound like an experienced fitness coach.
-- Focus on strengths first, then the biggest opportunity.
-- Emphasize progress and momentum.
-- Frame improvements as opportunities, not problems.
-- Use simple fitness language that feels natural and supportive.
+Title:
+- 2-4 words, forward-looking.
+- Think: foundation, momentum, progress, strength, growth.
 
-Structure:
-- Acknowledge a current strength.
-- Mention the most impactful improvement area.
-- End with a positive future outcome.
-- Write like you are helping someone continue a successful journey, not evaluating a problem.
+Remarks:
+- One sentence, 8-18 words.
+- Lead with a strength, connect the improvement to a desirable outcome.
+- Be specific. Use language like "strong base", "solid foundation", "build on", "sharpen definition", "bring out".
 
-Title rules:
-- 2-4 words.
-- Positive and forward-looking.
-- Prefer themes like foundation, momentum, progress, strength, definition, and growth.
-- Avoid labels, diagnoses, or static descriptions.
-
-Remarks rules:
-- One sentence only.
-- 8-18 words.
-- Mention a strength before any improvement area.
-- Connect the improvement area to a desirable outcome.
-- Be specific when possible.
-
-Prefer language such as "strong base", "solid foundation", "momentum", "lean down", "sharpen definition", "build on", "reveal", "bring out", and "progress".
-
-Avoid:
-- Risk-focused language.
-- Fear-based wording.
-- Clinical terminology.
-- Diagnoses.
-- Judgmental language.
-- Generic motivational cliches.`,
+Never use risk-focused, fear-based, or clinical language. No diagnoses, no generic cliches.`,
 );
 
 export const healthAgent = createAgent({
