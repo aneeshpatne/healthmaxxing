@@ -329,15 +329,46 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         body: {
           type: "object",
           required: ["profileId"],
-          anyOf: [{ required: ["waistCm"] }, { required: ["neckCm"] }],
+          anyOf: [
+            { required: ["neckCm"] },
+            { required: ["shoulderCm"] },
+            { required: ["chestCm"] },
+            { required: ["stomachCm"] },
+            { required: ["waistCm"] },
+            { required: ["calfCm"] },
+            { required: ["thighCm"] },
+            { required: ["bicepCm"] },
+            { required: ["forearmCm"] },
+          ],
           properties: {
             profileId: {
               type: "string",
             },
+            neckCm: {
+              type: "number",
+            },
+            shoulderCm: {
+              type: "number",
+            },
+            chestCm: {
+              type: "number",
+            },
+            stomachCm: {
+              type: "number",
+            },
             waistCm: {
               type: "number",
             },
-            neckCm: {
+            calfCm: {
+              type: "number",
+            },
+            thighCm: {
+              type: "number",
+            },
+            bicepCm: {
+              type: "number",
+            },
+            forearmCm: {
               type: "number",
             },
           },
@@ -347,12 +378,26 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
     async (request, reply) => {
       const {
         profileId,
-        waistCm = null,
         neckCm = null,
+        shoulderCm = null,
+        chestCm = null,
+        stomachCm = null,
+        waistCm = null,
+        calfCm = null,
+        thighCm = null,
+        bicepCm = null,
+        forearmCm = null,
       } = request.body as {
         profileId: string;
-        waistCm?: number | null;
         neckCm?: number | null;
+        shoulderCm?: number | null;
+        chestCm?: number | null;
+        stomachCm?: number | null;
+        waistCm?: number | null;
+        calfCm?: number | null;
+        thighCm?: number | null;
+        bicepCm?: number | null;
+        forearmCm?: number | null;
       };
 
       if (!profileExists(profileId)) {
@@ -362,19 +407,50 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const id = addBodyMeasurement(profileId, { waistCm, neckCm });
+      const { id, createdAt } = addBodyMeasurement(profileId, {
+        neckCm,
+        shoulderCm,
+        chestCm,
+        stomachCm,
+        waistCm,
+        calfCm,
+        thighCm,
+        bicepCm,
+        forearmCm,
+      });
 
       app.log.info(
-        { id, profileId, waistCm, neckCm },
+        {
+          id,
+          createdAt,
+          profileId,
+          neckCm,
+          shoulderCm,
+          chestCm,
+          stomachCm,
+          waistCm,
+          calfCm,
+          thighCm,
+          bicepCm,
+          forearmCm,
+        },
         "Registered body measurement",
       );
 
       return reply.code(201).send({
         ok: true,
         id,
+        createdAt,
         profileId,
-        waistCm,
         neckCm,
+        shoulderCm,
+        chestCm,
+        stomachCm,
+        waistCm,
+        calfCm,
+        thighCm,
+        bicepCm,
+        forearmCm,
       });
     },
   );
