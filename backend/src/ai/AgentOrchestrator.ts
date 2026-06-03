@@ -24,7 +24,7 @@ export function fetchHealthData(profileId: string) {
 export async function runHealthAgent(profileId = defaultProfileId) {
   const healthData = fetchHealthData(profileId);
 
-  return analyzeHealthData(healthData);
+  return analyzeHealthData(profileId, healthData);
 }
 
 export const response = await runHealthAgent();

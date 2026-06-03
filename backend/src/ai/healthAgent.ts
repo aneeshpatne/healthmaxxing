@@ -1,7 +1,7 @@
 import { createAgent, HumanMessage, SystemMessage } from "langchain";
 
 import { model } from "./model";
-import { ai_overview, body_analysis } from "./tools";
+import { createProfileAiTools } from "./tools";
 
 const systemMsg = new SystemMessage(
   `You are a fitness coach reviewing someone's progress. Call both tools: ai_overview and body_analysis.
@@ -58,12 +58,12 @@ Section guidance:
 Never use risk-focused, fear-based, or clinical language. No diagnoses, no cliches. Keep every field concise — if a sentence needs a dash or semicolon, split it or cut it.`,
 );
 
-export const healthAgent = createAgent({
-  model,
-  tools: [ai_overview, body_analysis],
-});
+export async function analyzeHealthData(profileId: string, healthData: unknown) {
+  const healthAgent = createAgent({
+    model,
+    tools: createProfileAiTools(profileId, "deepseek:deepseek-v4-pro"),
+  });
 
-export async function analyzeHealthData(healthData: unknown) {
   return healthAgent.invoke({
     messages: [
       systemMsg,
