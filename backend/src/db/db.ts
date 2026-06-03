@@ -192,6 +192,23 @@ export function getProfileMetadata(profileId: string) {
     .get(profileId);
 }
 
+export function getLatestWeightMeasurement(profileId: string) {
+  return db
+    .prepare(
+      `
+    SELECT
+      weight,
+      created_at AS createdAt
+    FROM measurements
+    WHERE profile_id = ?
+      AND weight IS NOT NULL
+    ORDER BY created_at DESC
+    LIMIT 1
+    `,
+    )
+    .get(profileId);
+}
+
 export function getBodyCompositionMeasurementDelta(profileId: string) {
   return db
     .prepare(

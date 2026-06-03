@@ -4,6 +4,7 @@ import {
   getBodyMeasurementDelta,
   getLatestBodyCompositionMeasurement,
   getLatestBodyMeasurement,
+  getLatestWeightMeasurement,
   getProfileMetadata,
 } from "../db/db";
 
@@ -15,6 +16,7 @@ export function fetchHealthData(profileId: string) {
     latestBodyCompositionMeasurement:
       getLatestBodyCompositionMeasurement(profileId),
     latestBodyMeasurement: getLatestBodyMeasurement(profileId),
+    latestWeightMeasurement: getLatestWeightMeasurement(profileId),
     bodyCompositionMeasurementDelta:
       getBodyCompositionMeasurementDelta(profileId),
     bodyMeasurementDelta: getBodyMeasurementDelta(profileId),
