@@ -7,6 +7,7 @@ import {
   initJob,
   jobExists,
   getProfileAiOverview,
+  getProfileEffortScore,
   listUserBodyMeasurements,
   listUsers,
   listUserWeight,
@@ -351,6 +352,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const insights = getProfileAiOverview(profileId);
+      const effortScore = getProfileEffortScore(profileId);
 
       if (insights === null) {
         return reply.code(404).send({
@@ -363,6 +365,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         ok: true,
         profileId,
         insights,
+        effortScore,
       });
     },
   );
