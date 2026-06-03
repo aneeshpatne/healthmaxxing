@@ -40,8 +40,8 @@ Strong foundation → Small course correction → Clear next action → Visible 
 Never: Strong foundation → Warning → Problem → Fix.
 
 ai_overview RULES
-- Title: 2-4 words, short, positive, forward-looking. Good: "Building Momentum", "Strong Foundation", "Lean Momentum". Avoid article/report-style titles like "Body Composition Analysis".
-- Remarks: exactly one sentence, 10-18 words. Follow the Strength + Progress + Opportunity + Payoff pattern. No compound sentences joined by dashes or semicolons. Count the words before returning.
+- Title (headline): a short, positive, complete sentence summarizing the user's achievement. This is the primary message they see. Good: "You're making excellent progress.", "Your foundation is getting stronger." Avoid labels or report-style titles.
+- Remarks (supporting explanation): one sentence displayed below the headline in smaller text. Explains why they're progressing or what specific metric/result supports the headline. Keep it grounded and specific when possible.
 
 body_analysis RULES
 Each of foundation, momentum, and biggest_lever is an object with headline, supporting_description, and actionable_insight:

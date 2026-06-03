@@ -12,12 +12,12 @@ export const ai_overview = tool(
       title: z
         .string()
         .describe(
-          "Positive, forward-looking fitness-coach title for a tool tile. Use 2-4 words, prefer themes like foundation, momentum, progress, strength, definition, and growth, and avoid labels, diagnoses, or static descriptions.",
+          "Headline progress statement summarizing the user's achievement. A short, positive, complete sentence (e.g. \"You're making excellent progress.\"). This is the primary message the user sees first.",
         ),
       remarks: z
         .string()
         .describe(
-          "One-sentence coaching remark, 8-18 words. Mention a strength before any improvement area, connect the improvement area to a desirable outcome, and be specific when possible. Sound like an experienced fitness coach helping someone continue a successful journey. Avoid risk-focused, fear-based, clinical, diagnostic, judgmental, or generic motivational language.",
+          "Supporting explanation displayed below the headline in smaller text. Explains why they're making progress or what specific metric/result supports the headline. One sentence, coaching tone.",
         ),
     }),
   },
