@@ -159,6 +159,17 @@ db.run(`
   )
 `);
 
+db.run(`
+  CREATE TABLE IF NOT EXISTS profile_effort_scores (
+    profile_id TEXT PRIMARY KEY,
+    score INTEGER NOT NULL CHECK(score >= 0 AND score <= 100),
+    remark TEXT NOT NULL,
+    model_name TEXT,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+  )
+`);
+
 export function getLatestBodyCompositionMeasurement(profileId: string) {
   return db
     .prepare(
