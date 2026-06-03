@@ -6,6 +6,7 @@ import {
   accountExists,
   initJob,
   jobExists,
+  getProfileAiOverview,
   listUserBodyMeasurements,
   listUsers,
   listUserWeight,
@@ -321,6 +322,50 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       users,
     });
   });
+
+  app.get(
+    "/profiles/:profileId/insights",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+
+      if (!profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const insights = getProfileAiOverview(profileId);
+
+      if (insights === null) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile insights do not exist",
+        });
+      }
+
+      return reply.send({
+        ok: true,
+        profileId,
+        insights,
+      });
+    },
+  );
 
   app.post(
     "/body-measurements",

@@ -70,6 +70,8 @@ export function createProfileAiTools(
 ) {
   const ai_overview = tool(
     ({ title, remarks }) => {
+      console.log({ profileId, title, remarks });
+
       const pending = pendingProfileAiOverviews.get(profileId) ?? {};
 
       pending.overview = { title, remarks };
@@ -98,6 +100,14 @@ export function createProfileAiTools(
 
   const body_analysis = tool(
     ({ foundation, momentum, biggest_lever, physique_archetype }) => {
+      console.log({
+        profileId,
+        foundation,
+        momentum,
+        biggest_lever,
+        physique_archetype,
+      });
+
       const pending = pendingProfileAiOverviews.get(profileId) ?? {};
 
       pending.analysis = {
