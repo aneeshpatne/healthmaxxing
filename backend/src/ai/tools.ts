@@ -4,6 +4,7 @@ import {
   type ProfileAiAnalysisBlock,
   type ProfileId,
   upsertProfileAiOverview,
+  upsertProfileEffortScore,
 } from "../db/commands";
 
 type AiOverviewPayload = {
@@ -36,9 +37,15 @@ type BodyAnalysisPayload = {
   physique_archetype: string;
 };
 
+type EffortScorePayload = {
+  score: number;
+  remark: string;
+};
+
 type PendingProfileAiOverview = {
   overview?: AiOverviewPayload;
   analysis?: BodyAnalysisPayload;
+  effortScore?: EffortScorePayload;
 };
 
 const pendingProfileAiOverviews = new Map<ProfileId, PendingProfileAiOverview>();
@@ -46,7 +53,7 @@ const pendingProfileAiOverviews = new Map<ProfileId, PendingProfileAiOverview>()
 function saveWhenComplete(profileId: ProfileId, modelName?: string | null) {
   const pending = pendingProfileAiOverviews.get(profileId);
 
-  if (!pending?.overview || !pending.analysis) {
+  if (!pending?.overview || !pending.analysis || !pending.effortScore) {
     return;
   }
 
@@ -58,6 +65,13 @@ function saveWhenComplete(profileId: ProfileId, modelName?: string | null) {
     momentum: pending.analysis.momentum,
     biggestLever: pending.analysis.biggest_lever,
     physiqueArchetype: pending.analysis.physique_archetype,
+    modelName,
+  });
+
+  upsertProfileEffortScore({
+    profileId,
+    score: pending.effortScore.score,
+    remark: pending.effortScore.remark,
     modelName,
   });
 
@@ -147,5 +161,39 @@ export function createProfileAiTools(
     },
   );
 
-  return [ai_overview, body_analysis];
+  const effort_score = tool(
+    ({ score, remark }) => {
+      console.log({ profileId, score, remark });
+
+      const pending = pendingProfileAiOverviews.get(profileId) ?? {};
+
+      pending.effortScore = { score, remark };
+      pendingProfileAiOverviews.set(profileId, pending);
+      saveWhenComplete(profileId, modelName);
+
+      return "Saved profile effort score.";
+    },
+    {
+      name: "effort_score",
+      description:
+        "Progress alignment score: how well current trends indicate the user's effort is moving them in the right direction.",
+      schema: z.object({
+        score: z
+          .number()
+          .int()
+          .min(0)
+          .max(100)
+          .describe(
+            "A 0-100 score reflecting how well the user's recent trends align with positive progress. Higher means trends are strongly moving in the right direction.",
+          ),
+        remark: z
+          .string()
+          .describe(
+            "One coaching sentence summarizing why the score is what it is. Reference the strongest trend signal. Keep the same supportive tone as other tools.",
+          ),
+      }),
+    },
+  );
+
+  return [ai_overview, body_analysis, effort_score];
 }
