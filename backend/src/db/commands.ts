@@ -665,6 +665,59 @@ export function getProfileAiOverview(
   };
 }
 
+export type ProfileEffortScore = {
+  profileId: ProfileId;
+  score: number;
+  remark: string;
+  modelName?: string | null;
+  updatedAt?: string;
+};
+
+export function upsertProfileEffortScore({
+  profileId,
+  score,
+  remark,
+  modelName = null,
+}: ProfileEffortScore): void {
+  db.prepare(
+    `
+  INSERT INTO profile_effort_scores (
+    profile_id,
+    score,
+    remark,
+    model_name,
+    updated_at
+  )
+  VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+  ON CONFLICT(profile_id) DO UPDATE SET
+    score = excluded.score,
+    remark = excluded.remark,
+    model_name = excluded.model_name,
+    updated_at = CURRENT_TIMESTAMP
+`,
+  ).run(profileId, score, remark, modelName);
+}
+
+export function getProfileEffortScore(
+  profileId: ProfileId,
+): ProfileEffortScore | null {
+  return db
+    .prepare(
+      `
+  SELECT
+    profile_id AS profileId,
+    score,
+    remark,
+    model_name AS modelName,
+    updated_at AS updatedAt
+  FROM profile_effort_scores
+  WHERE profile_id = ?
+  LIMIT 1
+`,
+    )
+    .get(profileId) as ProfileEffortScore | null;
+}
+
 export function listUsers(): Users[] {
   const rows = db
     .prepare(
