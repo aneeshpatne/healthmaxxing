@@ -109,6 +109,36 @@ export type ProgressMeasurement = {
   notes: "postWorkOut" | "preWorkOut";
 };
 
+export type ProfileAiAnalysisBlock = {
+  headline: string;
+  supporting_description: string;
+  actionable_insight: string;
+};
+
+export type ProfileAiOverview = {
+  profileId: ProfileId;
+  overviewTitle: string;
+  overviewRemarks: string;
+  foundation: ProfileAiAnalysisBlock;
+  momentum: ProfileAiAnalysisBlock;
+  biggestLever: ProfileAiAnalysisBlock;
+  physiqueArchetype: string;
+  modelName?: string | null;
+  updatedAt?: string;
+};
+
+type ProfileAiOverviewRow = {
+  profileId: ProfileId;
+  overviewTitle: string;
+  overviewRemarks: string;
+  foundation: string;
+  momentum: string;
+  biggestLever: string;
+  physiqueArchetype: string;
+  modelName: string | null;
+  updatedAt: string;
+};
+
 export type profile = {
   id: string;
   accountId: string;
@@ -552,6 +582,87 @@ export function addProgressMeasurement(
   );
 
   return id;
+}
+
+export function upsertProfileAiOverview({
+  profileId,
+  overviewTitle,
+  overviewRemarks,
+  foundation,
+  momentum,
+  biggestLever,
+  physiqueArchetype,
+  modelName = null,
+}: ProfileAiOverview): void {
+  db.prepare(
+    `
+  INSERT INTO profile_ai_overviews (
+    profile_id,
+    overview_title,
+    overview_remarks,
+    foundation,
+    momentum,
+    biggest_lever,
+    physique_archetype,
+    model_name,
+    updated_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  ON CONFLICT(profile_id) DO UPDATE SET
+    overview_title = excluded.overview_title,
+    overview_remarks = excluded.overview_remarks,
+    foundation = excluded.foundation,
+    momentum = excluded.momentum,
+    biggest_lever = excluded.biggest_lever,
+    physique_archetype = excluded.physique_archetype,
+    model_name = excluded.model_name,
+    updated_at = CURRENT_TIMESTAMP
+`,
+  ).run(
+    profileId,
+    overviewTitle,
+    overviewRemarks,
+    JSON.stringify(foundation),
+    JSON.stringify(momentum),
+    JSON.stringify(biggestLever),
+    physiqueArchetype,
+    modelName,
+  );
+}
+
+export function getProfileAiOverview(
+  profileId: ProfileId,
+): ProfileAiOverview | null {
+  const row = db
+    .prepare(
+      `
+  SELECT
+    profile_id AS profileId,
+    overview_title AS overviewTitle,
+    overview_remarks AS overviewRemarks,
+    foundation,
+    momentum,
+    biggest_lever AS biggestLever,
+    physique_archetype AS physiqueArchetype,
+    model_name AS modelName,
+    updated_at AS updatedAt
+  FROM profile_ai_overviews
+  WHERE profile_id = ?
+  LIMIT 1
+`,
+    )
+    .get(profileId) as ProfileAiOverviewRow | null;
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    foundation: JSON.parse(row.foundation) as ProfileAiAnalysisBlock,
+    momentum: JSON.parse(row.momentum) as ProfileAiAnalysisBlock,
+    biggestLever: JSON.parse(row.biggestLever) as ProfileAiAnalysisBlock,
+  };
 }
 
 export function listUsers(): Users[] {

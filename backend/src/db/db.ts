@@ -144,6 +144,21 @@ db.run(`
   )
 `);
 
+db.run(`
+  CREATE TABLE IF NOT EXISTS profile_ai_overviews (
+    profile_id TEXT PRIMARY KEY,
+    overview_title TEXT NOT NULL,
+    overview_remarks TEXT NOT NULL,
+    foundation TEXT NOT NULL,
+    momentum TEXT NOT NULL,
+    biggest_lever TEXT NOT NULL,
+    physique_archetype TEXT NOT NULL,
+    model_name TEXT,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+  )
+`);
+
 export function getLatestBodyCompositionMeasurement(profileId: string) {
   return db
     .prepare(
