@@ -26,7 +26,7 @@ export const model = await initChatModel("deepseek:deepseek-v4-pro", {
 
 // export const model = new ChatOpenRouter({
 //   apiKey: openRouterApiKey,
-//   model: "anthropic/claude-opus-4.8",
+//   model: "xiaomi/mimo-v2.5",
 // });
 
 // const response = await model.invoke("Why do parrots talk?");

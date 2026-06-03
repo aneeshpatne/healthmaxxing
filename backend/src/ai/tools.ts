@@ -23,6 +23,24 @@ export const ai_overview = tool(
   },
 );
 
+const analysisMessageSchema = z.object({
+  headline: z
+    .string()
+    .describe(
+      "Primary achievement or result message. Make it the most attention-grabbing text, one short sentence.",
+    ),
+  supporting_description: z
+    .string()
+    .describe(
+      "Brief explanation of why the result matters. Add context and highlight the practical benefit.",
+    ),
+  actionable_insight: z
+    .string()
+    .describe(
+      "Encouraging interpretation plus one specific next action. Reinforce the behavior to continue.",
+    ),
+});
+
 export const body_analysis = tool(
   ({ foundation, momentum, biggest_lever, physique_archetype }) => {
     console.log({ foundation, momentum, biggest_lever, physique_archetype });
@@ -32,18 +50,15 @@ export const body_analysis = tool(
     description:
       "Structured body composition analysis: where the user stands, what's trending, and the single highest-impact next move.",
     schema: z.object({
-      foundation: z
-        .string()
+      foundation: analysisMessageSchema
         .describe(
-          "One sentence on current physique quality — frame it as a base to build on, not a judgment.",
+          "Current physique quality framed as a base to build on, not a judgment.",
         ),
-      momentum: z
-        .string()
+      momentum: analysisMessageSchema
         .describe(
-          "One sentence on what's actively changing or trending — recent progress, shifts in composition, or emerging patterns.",
+          "What's actively changing or trending: recent progress, shifts in composition, or emerging patterns.",
         ),
-      biggest_lever: z
-        .string()
+      biggest_lever: analysisMessageSchema
         .describe(
           "The single most impactful change they could make next. Be specific and actionable.",
         ),
