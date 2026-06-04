@@ -3,6 +3,7 @@ import * as z from "zod";
 import {
   type ProfileAiAnalysisBlock,
   type ProfileId,
+  TREND_COLUMNS,
   upsertProfileAiOverview,
   upsertProfileEffortScore,
 } from "../db/commands";
@@ -27,6 +28,15 @@ const analysisMessageSchema = z.object({
     .string()
     .describe(
       "Encouraging interpretation plus one specific next action. Reinforce the behavior to continue.",
+    ),
+});
+
+const momentumAnalysisMessageSchema = analysisMessageSchema.extend({
+  factors: z
+    .array(z.enum(TREND_COLUMNS))
+    .max(3)
+    .describe(
+      "At most 3 body_composition_metrics_new metric columns most responsible for the momentum insight. These exact metrics will be plotted for the user.",
     ),
 });
 
@@ -144,7 +154,7 @@ export function createProfileAiTools(
           .describe(
             "Current physique quality framed as a base to build on, not a judgment.",
           ),
-        momentum: analysisMessageSchema
+        momentum: momentumAnalysisMessageSchema
           .describe(
             "What's actively changing or trending: recent progress, shifts in composition, or emerging patterns.",
           ),

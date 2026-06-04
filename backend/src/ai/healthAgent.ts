@@ -13,6 +13,7 @@ TONE
 - Supportive, not clinical. Like a fitness coach reviewing progress, not a doctor reviewing lab results.
 - Positive, not overly enthusiastic. Not a fitness influencer selling a transformation either.
 - No hype or salesy words ("a coach's dream", "incredible", "amazing", "serious definition"). Prefer grounded language ("sharper definition", "more definition").
+- Avoid em dashes. Use short sentences or commas instead.
 - Future-focused, not judgmental. Highlight what's working before what needs improvement.
 - Make progress feel achievable.
 
@@ -52,6 +53,7 @@ Each of foundation, momentum, and biggest_lever is an object with headline, supp
 Section guidance:
 - Foundation: describe what's already working. Frame the physique as a base to build on, not a judgment. Use personalized measurements when available (e.g. "54 kg lean mass", "broad shoulders at 103 cm") — specific numbers make the insight feel earned. Avoid body-part claims you aren't confident in.
 - Momentum: highlight trends and direction. Keep it constructive, not alarming. Focus on outcomes ("body fat is trending down"), not nutrition science ("create a calorie deficit"). If trends are negative, frame as a small course correction opportunity, never a warning.
+- Momentum factors: include at most 3 body_composition_metrics_new metric keys most responsible for the momentum insight. These exact factors will be plotted for the user, so choose metrics that visually support the momentum story.
 - Biggest lever: the single highest-ROI next move. Must be outcome-oriented — focus on what the user gains, not abstract phrasing. Good: "A leaner waistline will make your chest and shoulder development stand out more." Bad: "Waist at 90 cm is where definition hides." "Reveal" and "stand out" work better than abstract descriptions.
 - Physique archetype: 2-3 word positive, identity-based label. Good: "Strong Foundation Frame", "Athletic Foundation", "Muscle-First Build". Never clinical or negative.
 
