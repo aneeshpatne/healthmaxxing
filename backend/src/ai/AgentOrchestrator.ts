@@ -2,6 +2,7 @@ import { analyzeHealthData } from "./healthAgent";
 import {
   getBodyCompositionMeasurementDelta,
   getBodyMeasurementDelta,
+  getFirstHealthDataEntry,
   getLatestBodyCompositionMeasurement,
   getLatestBodyMeasurement,
   getLatestWeightMeasurement,
@@ -10,11 +11,41 @@ import {
 
 const defaultProfileId = "019e8724-ccf0-73cb-9c7d-822478474e90";
 
-export function fetchHealthData(profileId: string) {
+function getDesiredWeightTarget(
+  profileMetadata: unknown,
+  latestBodyCompositionMeasurement: unknown,
+) {
+  const metadata =
+    profileMetadata && typeof profileMetadata === "object"
+      ? (profileMetadata as Record<string, unknown>)
+      : null;
+  const measurement =
+    latestBodyCompositionMeasurement &&
+    typeof latestBodyCompositionMeasurement === "object"
+      ? (latestBodyCompositionMeasurement as Record<string, unknown>)
+      : null;
+
   return {
-    profileMetadata: getProfileMetadata(profileId),
-    latestBodyCompositionMeasurement:
-      getLatestBodyCompositionMeasurement(profileId),
+    preferredBodyFatPct: metadata?.preferredBodyFatPct ?? 18,
+    desiredWeightKg: measurement?.desired_weight_kg ?? null,
+    formula:
+      "desired_weight_kg = fat_free_mass_kg / (1 - preferred_body_fat_pct / 100)",
+  };
+}
+
+export function fetchHealthData(profileId: string) {
+  const profileMetadata = getProfileMetadata(profileId);
+  const latestBodyCompositionMeasurement =
+    getLatestBodyCompositionMeasurement(profileId);
+
+  return {
+    profileMetadata,
+    firstHealthDataEntry: getFirstHealthDataEntry(profileId),
+    latestBodyCompositionMeasurement,
+    desiredWeightTarget: getDesiredWeightTarget(
+      profileMetadata,
+      latestBodyCompositionMeasurement,
+    ),
     latestBodyMeasurement: getLatestBodyMeasurement(profileId),
     latestWeightMeasurement: getLatestWeightMeasurement(profileId),
     bodyCompositionMeasurementDelta:

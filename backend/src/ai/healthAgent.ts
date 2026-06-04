@@ -63,6 +63,21 @@ Never use risk-focused, fear-based, or clinical language. No diagnoses, no clich
 );
 
 export async function analyzeHealthData(profileId: string, healthData: unknown) {
+  const healthDataRecord =
+    healthData && typeof healthData === "object"
+      ? (healthData as Record<string, unknown>)
+      : null;
+  const firstHealthDataEntry =
+    healthDataRecord?.firstHealthDataEntry &&
+    typeof healthDataRecord.firstHealthDataEntry === "object"
+      ? (healthDataRecord.firstHealthDataEntry as Record<string, unknown>)
+      : null;
+  const trackingStartDate =
+    typeof firstHealthDataEntry?.createdAt === "string"
+      ? firstHealthDataEntry.createdAt
+      : "unknown";
+  const todayDate = new Date().toISOString().slice(0, 10);
+
   const healthAgent = createAgent({
     model,
     tools: createProfileAiTools(profileId, "deepseek:deepseek-v4-pro"),
@@ -71,7 +86,10 @@ export async function analyzeHealthData(profileId: string, healthData: unknown) 
   return healthAgent.invoke({
     messages: [
       systemMsg,
-      new HumanMessage(`Analyze this fetched health data:
+      new HumanMessage(`The user is tracking from this date -> ${trackingStartDate}
+Today's date -> ${todayDate}
+
+Analyze this fetched health data:
 ${JSON.stringify(healthData, null, 2)}`),
     ],
   });
