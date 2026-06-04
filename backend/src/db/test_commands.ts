@@ -1,10 +1,20 @@
+import { calculateAgeYears } from "../routes/ingest";
 import { db } from "./db";
 const profileId = "019e8724-ccf0-73cb-9c7d-822478474e90";
 
 const res = db
   .prepare(
-    "SELECT created_at, body_fat_pct FROM body_composition_metrics_new WHERE profile_id = ? AND created_at >= datetime('now', '-7 days')",
+    "SELECT body_age_years FROM body_composition_metrics_new WHERE profile_id = ?",
   )
-  .all(profileId);
+  .get(profileId) as { body_age_years: string } | null;
 
-console.log(res);
+const res1 = db
+  .prepare("SELECT date_of_birth FROM profile_metadata WHERE profile_id = ?")
+  .get(profileId) as { date_of_birth: string } | null;
+
+if (res1 === null) {
+  throw new Error(`No profile metadata found for profile ${profileId}`);
+}
+
+console.log(calculateAgeYears(res1.date_of_birth));
+console.log(res?.body_age_years);
