@@ -94,6 +94,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         age_years: calculateAgeYears(profile.dateOfBirth),
         sex: profile.gender,
         people_type: profile.peopleType,
+        preferred_body_fat_pct: profile.preferredBodyFatPct,
       });
       const metricsId = addProprietaryBodyCompositionMetrics(
         profileId,

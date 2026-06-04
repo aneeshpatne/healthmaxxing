@@ -261,6 +261,10 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
               type: "string",
               nullable: true,
             },
+            preferredBodyFatPct: {
+              type: "number",
+              default: 18,
+            },
           },
         },
       },
@@ -273,6 +277,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         peopleType,
         gender,
         profileImage = null,
+        preferredBodyFatPct = 18,
       } = request.body as {
         profileId: string;
         heightCm: number;
@@ -280,6 +285,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         peopleType: "standard" | "athlete";
         gender: "male" | "female";
         profileImage?: string | null;
+        preferredBodyFatPct?: number;
       };
 
       if (!profileExists(profileId)) {
@@ -296,10 +302,19 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         peopleType,
         gender,
         profileImage,
+        preferredBodyFatPct,
       });
 
       app.log.info(
-        { profileId, heightCm, dateOfBirth, peopleType, gender, profileImage },
+        {
+          profileId,
+          heightCm,
+          dateOfBirth,
+          peopleType,
+          gender,
+          profileImage,
+          preferredBodyFatPct,
+        },
         "Registered profile metadata",
       );
 
@@ -311,6 +326,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         peopleType,
         gender,
         profileImage,
+        preferredBodyFatPct,
       });
     },
   );
