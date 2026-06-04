@@ -1,6 +1,14 @@
 import { v7 as uuidv7 } from "uuid";
 import { BODY_COMPOSITION_METRICS_NEW_FACTORS, db } from "./db";
+import {
+  calculateFormaScore,
+  type FormaScore,
+} from "../calculations/formaScore";
 import type { ProprietaryBodyCompositionMetrics } from "../calculations/proprietaryMetrics";
+
+type BodyCompositionMetricsNewRow = ProprietaryBodyCompositionMetrics & {
+  desired_weight_kg: number;
+};
 
 export type JobId = string;
 export type AccountId = string;
@@ -543,7 +551,7 @@ export function saveBodyCompositionMetrics(
 
 export function addProprietaryBodyCompositionMetrics(
   profileId: ProfileId,
-  metrics: ProprietaryBodyCompositionMetrics,
+  metrics: BodyCompositionMetricsNewRow,
 ): string {
   const id = uuidv7();
 
@@ -810,6 +818,45 @@ export function getProfileEffortScore(
 `,
     )
     .get(profileId) as ProfileEffortScore | null;
+}
+
+export function getProfileFormaScore(profileId: ProfileId): FormaScore | null {
+  const metrics = db
+    .prepare(
+      `
+  SELECT
+    bmi,
+    body_fat_pct,
+    fat_mass_kg,
+    fat_free_mass_kg,
+    desired_weight_kg,
+    body_score,
+    body_age_years,
+    water_pct,
+    muscle_mass_kg,
+    muscle_rate_pct,
+    bmr_kcal,
+    visceral_fat,
+    ideal_weight_kg,
+    protein_mass_kg,
+    protein_pct,
+    skeletal_muscle_kg,
+    subcutaneous_fat_pct,
+    subcutaneous_fat_mass_kg,
+    predicted_lean_mass_kg
+  FROM body_composition_metrics_new
+  WHERE profile_id = ?
+  ORDER BY created_at DESC
+  LIMIT 1
+`,
+    )
+    .get(profileId) as BodyCompositionMetricsNewRow | null;
+
+  if (!metrics) {
+    return null;
+  }
+
+  return calculateFormaScore(metrics);
 }
 
 export function listUsers(): Users[] {

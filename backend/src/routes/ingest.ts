@@ -7,10 +7,11 @@ import {
   profileExists,
   type profile,
 } from "../db/commands";
+import { calculateDesiredWeightKg } from "../calculations/compositionSummary";
 import { calculateProprietaryMetrics } from "../calculations/proprietaryMetrics";
 const pub = new RedisClient("redis://localhost:6379");
 
-function calculateAgeYears(dateOfBirth: string): number {
+export function calculateAgeYears(dateOfBirth: string): number {
   const birthDate = new Date(dateOfBirth);
   const now = new Date();
   let age = now.getUTCFullYear() - birthDate.getUTCFullYear();
@@ -87,15 +88,21 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       //     "male",
       //   ),
       // );
-      const metrics = calculateProprietaryMetrics({
+      const metricsBase = calculateProprietaryMetrics({
         weight_kg: weight,
         impedance_ohms: impedance,
         height_cm: profile.heightCm,
         age_years: calculateAgeYears(profile.dateOfBirth),
         sex: profile.gender,
         people_type: profile.peopleType,
-        preferred_body_fat_pct: profile.preferredBodyFatPct,
       });
+      const metrics = {
+        ...metricsBase,
+        desired_weight_kg: calculateDesiredWeightKg({
+          fat_free_mass_kg: metricsBase.fat_free_mass_kg,
+          target_body_fat_pct: profile.preferredBodyFatPct,
+        }),
+      };
       const metricsId = addProprietaryBodyCompositionMetrics(
         profileId,
         metrics,
