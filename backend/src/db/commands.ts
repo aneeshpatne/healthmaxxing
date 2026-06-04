@@ -57,6 +57,7 @@ export type Users = {
   peopleType: "standard" | "athlete" | null;
   gender: "male" | "female" | null;
   profileImage: string | null;
+  preferredBodyFatPct: number;
   createdAt: string;
 };
 
@@ -81,6 +82,7 @@ export type RegisterProfileMetadataInput = {
   heightCm: number;
   peopleType: "standard" | "athlete";
   profileImage?: string | null;
+  preferredBodyFatPct?: number;
 };
 
 export type BodyMeasurementInput = {
@@ -150,6 +152,7 @@ export type profile = {
   peopleType: "standard" | "athlete";
   gender: "male" | "female";
   profileImage: string | null;
+  preferredBodyFatPct: number;
 };
 
 type ProfileRow = Omit<profile, "isPrimary"> & {
@@ -301,6 +304,7 @@ export function registerProfileMetadata({
   heightCm,
   peopleType,
   profileImage = null,
+  preferredBodyFatPct = 18,
 }: RegisterProfileMetadataInput): void {
   db.prepare(
     `
@@ -311,18 +315,28 @@ export function registerProfileMetadata({
     people_type,
     gender,
     profile_image,
+    preferred_body_fat_pct,
     updated_at
   )
-  VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
   ON CONFLICT(profile_id) DO UPDATE SET
     height_cm = excluded.height_cm,
     date_of_birth = excluded.date_of_birth,
     people_type = excluded.people_type,
     gender = excluded.gender,
     profile_image = excluded.profile_image,
+    preferred_body_fat_pct = excluded.preferred_body_fat_pct,
     updated_at = CURRENT_TIMESTAMP
 `,
-  ).run(profileId, heightCm, dateOfBirth, peopleType, gender, profileImage);
+  ).run(
+    profileId,
+    heightCm,
+    dateOfBirth,
+    peopleType,
+    gender,
+    profileImage,
+    preferredBodyFatPct,
+  );
 }
 
 export function listUserWeight(profileId: ProfileId): UserWeight[] {
@@ -510,6 +524,7 @@ export function addProprietaryBodyCompositionMetrics(
     body_fat_pct,
     fat_mass_kg,
     fat_free_mass_kg,
+    desired_weight_kg,
     body_score,
     body_age_years,
     water_pct,
@@ -526,7 +541,7 @@ export function addProprietaryBodyCompositionMetrics(
     predicted_lean_mass_kg,
     created_at
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 `,
   ).run(
     id,
@@ -535,6 +550,7 @@ export function addProprietaryBodyCompositionMetrics(
     metrics.body_fat_pct,
     metrics.fat_mass_kg,
     metrics.fat_free_mass_kg,
+    metrics.desired_weight_kg,
     metrics.body_score,
     metrics.body_age_years,
     metrics.water_pct,
@@ -733,6 +749,7 @@ export function listUsers(): Users[] {
     profile_metadata.people_type AS peopleType,
     profile_metadata.gender,
     profile_metadata.profile_image AS profileImage,
+    profile_metadata.preferred_body_fat_pct AS preferredBodyFatPct,
     profiles.created_at AS createdAt
   FROM profiles
   INNER JOIN accounts
@@ -764,7 +781,8 @@ export function getProfileById(id: ProfileId) {
     profile_metadata.date_of_birth AS dateOfBirth,
     profile_metadata.people_type AS peopleType,
     profile_metadata.gender,
-    profile_metadata.profile_image AS profileImage
+    profile_metadata.profile_image AS profileImage,
+    profile_metadata.preferred_body_fat_pct AS preferredBodyFatPct
   FROM profiles
   INNER JOIN accounts
     ON accounts.id = profiles.account_id
