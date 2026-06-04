@@ -2,6 +2,19 @@ import { Database } from "bun:sqlite";
 
 export const db = new Database("mydb.sqlite");
 
+export const BODY_COMPOSITION_METRICS_NEW_FACTORS = [
+  "bmi",
+  "body_fat_pct",
+  "body_score",
+  "body_age_years",
+  "water_pct",
+  "muscle_mass_kg",
+  "bmr_kcal",
+  "visceral_fat",
+  "protein_pct",
+  "subcutaneous_fat_pct",
+] as const;
+
 db.run(`
   CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,

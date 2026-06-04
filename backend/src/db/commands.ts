@@ -1,5 +1,5 @@
 import { v7 as uuidv7 } from "uuid";
-import { db } from "./db";
+import { BODY_COMPOSITION_METRICS_NEW_FACTORS, db } from "./db";
 import type { ProprietaryBodyCompositionMetrics } from "../calculations/proprietaryMetrics";
 
 export type JobId = string;
@@ -46,27 +46,7 @@ export type CalculatedBodyCompositionMetrics = {
   fat_mass_kg: number;
 };
 
-export const TREND_COLUMNS = [
-  "bmi",
-  "body_fat_pct",
-  "fat_mass_kg",
-  "fat_free_mass_kg",
-  "desired_weight_kg",
-  "body_score",
-  "body_age_years",
-  "water_pct",
-  "muscle_mass_kg",
-  "muscle_rate_pct",
-  "bmr_kcal",
-  "visceral_fat",
-  "ideal_weight_kg",
-  "protein_mass_kg",
-  "protein_pct",
-  "skeletal_muscle_kg",
-  "subcutaneous_fat_pct",
-  "subcutaneous_fat_mass_kg",
-  "predicted_lean_mass_kg",
-] as const;
+export const TREND_COLUMNS = BODY_COMPOSITION_METRICS_NEW_FACTORS;
 
 export const PERIODS = {
   "7d": "-7 days",
@@ -75,6 +55,7 @@ export const PERIODS = {
 } as const;
 
 export type BodyCompositionTrendMetric = (typeof TREND_COLUMNS)[number];
+export type BodyCompositionMetricFactor = BodyCompositionTrendMetric;
 export type BodyCompositionTrendPeriod = keyof typeof PERIODS;
 
 export type BodyCompositionTrendPoint = {
@@ -152,6 +133,7 @@ export type ProfileAiAnalysisBlock = {
   headline: string;
   supporting_description: string;
   actionable_insight: string;
+  factors?: BodyCompositionMetricFactor[];
 };
 
 export type ProfileAiOverview = {
@@ -177,6 +159,19 @@ type ProfileAiOverviewRow = {
   modelName: string | null;
   updatedAt: string;
 };
+
+function parseProfileAiAnalysisBlock(raw: string): ProfileAiAnalysisBlock {
+  return JSON.parse(raw) as ProfileAiAnalysisBlock;
+}
+
+function parseProfileAiMomentumBlock(raw: string): ProfileAiAnalysisBlock {
+  const block = JSON.parse(raw) as ProfileAiAnalysisBlock;
+
+  return {
+    ...block,
+    factors: Array.isArray(block.factors) ? block.factors : [],
+  };
+}
 
 export type profile = {
   id: string;
@@ -758,9 +753,9 @@ export function getProfileAiOverview(
 
   return {
     ...row,
-    foundation: JSON.parse(row.foundation) as ProfileAiAnalysisBlock,
-    momentum: JSON.parse(row.momentum) as ProfileAiAnalysisBlock,
-    biggestLever: JSON.parse(row.biggestLever) as ProfileAiAnalysisBlock,
+    foundation: parseProfileAiAnalysisBlock(row.foundation),
+    momentum: parseProfileAiMomentumBlock(row.momentum),
+    biggestLever: parseProfileAiAnalysisBlock(row.biggestLever),
   };
 }
 
