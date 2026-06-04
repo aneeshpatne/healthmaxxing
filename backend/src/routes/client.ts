@@ -8,6 +8,9 @@ import {
   jobExists,
   getProfileAiOverview,
   getProfileEffortScore,
+  isBodyCompositionTrendMetric,
+  isBodyCompositionTrendPeriod,
+  listBodyCompositionTrends,
   listUserBodyMeasurements,
   listUsers,
   listUserWeight,
@@ -15,6 +18,8 @@ import {
   registerProfileMetadata,
   registerProfile,
   registerUser,
+  PERIODS,
+  TREND_COLUMNS,
   type AccountId,
   type JobId,
   type ProfileId,
@@ -552,6 +557,75 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         ok: true,
         profileId,
         bodyMeasurements,
+      });
+    },
+  );
+
+  app.get(
+    "/body-composition/trends",
+    {
+      schema: {
+        querystring: {
+          type: "object",
+          required: ["metric", "period"],
+          properties: {
+            metric: {
+              type: "string",
+              enum: TREND_COLUMNS,
+            },
+            period: {
+              type: "string",
+              enum: Object.keys(PERIODS),
+            },
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { metric, period, profileId } = request.query as {
+        metric: string;
+        period: string;
+        profileId?: string;
+      };
+
+      if (!isBodyCompositionTrendMetric(metric)) {
+        return reply.code(400).send({
+          ok: false,
+          error: "Invalid body composition trend metric",
+          acceptedMetrics: TREND_COLUMNS,
+        });
+      }
+
+      if (!isBodyCompositionTrendPeriod(period)) {
+        return reply.code(400).send({
+          ok: false,
+          error: "Invalid body composition trend period",
+          acceptedPeriods: Object.keys(PERIODS),
+        });
+      }
+
+      if (profileId !== undefined && !profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const points = listBodyCompositionTrends({
+        metric,
+        period,
+        profileId,
+      });
+
+      return reply.send({
+        ok: true,
+        metric,
+        period,
+        profileId,
+        points,
       });
     },
   );

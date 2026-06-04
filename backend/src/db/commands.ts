@@ -46,6 +46,43 @@ export type CalculatedBodyCompositionMetrics = {
   fat_mass_kg: number;
 };
 
+export const TREND_COLUMNS = [
+  "bmi",
+  "body_fat_pct",
+  "fat_mass_kg",
+  "fat_free_mass_kg",
+  "desired_weight_kg",
+  "body_score",
+  "body_age_years",
+  "water_pct",
+  "muscle_mass_kg",
+  "muscle_rate_pct",
+  "bmr_kcal",
+  "visceral_fat",
+  "ideal_weight_kg",
+  "protein_mass_kg",
+  "protein_pct",
+  "skeletal_muscle_kg",
+  "subcutaneous_fat_pct",
+  "subcutaneous_fat_mass_kg",
+  "predicted_lean_mass_kg",
+] as const;
+
+export const PERIODS = {
+  "7d": "-7 days",
+  "30d": "-30 days",
+  all: null,
+} as const;
+
+export type BodyCompositionTrendMetric = (typeof TREND_COLUMNS)[number];
+export type BodyCompositionTrendPeriod = keyof typeof PERIODS;
+
+export type BodyCompositionTrendPoint = {
+  profileId: ProfileId;
+  createdAt: string;
+  value: number;
+};
+
 export type Users = {
   id: string;
   accountId: string;
@@ -568,6 +605,52 @@ export function addProprietaryBodyCompositionMetrics(
   );
 
   return id;
+}
+
+export function isBodyCompositionTrendMetric(
+  metric: string,
+): metric is BodyCompositionTrendMetric {
+  return TREND_COLUMNS.includes(metric as BodyCompositionTrendMetric);
+}
+
+export function isBodyCompositionTrendPeriod(
+  period: string,
+): period is BodyCompositionTrendPeriod {
+  return Object.hasOwn(PERIODS, period);
+}
+
+export function listBodyCompositionTrends({
+  metric,
+  period,
+  profileId,
+}: {
+  metric: BodyCompositionTrendMetric;
+  period: BodyCompositionTrendPeriod;
+  profileId?: ProfileId;
+}): BodyCompositionTrendPoint[] {
+  const range = PERIODS[period];
+  const profileFilter = profileId === undefined ? "" : "AND profile_id = ?";
+  const rangeFilter = range === null ? "" : "AND created_at >= datetime('now', ?)";
+  const params = [
+    ...(profileId === undefined ? [] : [profileId]),
+    ...(range === null ? [] : [range]),
+  ];
+
+  return db
+    .prepare(
+      `
+  SELECT
+    profile_id AS profileId,
+    created_at AS createdAt,
+    ${metric} AS value
+  FROM body_composition_metrics_new
+  WHERE 1 = 1
+    ${profileFilter}
+    ${rangeFilter}
+  ORDER BY created_at ASC
+`,
+    )
+    .all(...params) as BodyCompositionTrendPoint[];
 }
 
 export function addProgressMeasurement(
