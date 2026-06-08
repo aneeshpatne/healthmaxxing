@@ -1,6 +1,10 @@
 import { v7 as uuidv7 } from "uuid";
 import { BODY_COMPOSITION_METRICS_NEW_FACTORS, db } from "./db";
 import {
+  calculateCompositionSummary,
+  type CompositionSummary,
+} from "../calculations/compositionSummary";
+import {
   calculateFormaScore,
   type FormaScore,
 } from "../calculations/formaScore";
@@ -8,6 +12,10 @@ import type { ProprietaryBodyCompositionMetrics } from "../calculations/propriet
 
 type BodyCompositionMetricsNewRow = ProprietaryBodyCompositionMetrics & {
   desired_weight_kg: number;
+};
+
+type BodyCompositionMetricsNewWithCreatedAtRow = BodyCompositionMetricsNewRow & {
+  createdAt: string;
 };
 
 export type JobId = string;
@@ -70,6 +78,25 @@ export type BodyCompositionTrendPoint = {
   profileId: ProfileId;
   createdAt: string;
   value: number;
+};
+
+export type WeightTrendPoint = {
+  weight: number;
+  createdAt: string;
+};
+
+export type WeightSummary = {
+  currentWeight: number | null;
+  goalWeight: number | null;
+  averageWeight30d: number | null;
+  lowestWeight30d: number | null;
+  last30DaysWeightTrend: WeightTrendPoint[];
+};
+
+export type LatestBodyCompositionSnapshot = {
+  createdAt: string;
+  metrics: BodyCompositionMetricsNewRow;
+  compositionSummary: CompositionSummary;
 };
 
 export type Users = {
@@ -857,6 +884,150 @@ export function getProfileFormaScore(profileId: ProfileId): FormaScore | null {
   }
 
   return calculateFormaScore(metrics);
+}
+
+export function getLatestBodyCompositionSnapshot(
+  profileId: ProfileId,
+): LatestBodyCompositionSnapshot | null {
+  const row = db
+    .prepare(
+      `
+  SELECT
+    bmi,
+    body_fat_pct,
+    fat_mass_kg,
+    fat_free_mass_kg,
+    desired_weight_kg,
+    body_score,
+    body_age_years,
+    water_pct,
+    muscle_mass_kg,
+    muscle_rate_pct,
+    bmr_kcal,
+    visceral_fat,
+    ideal_weight_kg,
+    protein_mass_kg,
+    protein_pct,
+    skeletal_muscle_kg,
+    subcutaneous_fat_pct,
+    subcutaneous_fat_mass_kg,
+    predicted_lean_mass_kg,
+    created_at AS createdAt
+  FROM body_composition_metrics_new
+  WHERE profile_id = ?
+  ORDER BY created_at DESC
+  LIMIT 1
+`,
+    )
+    .get(profileId) as BodyCompositionMetricsNewWithCreatedAtRow | null;
+
+  if (!row) {
+    return null;
+  }
+
+  const { createdAt, ...metrics } = row;
+
+  return {
+    createdAt,
+    metrics,
+    compositionSummary: calculateCompositionSummary(metrics),
+  };
+}
+
+export function getLatestUserBodyMeasurement(
+  profileId: ProfileId,
+): BodyMeasurement | null {
+  return db
+    .prepare(
+      `
+  SELECT
+    id,
+    neck_cm AS neckCm,
+    shoulder_cm AS shoulderCm,
+    chest_cm AS chestCm,
+    stomach_cm AS stomachCm,
+    waist_cm AS waistCm,
+    calf_cm AS calfCm,
+    thigh_cm AS thighCm,
+    bicep_cm AS bicepCm,
+    forearm_cm AS forearmCm,
+    created_at AS createdAt
+  FROM body_measurements
+  WHERE profile_id = ?
+  ORDER BY created_at DESC
+  LIMIT 1
+`,
+    )
+    .get(profileId) as BodyMeasurement | null;
+}
+
+export function getWeightSummary(profileId: ProfileId): WeightSummary {
+  const currentWeightRow = db
+    .prepare(
+      `
+  SELECT
+    weight
+  FROM measurements
+  WHERE profile_id = ?
+    AND weight IS NOT NULL
+  ORDER BY created_at DESC
+  LIMIT 1
+`,
+    )
+    .get(profileId) as { weight: number } | null;
+
+  const goalWeightRow = db
+    .prepare(
+      `
+  SELECT
+    desired_weight_kg AS goalWeight
+  FROM body_composition_metrics_new
+  WHERE profile_id = ?
+  ORDER BY created_at DESC
+  LIMIT 1
+`,
+    )
+    .get(profileId) as { goalWeight: number } | null;
+
+  const summaryRow = db
+    .prepare(
+      `
+  SELECT
+    AVG(weight) AS averageWeight30d,
+    MIN(weight) AS lowestWeight30d
+  FROM measurements
+  WHERE profile_id = ?
+    AND weight IS NOT NULL
+    AND created_at >= datetime('now', '-30 days')
+`,
+    )
+    .get(profileId) as {
+    averageWeight30d: number | null;
+    lowestWeight30d: number | null;
+  } | null;
+
+  const last30DaysWeightTrend = db
+    .prepare(
+      `
+  SELECT
+    weight,
+    created_at AS createdAt
+  FROM measurements
+  WHERE profile_id = ?
+    AND weight IS NOT NULL
+    AND created_at >= datetime('now', '-30 days')
+  ORDER BY created_at ASC
+`,
+    )
+    .all(profileId) as WeightTrendPoint[];
+
+  return {
+    currentWeight: currentWeightRow?.weight ?? null,
+    goalWeight: goalWeightRow?.goalWeight ?? null,
+    averageWeight30d: summaryRow?.averageWeight30d ?? null,
+    lowestWeight30d: summaryRow?.lowestWeight30d ?? null,
+    last30DaysWeightTrend,
+  };
 }
 
 export function listUsers(): Users[] {
