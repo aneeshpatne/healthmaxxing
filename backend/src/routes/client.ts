@@ -4,10 +4,15 @@ import { RedisClient } from "bun";
 import {
   addBodyMeasurement,
   accountExists,
+  getLatestBodyCompositionSnapshot,
+  getLatestUserBodyMeasurement,
+  getProfileById,
   initJob,
   jobExists,
   getProfileAiOverview,
   getProfileEffortScore,
+  getProfileFormaScore,
+  getWeightSummary,
   isBodyCompositionTrendMetric,
   isBodyCompositionTrendPeriod,
   listBodyCompositionTrends,
@@ -41,6 +46,25 @@ function parseJobStatus(raw: string): JobStatusState | null {
   } catch {
     return null;
   }
+}
+
+function calculateAgeYears(dateOfBirth: string): number {
+  const birthDate = new Date(dateOfBirth);
+  const now = new Date();
+  let age = now.getUTCFullYear() - birthDate.getUTCFullYear();
+  const birthdayThisYear = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      birthDate.getUTCMonth(),
+      birthDate.getUTCDate(),
+    ),
+  );
+
+  if (now < birthdayThisYear) {
+    age -= 1;
+  }
+
+  return age;
 }
 
 const clientRoutes: FastifyPluginAsync = async (app) => {
@@ -344,6 +368,61 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       users,
     });
   });
+
+  app.get(
+    "/profiles/:profileId/essentials",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+
+      if (!profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const profile = getProfileById(profileId);
+      const formaScore = getProfileFormaScore(profileId);
+      const bodyComposition = getLatestBodyCompositionSnapshot(profileId);
+      const measurements = getLatestUserBodyMeasurement(profileId);
+      const weight = getWeightSummary(profileId);
+
+      return reply.send({
+        ok: true,
+        profileId,
+        essentials: {
+          formaScore,
+          bodyAge: bodyComposition?.metrics.body_age_years ?? null,
+          realAge:
+            profile.dateOfBirth === null
+              ? null
+              : calculateAgeYears(profile.dateOfBirth),
+          compositionSummary: bodyComposition?.compositionSummary ?? null,
+          measurements,
+          currentWeight: weight.currentWeight,
+          goalWeight: weight.goalWeight,
+          averageWeight30d: weight.averageWeight30d,
+          lowestWeight30d: weight.lowestWeight30d,
+          last30DaysWeightTrend: weight.last30DaysWeightTrend,
+        },
+      });
+    },
+  );
 
   app.get(
     "/profiles/:profileId/insights",
