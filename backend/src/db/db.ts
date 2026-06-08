@@ -159,6 +159,17 @@ db.run(`
   )
 `);
 
+db.run(`
+  CREATE TABLE IF NOT EXISTS derived_body_composition_metrics (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    fmi REAL NOT NULL,
+    ffmi REAL NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id)
+  )
+`);
+
 const bodyCompositionMetricsNewColumns = db
   .prepare("PRAGMA table_info(body_composition_metrics_new)")
   .all() as Array<{ name: string }>;
