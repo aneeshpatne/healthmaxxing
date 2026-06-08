@@ -62,6 +62,11 @@ export type CalculatedBodyCompositionMetrics = {
   fat_mass_kg: number;
 };
 
+export type DerivedBodyCompositionMetrics = {
+  fmi: number;
+  ffmi: number;
+};
+
 export const TREND_COLUMNS = BODY_COMPOSITION_METRICS_NEW_FACTORS;
 
 export const PERIODS = {
@@ -633,6 +638,28 @@ export function addProprietaryBodyCompositionMetrics(
     metrics.subcutaneous_fat_mass_kg,
     metrics.predicted_lean_mass_kg,
   );
+
+  return id;
+}
+
+export function addDerivedBodyComposition(
+  profileId: ProfileId,
+  metrics: DerivedBodyCompositionMetrics,
+): string {
+  const id = uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO derived_body_composition_metrics (
+    id,
+    profile_id,
+    fmi,
+    ffmi,
+    created_at
+  )
+  VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+`,
+  ).run(id, profileId, metrics.fmi, metrics.ffmi);
 
   return id;
 }
