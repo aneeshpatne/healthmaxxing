@@ -16,5 +16,10 @@ if (res1 === null) {
   throw new Error(`No profile metadata found for profile ${profileId}`);
 }
 
+const res3 = db
+  .prepare("SELECT * FROM body_measurements WHERE profile_id = ? ")
+  .get(profileId);
+
 console.log(calculateAgeYears(res1.date_of_birth));
 console.log(res?.body_age_years);
+console.log(res3);
