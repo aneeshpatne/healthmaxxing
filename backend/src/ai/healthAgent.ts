@@ -64,6 +64,81 @@ effort_score RULES
 Never use risk-focused, fear-based, or clinical language. No diagnoses, no cliches. Keep every field concise — if a sentence needs a dash or semicolon, split it or cut it.`,
 );
 
+function getNumericField(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number") {
+      return value;
+    }
+  }
+
+  return 0;
+}
+
+function logTokenUsage(result: unknown) {
+  const resultRecord =
+    result && typeof result === "object"
+      ? (result as Record<string, unknown>)
+      : null;
+  const messages = Array.isArray(resultRecord?.messages)
+    ? resultRecord.messages
+    : [];
+
+  const tokenUsage = messages.reduce(
+    (totals, message) => {
+      const messageRecord =
+        message && typeof message === "object"
+          ? (message as Record<string, unknown>)
+          : null;
+      const usageMetadata =
+        messageRecord?.usage_metadata &&
+        typeof messageRecord.usage_metadata === "object"
+          ? (messageRecord.usage_metadata as Record<string, unknown>)
+          : null;
+      const responseMetadata =
+        messageRecord?.response_metadata &&
+        typeof messageRecord.response_metadata === "object"
+          ? (messageRecord.response_metadata as Record<string, unknown>)
+          : null;
+      const tokenUsageMetadata =
+        responseMetadata?.tokenUsage &&
+        typeof responseMetadata.tokenUsage === "object"
+          ? (responseMetadata.tokenUsage as Record<string, unknown>)
+          : null;
+      const outputTokenDetails =
+        usageMetadata?.output_token_details &&
+        typeof usageMetadata.output_token_details === "object"
+          ? (usageMetadata.output_token_details as Record<string, unknown>)
+          : null;
+
+      const inputTokens =
+        getNumericField(usageMetadata ?? {}, ["input_tokens"]) ||
+        getNumericField(tokenUsageMetadata ?? {}, ["promptTokens"]);
+      const outputTokens =
+        getNumericField(usageMetadata ?? {}, ["output_tokens"]) ||
+        getNumericField(tokenUsageMetadata ?? {}, ["completionTokens"]);
+      const reasoningTokens = getNumericField(outputTokenDetails ?? {}, [
+        "reasoning_tokens",
+        "reasoning",
+      ]);
+
+      return {
+        input: totals.input + inputTokens,
+        output: totals.output + outputTokens,
+        reasoning: totals.reasoning + reasoningTokens,
+      };
+    },
+    { input: 0, output: 0, reasoning: 0 },
+  );
+
+  console.log("[healthAgent] token usage", {
+    input: tokenUsage.input,
+    output: tokenUsage.output,
+    reasoning: tokenUsage.reasoning,
+    total: tokenUsage.input + tokenUsage.output,
+  });
+}
+
 export async function analyzeHealthData(profileId: string, healthData: unknown) {
   const healthDataRecord =
     healthData && typeof healthData === "object"
@@ -85,7 +160,7 @@ export async function analyzeHealthData(profileId: string, healthData: unknown) 
     tools: createProfileAiTools(profileId, "deepseek:deepseek-v4-pro"),
   });
 
-  return healthAgent.invoke({
+  const result = await healthAgent.invoke({
     messages: [
       systemMsg,
       new HumanMessage(`The user is tracking from this date -> ${trackingStartDate}
@@ -95,4 +170,8 @@ Analyze this fetched health data:
 ${JSON.stringify(healthData, null, 2)}`),
     ],
   });
+
+  logTokenUsage(result);
+
+  return result;
 }
