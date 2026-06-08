@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { RedisClient } from "bun";
 import {
+  addDerivedBodyComposition,
   addMeasurement,
   addProprietaryBodyCompositionMetrics,
   getProfileById,
@@ -8,7 +9,11 @@ import {
   type profile,
 } from "../db/commands";
 import { calculateDesiredWeightKg } from "../calculations/compositionSummary";
-import { calculateProprietaryMetrics } from "../calculations/proprietaryMetrics";
+import {
+  calculateFfmi,
+  calculateFmi,
+  calculateProprietaryMetrics,
+} from "../calculations/proprietaryMetrics";
 const pub = new RedisClient("redis://localhost:6379");
 
 export function calculateAgeYears(dateOfBirth: string): number {
@@ -107,6 +112,10 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         profileId,
         metrics,
       );
+      addDerivedBodyComposition(profileId, {
+        fmi: calculateFmi(metricsBase.fat_mass_kg, profile.heightCm),
+        ffmi: calculateFfmi(metricsBase.fat_free_mass_kg, profile.heightCm),
+      });
 
       console.log(metrics);
 
