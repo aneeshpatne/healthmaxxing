@@ -4,6 +4,7 @@ import {
   type ProfileAiAnalysisBlock,
   type ProfileId,
   TREND_COLUMNS,
+  upsertDerivedMetricsComments,
   upsertProfileAiOverview,
   upsertProfileEffortScore,
 } from "../db/commands";
@@ -38,6 +39,30 @@ const momentumAnalysisMessageSchema = analysisMessageSchema.extend({
     .describe(
       "At most 3 body_composition_metrics_new metric columns most responsible for the momentum insight. These exact metrics will be plotted for the user.",
     ),
+});
+
+const derivedMetricCommentSchema = z.object({
+  comment: z.string().describe("Concise coaching comment. No word limit."),
+});
+
+const bodyRatioCommentSchema = z.object({
+  remark: z.string().describe("Exactly 1 word. Positive or neutral tone."),
+  comment: z
+    .string()
+    .describe("Exactly 4 words. Concise coaching comment."),
+});
+
+const bodyRatioCommentsSchema = z.object({
+  waist_height: bodyRatioCommentSchema.describe("Waist divided by height."),
+  shoulder_waist: bodyRatioCommentSchema.describe(
+    "Shoulder divided by waist.",
+  ),
+  chest_waist: bodyRatioCommentSchema.describe("Chest divided by waist."),
+  bicep_forearm: bodyRatioCommentSchema.describe(
+    "Bicep divided by forearm.",
+  ),
+  thigh_calf: bodyRatioCommentSchema.describe("Thigh divided by calf."),
+  neck_calf: bodyRatioCommentSchema.describe("Neck divided by calf."),
 });
 
 type BodyAnalysisPayload = {
@@ -205,5 +230,75 @@ export function createProfileAiTools(
     },
   );
 
-  return [ai_overview, body_analysis, effort_score];
+  const derived_metrics_comments = tool(
+    ({
+      ffmi,
+      ffmi_vs_fmi,
+      composition_flow,
+      composition_trend,
+      recomp_vector,
+      excess_fat_gauge,
+      body_ratios,
+    }) => {
+      console.log({
+        profileId,
+        ffmi,
+        ffmi_vs_fmi,
+        composition_flow,
+        composition_trend,
+        recomp_vector,
+        excess_fat_gauge,
+        body_ratios,
+      });
+
+      upsertDerivedMetricsComments({
+        profileId,
+        ffmi,
+        ffmiVsFmi: ffmi_vs_fmi,
+        compositionFlow: composition_flow,
+        compositionTrend: composition_trend,
+        recompVector: recomp_vector,
+        excessFatGauge: excess_fat_gauge,
+        bodyRatios: {
+          waistHeight: body_ratios.waist_height,
+          shoulderWaist: body_ratios.shoulder_waist,
+          chestWaist: body_ratios.chest_waist,
+          bicepForearm: body_ratios.bicep_forearm,
+          thighCalf: body_ratios.thigh_calf,
+          neckCalf: body_ratios.neck_calf,
+        },
+        modelName,
+      });
+
+      return "Saved derived metrics comments.";
+    },
+    {
+      name: "derived_metrics_comments",
+      description:
+        "Concise AI comments for performance-derived metrics. Use the provided performance values: FFMI, FFMI vs FMI, lean vs fat flow, 30-day lean/fat trends, target/current/initial lean/fat pairs, excess fat gauge, and body ratios.",
+      schema: z.object({
+        ffmi: derivedMetricCommentSchema.describe("FFMI value comment."),
+        ffmi_vs_fmi: derivedMetricCommentSchema.describe(
+          "Comment comparing FFMI against FMI.",
+        ),
+        composition_flow: derivedMetricCommentSchema.describe(
+          "Lean mass versus fat mass comment.",
+        ),
+        composition_trend: derivedMetricCommentSchema.describe(
+          "30-day lean mass versus fat mass trend comment.",
+        ),
+        recomp_vector: derivedMetricCommentSchema.describe(
+          "Target, current, and initial lean mass/fat mass pair comment.",
+        ),
+        excess_fat_gauge: derivedMetricCommentSchema.describe(
+          "Total fat, target fat, and excess fat comment.",
+        ),
+        body_ratios: bodyRatioCommentsSchema.describe(
+          "Separate comments for each latest body ratio.",
+        ),
+      }),
+    },
+  );
+
+  return [ai_overview, body_analysis, effort_score, derived_metrics_comments];
 }
