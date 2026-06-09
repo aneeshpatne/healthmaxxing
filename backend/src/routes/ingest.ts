@@ -4,6 +4,7 @@ import {
   addDerivedBodyComposition,
   addMeasurement,
   addProprietaryBodyCompositionMetrics,
+  createSnapshotReports,
   getProfileById,
   profileExists,
   type profile,
@@ -112,9 +113,15 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         profileId,
         metrics,
       );
-      addDerivedBodyComposition(profileId, {
+      const derivedMetrics = {
         fmi: calculateFmi(metricsBase.fat_mass_kg, profile.heightCm),
         ffmi: calculateFfmi(metricsBase.fat_free_mass_kg, profile.heightCm),
+      };
+      addDerivedBodyComposition(profileId, derivedMetrics);
+      createSnapshotReports({
+        profileId,
+        bodyCompositionMetricsId: metricsId,
+        derivedMetrics,
       });
 
       console.log(metrics);
