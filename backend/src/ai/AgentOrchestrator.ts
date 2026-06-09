@@ -1,5 +1,8 @@
 import { analyzeHealthData } from "./healthAgent";
 import {
+  getProfileFatReport,
+} from "../db/commands";
+import {
   getBodyCompositionMeasurementDelta,
   getBodyMeasurementDelta,
   getFirstHealthDataEntry,
@@ -51,6 +54,7 @@ export function fetchHealthData(profileId: string) {
     bodyCompositionMeasurementDelta:
       getBodyCompositionMeasurementDelta(profileId),
     bodyMeasurementDelta: getBodyMeasurementDelta(profileId),
+    fatReport: getProfileFatReport(profileId),
   };
 }
 

@@ -11,6 +11,7 @@ import {
   jobExists,
   getProfileAiOverview,
   getProfileEffortScore,
+  getProfileFatReport,
   getProfileFormaScore,
   getProfilePerformance,
   getWeightSummary,
@@ -456,6 +457,50 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         ok: true,
         profileId,
         performance: getProfilePerformance(profileId),
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/fat",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+
+      if (!profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const fat = getProfileFatReport(profileId);
+
+      if (fat === null) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Fat report does not exist",
+        });
+      }
+
+      return reply.send({
+        ok: true,
+        profileId,
+        fat,
       });
     },
   );
