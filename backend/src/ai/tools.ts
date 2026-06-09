@@ -4,6 +4,7 @@ import {
   type ProfileAiAnalysisBlock,
   type ProfileId,
   TREND_COLUMNS,
+  saveFatReportComments,
   upsertDerivedMetricsComments,
   upsertProfileAiOverview,
   upsertProfileEffortScore,
@@ -63,6 +64,11 @@ const bodyRatioCommentsSchema = z.object({
   ),
   thigh_calf: bodyRatioCommentSchema.describe("Thigh divided by calf."),
   neck_calf: bodyRatioCommentSchema.describe("Neck divided by calf."),
+});
+
+const fatReportCommentSchema = z.object({
+  remark: z.string().describe("Exactly 1 word. Positive or neutral tone."),
+  comment: z.string().describe("Concise coaching comment. No word limit."),
 });
 
 type BodyAnalysisPayload = {
@@ -300,5 +306,72 @@ export function createProfileAiTools(
     },
   );
 
-  return [ai_overview, body_analysis, effort_score, derived_metrics_comments];
+  const fat_report_comments = tool(
+    ({
+      fat_percent,
+      visceral_subcutaneous_30d_delta,
+      fat_mass,
+      visceral_fat_mass,
+      visceral_fat_percent,
+      subcutaneous_fat_mass,
+      subcutaneous_fat_ratio,
+    }) => {
+      console.log({
+        profileId,
+        fat_percent,
+        visceral_subcutaneous_30d_delta,
+        fat_mass,
+        visceral_fat_mass,
+        visceral_fat_percent,
+        subcutaneous_fat_mass,
+        subcutaneous_fat_ratio,
+      });
+
+      saveFatReportComments({
+        profileId,
+        comments: {
+          fatPercent: fat_percent,
+          visceralSubcutaneous30dDelta: visceral_subcutaneous_30d_delta,
+          fatMass: fat_mass,
+          visceralFatMass: visceral_fat_mass,
+          visceralFatPercent: visceral_fat_percent,
+          subcutaneousFatMass: subcutaneous_fat_mass,
+          subcutaneousFatRatio: subcutaneous_fat_ratio,
+        },
+        modelName,
+      });
+
+      return "Saved fat report comments.";
+    },
+    {
+      name: "fat_report_comments",
+      description:
+        "AI remarks and comments for the latest fat report factors. Every remark must be exactly one word.",
+      schema: z.object({
+        fat_percent: fatReportCommentSchema.describe("Body fat percentage."),
+        visceral_subcutaneous_30d_delta: fatReportCommentSchema.describe(
+          "30-day visceral fat mass delta and subcutaneous fat mass delta.",
+        ),
+        fat_mass: fatReportCommentSchema.describe("Total fat mass."),
+        visceral_fat_mass: fatReportCommentSchema.describe("Visceral fat mass."),
+        visceral_fat_percent: fatReportCommentSchema.describe(
+          "Visceral fat percentage.",
+        ),
+        subcutaneous_fat_mass: fatReportCommentSchema.describe(
+          "Subcutaneous fat mass.",
+        ),
+        subcutaneous_fat_ratio: fatReportCommentSchema.describe(
+          "Subcutaneous fat mass divided by total fat mass.",
+        ),
+      }),
+    },
+  );
+
+  return [
+    ai_overview,
+    body_analysis,
+    effort_score,
+    derived_metrics_comments,
+    fat_report_comments,
+  ];
 }
