@@ -8,7 +8,11 @@ import {
   calculateFormaScore,
   type FormaScore,
 } from "../calculations/formaScore";
-import type { ProprietaryBodyCompositionMetrics } from "../calculations/proprietaryMetrics";
+import {
+  calculateFfmi,
+  calculateFmi,
+  type ProprietaryBodyCompositionMetrics,
+} from "../calculations/proprietaryMetrics";
 
 type BodyCompositionMetricsNewRow = ProprietaryBodyCompositionMetrics & {
   desired_weight_kg: number;
@@ -102,6 +106,89 @@ export type LatestBodyCompositionSnapshot = {
   createdAt: string;
   metrics: BodyCompositionMetricsNewRow;
   compositionSummary: CompositionSummary;
+};
+
+export type CompositionTrendMassPoint = {
+  createdAt: string;
+  leanMassKg: number;
+  fatMassKg: number;
+};
+
+export type BodyRatios = {
+  waistHeight: number | null;
+  shoulderWaist: number | null;
+  chestWaist: number | null;
+  bicepForearm: number | null;
+  thighCalf: number | null;
+  neckCalf: number | null;
+};
+
+export type ProfilePerformance = {
+  ffmi: number | null;
+  ffmiVsFmi: {
+    ffmi: number | null;
+    fmi: number | null;
+  };
+  bodyComposition: {
+    leanMassKg: number | null;
+    fatMassKg: number | null;
+  };
+  compositionTrends: {
+    leanMass30Days: Array<{ createdAt: string; value: number }>;
+    fatMass30Days: Array<{ createdAt: string; value: number }>;
+  };
+  weightPair: {
+    target: {
+      leanMassKg: number | null;
+      fatMassKg: number | null;
+    };
+    current: {
+      leanMassKg: number | null;
+      fatMassKg: number | null;
+    };
+    initial: {
+      leanMassKg: number | null;
+      fatMassKg: number | null;
+    };
+  };
+  excessFatGauge: {
+    totalFatKg: number | null;
+    targetFatKg: number | null;
+    excessFatKg: number | null;
+  };
+  bodyMeasurements: BodyMeasurement[];
+  lastBodyRatios: BodyRatios;
+  comments: Omit<DerivedMetricsComments, "profileId" | "modelName"> | null;
+};
+
+export type DerivedMetricComment = {
+  comment: string;
+};
+
+export type BodyRatioComment = {
+  remark: string;
+  comment: string;
+};
+
+export type BodyRatioComments = {
+  waistHeight: BodyRatioComment;
+  shoulderWaist: BodyRatioComment;
+  chestWaist: BodyRatioComment;
+  bicepForearm: BodyRatioComment;
+  thighCalf: BodyRatioComment;
+  neckCalf: BodyRatioComment;
+};
+
+export type DerivedMetricsComments = {
+  profileId: ProfileId;
+  ffmi: DerivedMetricComment;
+  ffmiVsFmi: DerivedMetricComment;
+  compositionFlow: DerivedMetricComment;
+  compositionTrend: DerivedMetricComment;
+  recompVector: DerivedMetricComment;
+  excessFatGauge: DerivedMetricComment;
+  bodyRatios: BodyRatioComments;
+  modelName?: string | null;
 };
 
 export type Users = {
@@ -854,6 +941,59 @@ export function upsertProfileEffortScore({
   ).run(profileId, score, remark, modelName);
 }
 
+export function upsertDerivedMetricsComments({
+  profileId,
+  ffmi,
+  ffmiVsFmi,
+  compositionFlow,
+  compositionTrend,
+  recompVector,
+  excessFatGauge,
+  bodyRatios,
+  modelName = null,
+}: DerivedMetricsComments): void {
+  db.prepare(
+    `
+  INSERT INTO derived_metrics_comments (
+    id,
+    profile_id,
+    ffmi,
+    ffmi_vs_fmi,
+    composition_flow,
+    composition_trend,
+    recomp_vector,
+    excess_fat_gauge,
+    body_ratios,
+    model_name,
+    created_at,
+    updated_at
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  ON CONFLICT(profile_id) DO UPDATE SET
+    ffmi = excluded.ffmi,
+    ffmi_vs_fmi = excluded.ffmi_vs_fmi,
+    composition_flow = excluded.composition_flow,
+    composition_trend = excluded.composition_trend,
+    recomp_vector = excluded.recomp_vector,
+    excess_fat_gauge = excluded.excess_fat_gauge,
+    body_ratios = excluded.body_ratios,
+    model_name = excluded.model_name,
+    updated_at = CURRENT_TIMESTAMP
+`,
+  ).run(
+    uuidv7(),
+    profileId,
+    JSON.stringify(ffmi),
+    JSON.stringify(ffmiVsFmi),
+    JSON.stringify(compositionFlow),
+    JSON.stringify(compositionTrend),
+    JSON.stringify(recompVector),
+    JSON.stringify(excessFatGauge),
+    JSON.stringify(bodyRatios),
+    modelName,
+  );
+}
+
 export function getProfileEffortScore(
   profileId: ProfileId,
 ): ProfileEffortScore | null {
@@ -986,6 +1126,374 @@ export function getLatestUserBodyMeasurement(
 `,
     )
     .get(profileId) as BodyMeasurement | null;
+}
+
+function roundMetric(value: number, digits: number): number {
+  return Number(value.toFixed(digits));
+}
+
+function ratioOrNull(
+  numerator: number | null,
+  denominator: number | null,
+): number | null {
+  if (
+    numerator === null ||
+    denominator === null ||
+    !Number.isFinite(numerator) ||
+    !Number.isFinite(denominator) ||
+    denominator <= 0
+  ) {
+    return null;
+  }
+
+  return roundMetric(numerator / denominator, 2);
+}
+
+function normalizeTrend(
+  points: Array<{ createdAt: string; value: number }>,
+): Array<{ createdAt: string; value: number }> {
+  const baseline = points[0]?.value;
+
+  if (baseline === undefined || !Number.isFinite(baseline)) {
+    return [];
+  }
+
+  return points.map((point) => ({
+    createdAt: point.createdAt,
+    value: roundMetric(point.value - baseline, 2),
+  }));
+}
+
+type DerivedMetricsCommentsRow = {
+  ffmi: string;
+  ffmiVsFmi: string;
+  compositionFlow: string;
+  compositionTrend: string;
+  recompVector: string;
+  excessFatGauge: string;
+  bodyRatios: string;
+};
+
+function parseJsonField<T>(raw: string): T | null {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeDerivedComment(comment: unknown): DerivedMetricComment | null {
+  if (comment === null || typeof comment !== "object") {
+    return null;
+  }
+
+  const record = comment as Record<string, unknown>;
+
+  if (typeof record.comment !== "string") {
+    return null;
+  }
+
+  return {
+    comment: record.comment,
+  };
+}
+
+function normalizeRatioComment(comment: unknown): BodyRatioComment | null {
+  if (comment === null || typeof comment !== "object") {
+    return null;
+  }
+
+  const record = comment as Record<string, unknown>;
+
+  if (typeof record.remark !== "string" || typeof record.comment !== "string") {
+    return null;
+  }
+
+  return {
+    remark: record.remark,
+    comment: record.comment,
+  };
+}
+
+function normalizeBodyRatioComments(
+  comments: unknown,
+): BodyRatioComments | null {
+  if (comments === null || typeof comments !== "object") {
+    return null;
+  }
+
+  const record = comments as Record<string, unknown>;
+  const waistHeight = normalizeRatioComment(record.waistHeight);
+  const shoulderWaist = normalizeRatioComment(record.shoulderWaist);
+  const chestWaist = normalizeRatioComment(record.chestWaist);
+  const bicepForearm = normalizeRatioComment(record.bicepForearm);
+  const thighCalf = normalizeRatioComment(record.thighCalf);
+  const neckCalf = normalizeRatioComment(record.neckCalf);
+
+  if (
+    waistHeight === null ||
+    shoulderWaist === null ||
+    chestWaist === null ||
+    bicepForearm === null ||
+    thighCalf === null ||
+    neckCalf === null
+  ) {
+    return null;
+  }
+
+  return {
+    waistHeight,
+    shoulderWaist,
+    chestWaist,
+    bicepForearm,
+    thighCalf,
+    neckCalf,
+  };
+}
+
+function parseDerivedMetricsComments(
+  row: DerivedMetricsCommentsRow | null,
+): Omit<DerivedMetricsComments, "profileId" | "modelName"> | null {
+  if (row === null) {
+    return null;
+  }
+
+  const ffmi = normalizeDerivedComment(parseJsonField<unknown>(row.ffmi));
+  const ffmiVsFmi = normalizeDerivedComment(
+    parseJsonField<unknown>(row.ffmiVsFmi),
+  );
+  const compositionFlow = normalizeDerivedComment(
+    parseJsonField<unknown>(row.compositionFlow),
+  );
+  const compositionTrend = normalizeDerivedComment(
+    parseJsonField<unknown>(row.compositionTrend),
+  );
+  const recompVector = normalizeDerivedComment(
+    parseJsonField<unknown>(row.recompVector),
+  );
+  const excessFatGauge = normalizeDerivedComment(
+    parseJsonField<unknown>(row.excessFatGauge),
+  );
+  const bodyRatios = normalizeBodyRatioComments(
+    parseJsonField<unknown>(row.bodyRatios),
+  );
+
+  if (
+    ffmi === null ||
+    ffmiVsFmi === null ||
+    compositionFlow === null ||
+    compositionTrend === null ||
+    recompVector === null ||
+    excessFatGauge === null ||
+    bodyRatios === null
+  ) {
+    return null;
+  }
+
+  return {
+    ffmi,
+    ffmiVsFmi,
+    compositionFlow,
+    compositionTrend,
+    recompVector,
+    excessFatGauge,
+    bodyRatios,
+  };
+}
+
+export function getProfilePerformance(
+  profileId: ProfileId,
+): ProfilePerformance {
+  const latestComposition = db
+    .prepare(
+      `
+  SELECT
+    fat_mass_kg AS fatMassKg,
+    fat_free_mass_kg AS leanMassKg,
+    desired_weight_kg AS desiredWeightKg,
+    created_at AS createdAt
+  FROM body_composition_metrics_new
+  WHERE profile_id = ?
+  ORDER BY created_at DESC
+  LIMIT 1
+`,
+    )
+    .get(profileId) as {
+    fatMassKg: number;
+    leanMassKg: number;
+    desiredWeightKg: number;
+    createdAt: string;
+  } | null;
+
+  const initialComposition = db
+    .prepare(
+      `
+  SELECT
+    fat_mass_kg AS fatMassKg,
+    fat_free_mass_kg AS leanMassKg,
+    created_at AS createdAt
+  FROM body_composition_metrics_new
+  WHERE profile_id = ?
+  ORDER BY created_at ASC
+  LIMIT 1
+`,
+    )
+    .get(profileId) as {
+    fatMassKg: number;
+    leanMassKg: number;
+    createdAt: string;
+  } | null;
+
+  const derivedMetrics = db
+    .prepare(
+      `
+  SELECT
+    fmi,
+    ffmi,
+    created_at AS createdAt
+  FROM derived_body_composition_metrics
+  WHERE profile_id = ?
+  ORDER BY created_at DESC
+  LIMIT 1
+`,
+    )
+    .get(profileId) as {
+    fmi: number;
+    ffmi: number;
+    createdAt: string;
+  } | null;
+
+  const compositionTrend = db
+    .prepare(
+      `
+  SELECT
+    created_at AS createdAt,
+    fat_free_mass_kg AS leanMassKg,
+    fat_mass_kg AS fatMassKg
+  FROM body_composition_metrics_new
+  WHERE profile_id = ?
+    AND created_at >= datetime('now', '-30 days')
+  ORDER BY created_at ASC
+`,
+    )
+    .all(profileId) as CompositionTrendMassPoint[];
+
+  const commentsRow = db
+    .prepare(
+      `
+  SELECT
+    ffmi,
+    ffmi_vs_fmi AS ffmiVsFmi,
+    composition_flow AS compositionFlow,
+    composition_trend AS compositionTrend,
+    recomp_vector AS recompVector,
+    excess_fat_gauge AS excessFatGauge,
+    body_ratios AS bodyRatios
+  FROM derived_metrics_comments
+  WHERE profile_id = ?
+  LIMIT 1
+`,
+    )
+    .get(profileId) as DerivedMetricsCommentsRow | null;
+
+  const bodyMeasurements = listUserBodyMeasurements(profileId);
+  const latestMeasurement = bodyMeasurements[0] ?? null;
+  const profile = getProfileById(profileId);
+  const fallbackFmi =
+    latestComposition === null || profile.heightCm === null
+      ? null
+      : calculateFmi(latestComposition.fatMassKg, profile.heightCm);
+  const fallbackFfmi =
+    latestComposition === null || profile.heightCm === null
+      ? null
+      : calculateFfmi(latestComposition.leanMassKg, profile.heightCm);
+  const fmi = derivedMetrics?.fmi ?? fallbackFmi;
+  const ffmi = derivedMetrics?.ffmi ?? fallbackFfmi;
+  const targetFatKg =
+    latestComposition === null
+      ? null
+      : roundMetric(
+          Math.max(
+            latestComposition.desiredWeightKg - latestComposition.leanMassKg,
+            0,
+          ),
+          2,
+        );
+  const excessFatKg =
+    latestComposition === null || targetFatKg === null
+      ? null
+      : roundMetric(Math.max(latestComposition.fatMassKg - targetFatKg, 0), 2);
+  const leanMass30Days = compositionTrend.map((point) => ({
+    createdAt: point.createdAt,
+    value: point.leanMassKg,
+  }));
+  const fatMass30Days = compositionTrend.map((point) => ({
+    createdAt: point.createdAt,
+    value: point.fatMassKg,
+  }));
+
+  return {
+    ffmi,
+    ffmiVsFmi: {
+      ffmi,
+      fmi,
+    },
+    bodyComposition: {
+      leanMassKg: latestComposition?.leanMassKg ?? null,
+      fatMassKg: latestComposition?.fatMassKg ?? null,
+    },
+    compositionTrends: {
+      leanMass30Days: normalizeTrend(leanMass30Days),
+      fatMass30Days: normalizeTrend(fatMass30Days),
+    },
+    weightPair: {
+      target: {
+        leanMassKg: latestComposition?.leanMassKg ?? null,
+        fatMassKg: targetFatKg,
+      },
+      current: {
+        leanMassKg: latestComposition?.leanMassKg ?? null,
+        fatMassKg: latestComposition?.fatMassKg ?? null,
+      },
+      initial: {
+        leanMassKg: initialComposition?.leanMassKg ?? null,
+        fatMassKg: initialComposition?.fatMassKg ?? null,
+      },
+    },
+    excessFatGauge: {
+      totalFatKg: latestComposition?.fatMassKg ?? null,
+      targetFatKg,
+      excessFatKg,
+    },
+    bodyMeasurements,
+    lastBodyRatios: {
+      waistHeight: ratioOrNull(
+        latestMeasurement?.waistCm ?? null,
+        profile.heightCm,
+      ),
+      shoulderWaist: ratioOrNull(
+        latestMeasurement?.shoulderCm ?? null,
+        latestMeasurement?.waistCm ?? null,
+      ),
+      chestWaist: ratioOrNull(
+        latestMeasurement?.chestCm ?? null,
+        latestMeasurement?.waistCm ?? null,
+      ),
+      bicepForearm: ratioOrNull(
+        latestMeasurement?.bicepCm ?? null,
+        latestMeasurement?.forearmCm ?? null,
+      ),
+      thighCalf: ratioOrNull(
+        latestMeasurement?.thighCm ?? null,
+        latestMeasurement?.calfCm ?? null,
+      ),
+      neckCalf: ratioOrNull(
+        latestMeasurement?.neckCm ?? null,
+        latestMeasurement?.calfCm ?? null,
+      ),
+    },
+    comments: parseDerivedMetricsComments(commentsRow),
+  };
 }
 
 export function getWeightSummary(profileId: ProfileId): WeightSummary {
