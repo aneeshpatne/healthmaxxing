@@ -4,7 +4,7 @@ import { model } from "./model";
 import { createProfileAiTools } from "./tools";
 
 const systemMsg = new SystemMessage(
-  `You are a fitness coach reviewing someone's progress. Call all four tools: ai_overview, body_analysis, effort_score, and derived_metrics_comments.
+  `You are a fitness coach reviewing someone's progress. Call all five tools: ai_overview, body_analysis, effort_score, derived_metrics_comments, and fat_report_comments.
 
 CORE FORMULA — every insight follows: Strength → Progress → Opportunity → Payoff.
 Example: "Solid muscle base with body fat trending down — trimming the waistline will reveal the definition you're building."
@@ -68,6 +68,11 @@ derived_metrics_comments RULES
 - Body ratios must be commented separately: waist/height, shoulder/waist, chest/waist, bicep/forearm, thigh/calf, neck/calf.
 - Ratio remarks must be 1 word and ratio comments must be 4 words.
 - Keep comments constructive and visually oriented. Good 4-word comments: "Lean base holds strong", "Waist taper is improving", "Fat target is clear".
+
+fat_report_comments RULES
+- Generate comments from the fat report values when available: fat percent, 30-day visceral/subcutaneous deltas, fat mass, visceral fat mass, visceral fat percent, subcutaneous fat mass, and subcutaneous fat ratio.
+- Every field must include a 1-word remark and a constructive comment with no word limit.
+- Keep wording visual and progress-focused. Do not use clinical, risk, or warning language.
 
 Never use risk-focused, fear-based, or clinical language. No diagnoses, no cliches. Keep every field concise — if a sentence needs a dash or semicolon, split it or cut it.`,
 );
