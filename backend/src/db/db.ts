@@ -225,6 +225,24 @@ db.run(`
   )
 `);
 
+db.run(`
+  CREATE TABLE IF NOT EXISTS derived_metrics_comments (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL UNIQUE,
+    ffmi TEXT NOT NULL,
+    ffmi_vs_fmi TEXT NOT NULL,
+    composition_flow TEXT NOT NULL,
+    composition_trend TEXT NOT NULL,
+    recomp_vector TEXT NOT NULL,
+    excess_fat_gauge TEXT NOT NULL,
+    body_ratios TEXT NOT NULL,
+    model_name TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+  )
+`);
+
 export function getLatestBodyCompositionMeasurement(profileId: string) {
   return db
     .prepare(
