@@ -243,6 +243,398 @@ db.run(`
   )
 `);
 
+db.run(`
+  CREATE TABLE IF NOT EXISTS performance_reports (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    body_composition_metrics_id TEXT NOT NULL,
+    fmi REAL,
+    ffmi REAL,
+    model_name TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+    FOREIGN KEY(body_composition_metrics_id) REFERENCES body_composition_metrics_new(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_performance_reports_profile_created
+  ON performance_reports(profile_id, created_at DESC)
+`);
+
+db.run(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_performance_reports_snapshot
+  ON performance_reports(body_composition_metrics_id)
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS performance_report_comments (
+    id TEXT PRIMARY KEY,
+    report_id TEXT NOT NULL,
+    factor TEXT NOT NULL,
+    remark TEXT NOT NULL DEFAULT '',
+    comment TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(report_id) REFERENCES performance_reports(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_performance_report_comments_report
+  ON performance_report_comments(report_id)
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS profile_insight_reports (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    body_composition_metrics_id TEXT NOT NULL,
+    overview_title TEXT,
+    overview_remarks TEXT,
+    foundation TEXT,
+    momentum TEXT,
+    biggest_lever TEXT,
+    physique_archetype TEXT,
+    effort_score INTEGER CHECK(effort_score IS NULL OR (effort_score >= 0 AND effort_score <= 100)),
+    effort_remark TEXT,
+    model_name TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+    FOREIGN KEY(body_composition_metrics_id) REFERENCES body_composition_metrics_new(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_profile_insight_reports_profile_created
+  ON profile_insight_reports(profile_id, created_at DESC)
+`);
+
+db.run(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_profile_insight_reports_snapshot
+  ON profile_insight_reports(body_composition_metrics_id)
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS profile_insight_report_comments (
+    id TEXT PRIMARY KEY,
+    report_id TEXT NOT NULL,
+    factor TEXT NOT NULL,
+    remark TEXT NOT NULL DEFAULT '',
+    comment TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(report_id) REFERENCES profile_insight_reports(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_profile_insight_report_comments_report
+  ON profile_insight_report_comments(report_id)
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS fat_reports (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    body_composition_metrics_id TEXT NOT NULL,
+    fat_percent REAL NOT NULL,
+    visceral_fat_delta_30d_kg REAL NOT NULL,
+    subcutaneous_fat_delta_30d_kg REAL NOT NULL,
+    fat_mass_kg REAL NOT NULL,
+    visceral_fat_mass_kg REAL NOT NULL,
+    visceral_fat_percent REAL NOT NULL,
+    subcutaneous_fat_mass_kg REAL NOT NULL,
+    subcutaneous_fat_ratio REAL NOT NULL,
+    model_name TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+    FOREIGN KEY(body_composition_metrics_id) REFERENCES body_composition_metrics_new(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_fat_reports_profile_created
+  ON fat_reports(profile_id, created_at DESC)
+`);
+
+db.run(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_fat_reports_snapshot
+  ON fat_reports(body_composition_metrics_id)
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS fat_report_comments (
+    id TEXT PRIMARY KEY,
+    report_id TEXT NOT NULL,
+    factor TEXT NOT NULL,
+    remark TEXT NOT NULL DEFAULT '',
+    comment TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(report_id) REFERENCES fat_reports(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_fat_report_comments_report
+  ON fat_report_comments(report_id)
+`);
+
+db.run(`
+  INSERT INTO performance_reports (
+    id,
+    profile_id,
+    body_composition_metrics_id,
+    fmi,
+    ffmi,
+    created_at,
+    updated_at
+  )
+  SELECT
+    lower(hex(randomblob(16))),
+    metrics.profile_id,
+    metrics.id,
+    CASE
+      WHEN profile_metadata.height_cm IS NULL OR profile_metadata.height_cm <= 0 THEN NULL
+      ELSE ROUND(metrics.fat_mass_kg / ((profile_metadata.height_cm / 100.0) * (profile_metadata.height_cm / 100.0)), 2)
+    END,
+    CASE
+      WHEN profile_metadata.height_cm IS NULL OR profile_metadata.height_cm <= 0 THEN NULL
+      ELSE ROUND(metrics.fat_free_mass_kg / ((profile_metadata.height_cm / 100.0) * (profile_metadata.height_cm / 100.0)), 2)
+    END,
+    metrics.created_at,
+    metrics.created_at
+  FROM body_composition_metrics_new AS metrics
+  LEFT JOIN profile_metadata
+    ON profile_metadata.profile_id = metrics.profile_id
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM performance_reports
+    WHERE performance_reports.body_composition_metrics_id = metrics.id
+  )
+`);
+
+db.run(`
+  INSERT INTO profile_insight_reports (
+    id,
+    profile_id,
+    body_composition_metrics_id,
+    created_at,
+    updated_at
+  )
+  SELECT
+    lower(hex(randomblob(16))),
+    metrics.profile_id,
+    metrics.id,
+    metrics.created_at,
+    metrics.created_at
+  FROM body_composition_metrics_new AS metrics
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM profile_insight_reports
+    WHERE profile_insight_reports.body_composition_metrics_id = metrics.id
+  )
+`);
+
+db.run(`
+  INSERT INTO fat_reports (
+    id,
+    profile_id,
+    body_composition_metrics_id,
+    fat_percent,
+    visceral_fat_delta_30d_kg,
+    subcutaneous_fat_delta_30d_kg,
+    fat_mass_kg,
+    visceral_fat_mass_kg,
+    visceral_fat_percent,
+    subcutaneous_fat_mass_kg,
+    subcutaneous_fat_ratio,
+    created_at,
+    updated_at
+  )
+  SELECT
+    lower(hex(randomblob(16))),
+    latest.profile_id,
+    latest.id,
+    latest.body_fat_pct,
+    ROUND(
+      (latest.fat_mass_kg - latest.subcutaneous_fat_mass_kg) -
+      (baseline.fat_mass_kg - baseline.subcutaneous_fat_mass_kg),
+      2
+    ),
+    ROUND(latest.subcutaneous_fat_mass_kg - baseline.subcutaneous_fat_mass_kg, 2),
+    latest.fat_mass_kg,
+    ROUND(latest.fat_mass_kg - latest.subcutaneous_fat_mass_kg, 2),
+    ROUND(latest.body_fat_pct - latest.subcutaneous_fat_pct, 2),
+    latest.subcutaneous_fat_mass_kg,
+    CASE
+      WHEN latest.fat_mass_kg <= 0 THEN 0
+      ELSE ROUND(latest.subcutaneous_fat_mass_kg / latest.fat_mass_kg, 2)
+    END,
+    latest.created_at,
+    latest.created_at
+  FROM body_composition_metrics_new AS latest
+  INNER JOIN body_composition_metrics_new AS baseline
+    ON baseline.id = (
+      SELECT oldest.id
+      FROM body_composition_metrics_new AS oldest
+      WHERE oldest.profile_id = latest.profile_id
+        AND oldest.created_at >= datetime(latest.created_at, '-30 days')
+        AND oldest.created_at <= latest.created_at
+      ORDER BY oldest.created_at ASC
+      LIMIT 1
+    )
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM fat_reports
+    WHERE fat_reports.body_composition_metrics_id = latest.id
+  )
+`);
+
+db.run(`
+  UPDATE profile_insight_reports
+  SET
+    overview_title = (
+      SELECT overview.overview_title
+      FROM profile_ai_overviews AS overview
+      WHERE overview.profile_id = profile_insight_reports.profile_id
+      LIMIT 1
+    ),
+    overview_remarks = (
+      SELECT overview.overview_remarks
+      FROM profile_ai_overviews AS overview
+      WHERE overview.profile_id = profile_insight_reports.profile_id
+      LIMIT 1
+    ),
+    foundation = (
+      SELECT overview.foundation
+      FROM profile_ai_overviews AS overview
+      WHERE overview.profile_id = profile_insight_reports.profile_id
+      LIMIT 1
+    ),
+    momentum = (
+      SELECT overview.momentum
+      FROM profile_ai_overviews AS overview
+      WHERE overview.profile_id = profile_insight_reports.profile_id
+      LIMIT 1
+    ),
+    biggest_lever = (
+      SELECT overview.biggest_lever
+      FROM profile_ai_overviews AS overview
+      WHERE overview.profile_id = profile_insight_reports.profile_id
+      LIMIT 1
+    ),
+    physique_archetype = (
+      SELECT overview.physique_archetype
+      FROM profile_ai_overviews AS overview
+      WHERE overview.profile_id = profile_insight_reports.profile_id
+      LIMIT 1
+    ),
+    effort_score = (
+      SELECT effort.score
+      FROM profile_effort_scores AS effort
+      WHERE effort.profile_id = profile_insight_reports.profile_id
+      LIMIT 1
+    ),
+    effort_remark = (
+      SELECT effort.remark
+      FROM profile_effort_scores AS effort
+      WHERE effort.profile_id = profile_insight_reports.profile_id
+      LIMIT 1
+    ),
+    model_name = COALESCE(
+      (
+        SELECT overview.model_name
+        FROM profile_ai_overviews AS overview
+        WHERE overview.profile_id = profile_insight_reports.profile_id
+        LIMIT 1
+      ),
+      (
+        SELECT effort.model_name
+        FROM profile_effort_scores AS effort
+        WHERE effort.profile_id = profile_insight_reports.profile_id
+        LIMIT 1
+      )
+    ),
+    updated_at = CURRENT_TIMESTAMP
+  WHERE profile_insight_reports.body_composition_metrics_id = (
+    SELECT latest.id
+    FROM body_composition_metrics_new AS latest
+    WHERE latest.profile_id = profile_insight_reports.profile_id
+    ORDER BY latest.created_at DESC
+    LIMIT 1
+  )
+    AND profile_insight_reports.overview_title IS NULL
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM profile_ai_overviews AS overview
+        WHERE overview.profile_id = profile_insight_reports.profile_id
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM profile_effort_scores AS effort
+        WHERE effort.profile_id = profile_insight_reports.profile_id
+      )
+    )
+`);
+
+db.run(`
+  INSERT INTO performance_report_comments (
+    id,
+    report_id,
+    factor,
+    remark,
+    comment,
+    created_at
+  )
+  SELECT lower(hex(randomblob(16))), reports.id, comments.factor, comments.remark, comments.comment, CURRENT_TIMESTAMP
+  FROM performance_reports AS reports
+  INNER JOIN derived_metrics_comments AS legacy
+    ON legacy.profile_id = reports.profile_id
+  INNER JOIN (
+    SELECT 'ffmi' AS factor, '' AS remark, json_extract(ffmi, '$.comment') AS comment, profile_id FROM derived_metrics_comments
+    UNION ALL
+    SELECT 'ffmi_vs_fmi', '', json_extract(ffmi_vs_fmi, '$.comment'), profile_id FROM derived_metrics_comments
+    UNION ALL
+    SELECT 'composition_flow', '', json_extract(composition_flow, '$.comment'), profile_id FROM derived_metrics_comments
+    UNION ALL
+    SELECT 'composition_trend', '', json_extract(composition_trend, '$.comment'), profile_id FROM derived_metrics_comments
+    UNION ALL
+    SELECT 'recomp_vector', '', json_extract(recomp_vector, '$.comment'), profile_id FROM derived_metrics_comments
+    UNION ALL
+    SELECT 'excess_fat_gauge', '', json_extract(excess_fat_gauge, '$.comment'), profile_id FROM derived_metrics_comments
+    UNION ALL
+    SELECT 'body_ratio_waist_height', json_extract(body_ratios, '$.waistHeight.remark'), json_extract(body_ratios, '$.waistHeight.comment'), profile_id FROM derived_metrics_comments
+    UNION ALL
+    SELECT 'body_ratio_shoulder_waist', json_extract(body_ratios, '$.shoulderWaist.remark'), json_extract(body_ratios, '$.shoulderWaist.comment'), profile_id FROM derived_metrics_comments
+    UNION ALL
+    SELECT 'body_ratio_chest_waist', json_extract(body_ratios, '$.chestWaist.remark'), json_extract(body_ratios, '$.chestWaist.comment'), profile_id FROM derived_metrics_comments
+    UNION ALL
+    SELECT 'body_ratio_bicep_forearm', json_extract(body_ratios, '$.bicepForearm.remark'), json_extract(body_ratios, '$.bicepForearm.comment'), profile_id FROM derived_metrics_comments
+    UNION ALL
+    SELECT 'body_ratio_thigh_calf', json_extract(body_ratios, '$.thighCalf.remark'), json_extract(body_ratios, '$.thighCalf.comment'), profile_id FROM derived_metrics_comments
+    UNION ALL
+    SELECT 'body_ratio_neck_calf', json_extract(body_ratios, '$.neckCalf.remark'), json_extract(body_ratios, '$.neckCalf.comment'), profile_id FROM derived_metrics_comments
+  ) AS comments
+    ON comments.profile_id = reports.profile_id
+  WHERE reports.body_composition_metrics_id = (
+    SELECT latest.id
+    FROM body_composition_metrics_new AS latest
+    WHERE latest.profile_id = reports.profile_id
+    ORDER BY latest.created_at DESC
+    LIMIT 1
+  )
+    AND comments.comment IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM performance_report_comments AS existing
+      WHERE existing.report_id = reports.id
+        AND existing.factor = comments.factor
+    )
+`);
+
 export function getLatestBodyCompositionMeasurement(profileId: string) {
   return db
     .prepare(
