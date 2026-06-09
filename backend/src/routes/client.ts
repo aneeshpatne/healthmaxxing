@@ -12,6 +12,7 @@ import {
   getProfileAiOverview,
   getProfileEffortScore,
   getProfileFormaScore,
+  getProfilePerformance,
   getWeightSummary,
   isBodyCompositionTrendMetric,
   isBodyCompositionTrendPeriod,
@@ -420,6 +421,41 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
           lowestWeight30d: weight.lowestWeight30d,
           last30DaysWeightTrend: weight.last30DaysWeightTrend,
         },
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/performance",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+
+      if (!profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      return reply.send({
+        ok: true,
+        profileId,
+        performance: getProfilePerformance(profileId),
       });
     },
   );
