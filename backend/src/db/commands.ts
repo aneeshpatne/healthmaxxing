@@ -191,6 +191,54 @@ export type DerivedMetricsComments = {
   modelName?: string | null;
 };
 
+type ReportComment = {
+  factor: string;
+  remark: string;
+  comment: string;
+};
+
+export type FatReportFactor =
+  | "fatPercent"
+  | "visceralSubcutaneous30dDelta"
+  | "fatMass"
+  | "visceralFatMass"
+  | "visceralFatPercent"
+  | "subcutaneousFatMass"
+  | "subcutaneousFatRatio";
+
+export type FatReportComment = {
+  remark: string;
+  comment: string;
+};
+
+export type FatReportComments = Partial<Record<FatReportFactor, FatReportComment>>;
+
+export type FatReport = {
+  id: string;
+  profileId: ProfileId;
+  bodyCompositionMetricsId: string;
+  createdAt: string;
+  metrics: {
+    fatPercent: number;
+    visceralSubcutaneous30dDelta: {
+      visceralFatDeltaKg: number;
+      subcutaneousFatDeltaKg: number;
+    };
+    fatMassKg: number;
+    visceralFatMassKg: number;
+    visceralFatPercent: number;
+    subcutaneousFatMassKg: number;
+    subcutaneousFatRatio: number;
+  };
+  comments: FatReportComments;
+};
+
+export type FatReportCommentsInput = {
+  profileId: ProfileId;
+  comments: Record<FatReportFactor, FatReportComment>;
+  modelName?: string | null;
+};
+
 export type Users = {
   id: string;
   accountId: string;
@@ -751,6 +799,276 @@ export function addDerivedBodyComposition(
   return id;
 }
 
+function getLatestBodyCompositionMetricsId(profileId: ProfileId): string | null {
+  const row = db
+    .prepare(
+      `
+  SELECT id
+  FROM body_composition_metrics_new
+  WHERE profile_id = ?
+  ORDER BY created_at DESC
+  LIMIT 1
+`,
+    )
+    .get(profileId) as { id: string } | null;
+
+  return row?.id ?? null;
+}
+
+function getOrCreatePerformanceReport(
+  profileId: ProfileId,
+  bodyCompositionMetricsId: string,
+  metrics?: Partial<DerivedBodyCompositionMetrics>,
+  modelName: string | null = null,
+): string {
+  const existing = db
+    .prepare(
+      `
+  SELECT id
+  FROM performance_reports
+  WHERE body_composition_metrics_id = ?
+  LIMIT 1
+`,
+    )
+    .get(bodyCompositionMetricsId) as { id: string } | null;
+
+  if (existing !== null) {
+    if (metrics?.fmi !== undefined || metrics?.ffmi !== undefined || modelName !== null) {
+      db.prepare(
+        `
+  UPDATE performance_reports
+  SET
+    fmi = COALESCE(?, fmi),
+    ffmi = COALESCE(?, ffmi),
+    model_name = COALESCE(?, model_name),
+    updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
+`,
+      ).run(metrics?.fmi ?? null, metrics?.ffmi ?? null, modelName, existing.id);
+    }
+
+    return existing.id;
+  }
+
+  const id = uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO performance_reports (
+    id,
+    profile_id,
+    body_composition_metrics_id,
+    fmi,
+    ffmi,
+    model_name,
+    created_at,
+    updated_at
+  )
+  SELECT
+    ?,
+    ?,
+    ?,
+    COALESCE(?, CASE
+      WHEN profile_metadata.height_cm IS NULL OR profile_metadata.height_cm <= 0 THEN NULL
+      ELSE ROUND(metrics.fat_mass_kg / ((profile_metadata.height_cm / 100.0) * (profile_metadata.height_cm / 100.0)), 2)
+    END),
+    COALESCE(?, CASE
+      WHEN profile_metadata.height_cm IS NULL OR profile_metadata.height_cm <= 0 THEN NULL
+      ELSE ROUND(metrics.fat_free_mass_kg / ((profile_metadata.height_cm / 100.0) * (profile_metadata.height_cm / 100.0)), 2)
+    END),
+    ?,
+    metrics.created_at,
+    CURRENT_TIMESTAMP
+  FROM body_composition_metrics_new AS metrics
+  LEFT JOIN profile_metadata
+    ON profile_metadata.profile_id = metrics.profile_id
+  WHERE metrics.id = ?
+`,
+  ).run(
+    id,
+    profileId,
+    bodyCompositionMetricsId,
+    metrics?.fmi ?? null,
+    metrics?.ffmi ?? null,
+    modelName,
+    bodyCompositionMetricsId,
+  );
+
+  return id;
+}
+
+function getOrCreateProfileInsightReport(
+  profileId: ProfileId,
+  bodyCompositionMetricsId: string,
+): string {
+  const existing = db
+    .prepare(
+      `
+  SELECT id
+  FROM profile_insight_reports
+  WHERE body_composition_metrics_id = ?
+  LIMIT 1
+`,
+    )
+    .get(bodyCompositionMetricsId) as { id: string } | null;
+
+  if (existing !== null) {
+    return existing.id;
+  }
+
+  const id = uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO profile_insight_reports (
+    id,
+    profile_id,
+    body_composition_metrics_id,
+    created_at,
+    updated_at
+  )
+  SELECT ?, ?, ?, created_at, CURRENT_TIMESTAMP
+  FROM body_composition_metrics_new
+  WHERE id = ?
+`,
+  ).run(id, profileId, bodyCompositionMetricsId, bodyCompositionMetricsId);
+
+  return id;
+}
+
+function getOrCreateFatReport(
+  profileId: ProfileId,
+  bodyCompositionMetricsId: string,
+  modelName: string | null = null,
+): string {
+  const existing = db
+    .prepare(
+      `
+  SELECT id
+  FROM fat_reports
+  WHERE body_composition_metrics_id = ?
+  LIMIT 1
+`,
+    )
+    .get(bodyCompositionMetricsId) as { id: string } | null;
+
+  if (existing !== null) {
+    if (modelName !== null) {
+      db.prepare(
+        `
+  UPDATE fat_reports
+  SET model_name = ?, updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
+`,
+      ).run(modelName, existing.id);
+    }
+
+    return existing.id;
+  }
+
+  const id = uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO fat_reports (
+    id,
+    profile_id,
+    body_composition_metrics_id,
+    fat_percent,
+    visceral_fat_delta_30d_kg,
+    subcutaneous_fat_delta_30d_kg,
+    fat_mass_kg,
+    visceral_fat_mass_kg,
+    visceral_fat_percent,
+    subcutaneous_fat_mass_kg,
+    subcutaneous_fat_ratio,
+    model_name,
+    created_at,
+    updated_at
+  )
+  SELECT
+    ?,
+    latest.profile_id,
+    latest.id,
+    latest.body_fat_pct,
+    ROUND(
+      (latest.fat_mass_kg - latest.subcutaneous_fat_mass_kg) -
+      (baseline.fat_mass_kg - baseline.subcutaneous_fat_mass_kg),
+      2
+    ),
+    ROUND(latest.subcutaneous_fat_mass_kg - baseline.subcutaneous_fat_mass_kg, 2),
+    latest.fat_mass_kg,
+    ROUND(latest.fat_mass_kg - latest.subcutaneous_fat_mass_kg, 2),
+    ROUND(latest.body_fat_pct - latest.subcutaneous_fat_pct, 2),
+    latest.subcutaneous_fat_mass_kg,
+    CASE
+      WHEN latest.fat_mass_kg <= 0 THEN 0
+      ELSE ROUND(latest.subcutaneous_fat_mass_kg / latest.fat_mass_kg, 2)
+    END,
+    ?,
+    latest.created_at,
+    CURRENT_TIMESTAMP
+  FROM body_composition_metrics_new AS latest
+  INNER JOIN body_composition_metrics_new AS baseline
+    ON baseline.id = (
+      SELECT oldest.id
+      FROM body_composition_metrics_new AS oldest
+      WHERE oldest.profile_id = latest.profile_id
+        AND oldest.created_at >= datetime(latest.created_at, '-30 days')
+        AND oldest.created_at <= latest.created_at
+      ORDER BY oldest.created_at ASC
+      LIMIT 1
+    )
+  WHERE latest.id = ?
+    AND latest.profile_id = ?
+`,
+  ).run(id, modelName, bodyCompositionMetricsId, profileId);
+
+  return id;
+}
+
+export function createSnapshotReports({
+  profileId,
+  bodyCompositionMetricsId,
+  derivedMetrics,
+  modelName = null,
+}: {
+  profileId: ProfileId;
+  bodyCompositionMetricsId: string;
+  derivedMetrics?: DerivedBodyCompositionMetrics;
+  modelName?: string | null;
+}): void {
+  getOrCreatePerformanceReport(
+    profileId,
+    bodyCompositionMetricsId,
+    derivedMetrics,
+    modelName,
+  );
+  getOrCreateProfileInsightReport(profileId, bodyCompositionMetricsId);
+  getOrCreateFatReport(profileId, bodyCompositionMetricsId, modelName);
+}
+
+function getLatestReportIds(profileId: ProfileId) {
+  const bodyCompositionMetricsId = getLatestBodyCompositionMetricsId(profileId);
+
+  if (bodyCompositionMetricsId === null) {
+    return null;
+  }
+
+  return {
+    bodyCompositionMetricsId,
+    performanceReportId: getOrCreatePerformanceReport(
+      profileId,
+      bodyCompositionMetricsId,
+    ),
+    insightReportId: getOrCreateProfileInsightReport(
+      profileId,
+      bodyCompositionMetricsId,
+    ),
+    fatReportId: getOrCreateFatReport(profileId, bodyCompositionMetricsId),
+  };
+}
+
 export function isBodyCompositionTrendMetric(
   metric: string,
 ): metric is BodyCompositionTrendMetric {
@@ -837,32 +1155,27 @@ export function upsertProfileAiOverview({
   physiqueArchetype,
   modelName = null,
 }: ProfileAiOverview): void {
+  const reportIds = getLatestReportIds(profileId);
+
+  if (reportIds === null) {
+    return;
+  }
+
   db.prepare(
     `
-  INSERT INTO profile_ai_overviews (
-    profile_id,
-    overview_title,
-    overview_remarks,
-    foundation,
-    momentum,
-    biggest_lever,
-    physique_archetype,
-    model_name,
-    updated_at
-  )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  ON CONFLICT(profile_id) DO UPDATE SET
-    overview_title = excluded.overview_title,
-    overview_remarks = excluded.overview_remarks,
-    foundation = excluded.foundation,
-    momentum = excluded.momentum,
-    biggest_lever = excluded.biggest_lever,
-    physique_archetype = excluded.physique_archetype,
-    model_name = excluded.model_name,
+  UPDATE profile_insight_reports
+  SET
+    overview_title = ?,
+    overview_remarks = ?,
+    foundation = ?,
+    momentum = ?,
+    biggest_lever = ?,
+    physique_archetype = ?,
+    model_name = ?,
     updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
 `,
   ).run(
-    profileId,
     overviewTitle,
     overviewRemarks,
     JSON.stringify(foundation),
@@ -870,7 +1183,109 @@ export function upsertProfileAiOverview({
     JSON.stringify(biggestLever),
     physiqueArchetype,
     modelName,
+    reportIds.insightReportId,
   );
+}
+
+function replaceReportComments(
+  tableName: "performance_report_comments" | "fat_report_comments",
+  reportId: string,
+  comments: ReportComment[],
+): void {
+  const replace = db.transaction(() => {
+    db.prepare(`DELETE FROM ${tableName} WHERE report_id = ?`).run(reportId);
+
+    const insert = db.prepare(`
+  INSERT INTO ${tableName} (
+    id,
+    report_id,
+    factor,
+    remark,
+    comment,
+    created_at
+  )
+  VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+`);
+
+    for (const comment of comments) {
+      insert.run(
+        uuidv7(),
+        reportId,
+        comment.factor,
+        comment.remark,
+        comment.comment,
+      );
+    }
+  });
+
+  replace();
+}
+
+function readReportComments(
+  tableName: "performance_report_comments" | "fat_report_comments",
+  reportId: string,
+): ReportComment[] {
+  return db
+    .prepare(
+      `
+  SELECT
+    factor,
+    remark,
+    comment
+  FROM ${tableName}
+  WHERE report_id = ?
+`,
+    )
+    .all(reportId) as ReportComment[];
+}
+
+function requireOneWordRemark(remark: string): string {
+  const trimmed = remark.trim();
+
+  if (!trimmed || /\s/.test(trimmed)) {
+    throw new Error("remark must be exactly one word");
+  }
+
+  return trimmed;
+}
+
+export function saveFatReportComments({
+  profileId,
+  comments,
+  modelName = null,
+}: FatReportCommentsInput): void {
+  const reportIds = getLatestReportIds(profileId);
+
+  if (reportIds === null) {
+    return;
+  }
+
+  const rows: ReportComment[] = [
+    { factor: "fat_percent", ...comments.fatPercent },
+    {
+      factor: "visceral_subcutaneous_30d_delta",
+      ...comments.visceralSubcutaneous30dDelta,
+    },
+    { factor: "fat_mass", ...comments.fatMass },
+    { factor: "visceral_fat_mass", ...comments.visceralFatMass },
+    { factor: "visceral_fat_percent", ...comments.visceralFatPercent },
+    { factor: "subcutaneous_fat_mass", ...comments.subcutaneousFatMass },
+    { factor: "subcutaneous_fat_ratio", ...comments.subcutaneousFatRatio },
+  ].map((row) => ({
+    factor: row.factor,
+    remark: requireOneWordRemark(row.remark),
+    comment: row.comment,
+  }));
+
+  db.prepare(
+    `
+  UPDATE fat_reports
+  SET model_name = ?, updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
+`,
+  ).run(modelName, reportIds.fatReportId);
+
+  replaceReportComments("fat_report_comments", reportIds.fatReportId, rows);
 }
 
 export function getProfileAiOverview(
@@ -889,8 +1304,15 @@ export function getProfileAiOverview(
     physique_archetype AS physiqueArchetype,
     model_name AS modelName,
     updated_at AS updatedAt
-  FROM profile_ai_overviews
+  FROM profile_insight_reports
   WHERE profile_id = ?
+    AND overview_title IS NOT NULL
+    AND overview_remarks IS NOT NULL
+    AND foundation IS NOT NULL
+    AND momentum IS NOT NULL
+    AND biggest_lever IS NOT NULL
+    AND physique_archetype IS NOT NULL
+  ORDER BY created_at DESC
   LIMIT 1
 `,
     )
@@ -922,23 +1344,23 @@ export function upsertProfileEffortScore({
   remark,
   modelName = null,
 }: ProfileEffortScore): void {
+  const reportIds = getLatestReportIds(profileId);
+
+  if (reportIds === null) {
+    return;
+  }
+
   db.prepare(
     `
-  INSERT INTO profile_effort_scores (
-    profile_id,
-    score,
-    remark,
-    model_name,
-    updated_at
-  )
-  VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-  ON CONFLICT(profile_id) DO UPDATE SET
-    score = excluded.score,
-    remark = excluded.remark,
-    model_name = excluded.model_name,
+  UPDATE profile_insight_reports
+  SET
+    effort_score = ?,
+    effort_remark = ?,
+    model_name = ?,
     updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
 `,
-  ).run(profileId, score, remark, modelName);
+  ).run(score, remark, modelName, reportIds.insightReportId);
 }
 
 export function upsertDerivedMetricsComments({
@@ -952,46 +1374,62 @@ export function upsertDerivedMetricsComments({
   bodyRatios,
   modelName = null,
 }: DerivedMetricsComments): void {
+  const reportIds = getLatestReportIds(profileId);
+
+  if (reportIds === null) {
+    return;
+  }
+
   db.prepare(
     `
-  INSERT INTO derived_metrics_comments (
-    id,
-    profile_id,
-    ffmi,
-    ffmi_vs_fmi,
-    composition_flow,
-    composition_trend,
-    recomp_vector,
-    excess_fat_gauge,
-    body_ratios,
-    model_name,
-    created_at,
-    updated_at
-  )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-  ON CONFLICT(profile_id) DO UPDATE SET
-    ffmi = excluded.ffmi,
-    ffmi_vs_fmi = excluded.ffmi_vs_fmi,
-    composition_flow = excluded.composition_flow,
-    composition_trend = excluded.composition_trend,
-    recomp_vector = excluded.recomp_vector,
-    excess_fat_gauge = excluded.excess_fat_gauge,
-    body_ratios = excluded.body_ratios,
-    model_name = excluded.model_name,
-    updated_at = CURRENT_TIMESTAMP
+  UPDATE performance_reports
+  SET model_name = ?, updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
 `,
-  ).run(
-    uuidv7(),
-    profileId,
-    JSON.stringify(ffmi),
-    JSON.stringify(ffmiVsFmi),
-    JSON.stringify(compositionFlow),
-    JSON.stringify(compositionTrend),
-    JSON.stringify(recompVector),
-    JSON.stringify(excessFatGauge),
-    JSON.stringify(bodyRatios),
-    modelName,
-  );
+  ).run(modelName, reportIds.performanceReportId);
+
+  replaceReportComments("performance_report_comments", reportIds.performanceReportId, [
+    { factor: "ffmi", remark: "", comment: ffmi.comment },
+    { factor: "ffmi_vs_fmi", remark: "", comment: ffmiVsFmi.comment },
+    { factor: "composition_flow", remark: "", comment: compositionFlow.comment },
+    {
+      factor: "composition_trend",
+      remark: "",
+      comment: compositionTrend.comment,
+    },
+    { factor: "recomp_vector", remark: "", comment: recompVector.comment },
+    { factor: "excess_fat_gauge", remark: "", comment: excessFatGauge.comment },
+    {
+      factor: "body_ratio_waist_height",
+      remark: bodyRatios.waistHeight.remark,
+      comment: bodyRatios.waistHeight.comment,
+    },
+    {
+      factor: "body_ratio_shoulder_waist",
+      remark: bodyRatios.shoulderWaist.remark,
+      comment: bodyRatios.shoulderWaist.comment,
+    },
+    {
+      factor: "body_ratio_chest_waist",
+      remark: bodyRatios.chestWaist.remark,
+      comment: bodyRatios.chestWaist.comment,
+    },
+    {
+      factor: "body_ratio_bicep_forearm",
+      remark: bodyRatios.bicepForearm.remark,
+      comment: bodyRatios.bicepForearm.comment,
+    },
+    {
+      factor: "body_ratio_thigh_calf",
+      remark: bodyRatios.thighCalf.remark,
+      comment: bodyRatios.thighCalf.comment,
+    },
+    {
+      factor: "body_ratio_neck_calf",
+      remark: bodyRatios.neckCalf.remark,
+      comment: bodyRatios.neckCalf.comment,
+    },
+  ]);
 }
 
 export function getProfileEffortScore(
@@ -1002,12 +1440,15 @@ export function getProfileEffortScore(
       `
   SELECT
     profile_id AS profileId,
-    score,
-    remark,
+    effort_score AS score,
+    effort_remark AS remark,
     model_name AS modelName,
     updated_at AS updatedAt
-  FROM profile_effort_scores
+  FROM profile_insight_reports
   WHERE profile_id = ?
+    AND effort_score IS NOT NULL
+    AND effort_remark IS NOT NULL
+  ORDER BY created_at DESC
   LIMIT 1
 `,
     )
@@ -1301,6 +1742,79 @@ function parseDerivedMetricsComments(
   };
 }
 
+function parsePerformanceReportComments(
+  rows: ReportComment[],
+): Omit<DerivedMetricsComments, "profileId" | "modelName"> | null {
+  const byFactor = new Map(rows.map((row) => [row.factor, row]));
+  const derivedComment = (factor: string): DerivedMetricComment | null => {
+    const row = byFactor.get(factor);
+
+    if (row === undefined || row.comment === "") {
+      return null;
+    }
+
+    return { comment: row.comment };
+  };
+  const ratioComment = (factor: string): BodyRatioComment | null => {
+    const row = byFactor.get(factor);
+
+    if (row === undefined || row.remark === "" || row.comment === "") {
+      return null;
+    }
+
+    return {
+      remark: row.remark,
+      comment: row.comment,
+    };
+  };
+  const ffmi = derivedComment("ffmi");
+  const ffmiVsFmi = derivedComment("ffmi_vs_fmi");
+  const compositionFlow = derivedComment("composition_flow");
+  const compositionTrend = derivedComment("composition_trend");
+  const recompVector = derivedComment("recomp_vector");
+  const excessFatGauge = derivedComment("excess_fat_gauge");
+  const waistHeight = ratioComment("body_ratio_waist_height");
+  const shoulderWaist = ratioComment("body_ratio_shoulder_waist");
+  const chestWaist = ratioComment("body_ratio_chest_waist");
+  const bicepForearm = ratioComment("body_ratio_bicep_forearm");
+  const thighCalf = ratioComment("body_ratio_thigh_calf");
+  const neckCalf = ratioComment("body_ratio_neck_calf");
+
+  if (
+    ffmi === null ||
+    ffmiVsFmi === null ||
+    compositionFlow === null ||
+    compositionTrend === null ||
+    recompVector === null ||
+    excessFatGauge === null ||
+    waistHeight === null ||
+    shoulderWaist === null ||
+    chestWaist === null ||
+    bicepForearm === null ||
+    thighCalf === null ||
+    neckCalf === null
+  ) {
+    return null;
+  }
+
+  return {
+    ffmi,
+    ffmiVsFmi,
+    compositionFlow,
+    compositionTrend,
+    recompVector,
+    excessFatGauge,
+    bodyRatios: {
+      waistHeight,
+      shoulderWaist,
+      chestWaist,
+      bicepForearm,
+      thighCalf,
+      neckCalf,
+    },
+  };
+}
+
 export function getProfilePerformance(
   profileId: ProfileId,
 ): ProfilePerformance {
@@ -1344,22 +1858,24 @@ export function getProfilePerformance(
     createdAt: string;
   } | null;
 
-  const derivedMetrics = db
+  const performanceReport = db
     .prepare(
       `
   SELECT
+    id,
     fmi,
     ffmi,
     created_at AS createdAt
-  FROM derived_body_composition_metrics
+  FROM performance_reports
   WHERE profile_id = ?
   ORDER BY created_at DESC
   LIMIT 1
 `,
     )
     .get(profileId) as {
-    fmi: number;
-    ffmi: number;
+    id: string;
+    fmi: number | null;
+    ffmi: number | null;
     createdAt: string;
   } | null;
 
@@ -1378,23 +1894,13 @@ export function getProfilePerformance(
     )
     .all(profileId) as CompositionTrendMassPoint[];
 
-  const commentsRow = db
-    .prepare(
-      `
-  SELECT
-    ffmi,
-    ffmi_vs_fmi AS ffmiVsFmi,
-    composition_flow AS compositionFlow,
-    composition_trend AS compositionTrend,
-    recomp_vector AS recompVector,
-    excess_fat_gauge AS excessFatGauge,
-    body_ratios AS bodyRatios
-  FROM derived_metrics_comments
-  WHERE profile_id = ?
-  LIMIT 1
-`,
-    )
-    .get(profileId) as DerivedMetricsCommentsRow | null;
+  const performanceComments =
+    performanceReport === null
+      ? []
+      : readReportComments(
+          "performance_report_comments",
+          performanceReport.id,
+        );
 
   const bodyMeasurements = listUserBodyMeasurements(profileId);
   const latestMeasurement = bodyMeasurements[0] ?? null;
@@ -1407,8 +1913,8 @@ export function getProfilePerformance(
     latestComposition === null || profile.heightCm === null
       ? null
       : calculateFfmi(latestComposition.leanMassKg, profile.heightCm);
-  const fmi = derivedMetrics?.fmi ?? fallbackFmi;
-  const ffmi = derivedMetrics?.ffmi ?? fallbackFfmi;
+  const fmi = performanceReport?.fmi ?? fallbackFmi;
+  const ffmi = performanceReport?.ffmi ?? fallbackFfmi;
   const targetFatKg =
     latestComposition === null
       ? null
@@ -1492,7 +1998,107 @@ export function getProfilePerformance(
         latestMeasurement?.calfCm ?? null,
       ),
     },
-    comments: parseDerivedMetricsComments(commentsRow),
+    comments: parsePerformanceReportComments(performanceComments),
+  };
+}
+
+function parseFatReportComments(rows: ReportComment[]): FatReportComments {
+  const factorMap: Record<string, FatReportFactor> = {
+    fat_percent: "fatPercent",
+    visceral_subcutaneous_30d_delta: "visceralSubcutaneous30dDelta",
+    fat_mass: "fatMass",
+    visceral_fat_mass: "visceralFatMass",
+    visceral_fat_percent: "visceralFatPercent",
+    subcutaneous_fat_mass: "subcutaneousFatMass",
+    subcutaneous_fat_ratio: "subcutaneousFatRatio",
+  };
+  const comments: FatReportComments = {};
+
+  for (const row of rows) {
+    const factor = factorMap[row.factor];
+
+    if (factor === undefined || row.remark === "" || row.comment === "") {
+      continue;
+    }
+
+    comments[factor] = {
+      remark: row.remark,
+      comment: row.comment,
+    };
+  }
+
+  return comments;
+}
+
+export function getProfileFatReport(profileId: ProfileId): FatReport | null {
+  const row = db
+    .prepare(
+      `
+  SELECT
+    id,
+    profile_id AS profileId,
+    body_composition_metrics_id AS bodyCompositionMetricsId,
+    fat_percent AS fatPercent,
+    visceral_fat_delta_30d_kg AS visceralFatDelta30dKg,
+    subcutaneous_fat_delta_30d_kg AS subcutaneousFatDelta30dKg,
+    fat_mass_kg AS fatMassKg,
+    visceral_fat_mass_kg AS visceralFatMassKg,
+    visceral_fat_percent AS visceralFatPercent,
+    subcutaneous_fat_mass_kg AS subcutaneousFatMassKg,
+    subcutaneous_fat_ratio AS subcutaneousFatRatio,
+    created_at AS createdAt
+  FROM fat_reports
+  WHERE profile_id = ?
+  ORDER BY created_at DESC
+  LIMIT 1
+`,
+    )
+    .get(profileId) as {
+    id: string;
+    profileId: ProfileId;
+    bodyCompositionMetricsId: string;
+    fatPercent: number;
+    visceralFatDelta30dKg: number;
+    subcutaneousFatDelta30dKg: number;
+    fatMassKg: number;
+    visceralFatMassKg: number;
+    visceralFatPercent: number;
+    subcutaneousFatMassKg: number;
+    subcutaneousFatRatio: number;
+    createdAt: string;
+  } | null;
+
+  if (row === null) {
+    const bodyCompositionMetricsId = getLatestBodyCompositionMetricsId(profileId);
+
+    if (bodyCompositionMetricsId === null) {
+      return null;
+    }
+
+    getOrCreateFatReport(profileId, bodyCompositionMetricsId);
+    return getProfileFatReport(profileId);
+  }
+
+  return {
+    id: row.id,
+    profileId: row.profileId,
+    bodyCompositionMetricsId: row.bodyCompositionMetricsId,
+    createdAt: row.createdAt,
+    metrics: {
+      fatPercent: row.fatPercent,
+      visceralSubcutaneous30dDelta: {
+        visceralFatDeltaKg: row.visceralFatDelta30dKg,
+        subcutaneousFatDeltaKg: row.subcutaneousFatDelta30dKg,
+      },
+      fatMassKg: row.fatMassKg,
+      visceralFatMassKg: row.visceralFatMassKg,
+      visceralFatPercent: row.visceralFatPercent,
+      subcutaneousFatMassKg: row.subcutaneousFatMassKg,
+      subcutaneousFatRatio: row.subcutaneousFatRatio,
+    },
+    comments: parseFatReportComments(
+      readReportComments("fat_report_comments", row.id),
+    ),
   };
 }
 
