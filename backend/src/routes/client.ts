@@ -13,6 +13,7 @@ import {
   getProfileEffortScore,
   getProfileFatReport,
   getProfileFormaScore,
+  getProfileMuscleReport,
   getProfilePerformance,
   getWeightSummary,
   isBodyCompositionTrendMetric,
@@ -501,6 +502,50 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         ok: true,
         profileId,
         fat,
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/muscle",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+
+      if (!profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const muscle = getProfileMuscleReport(profileId);
+
+      if (muscle === null) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Muscle report does not exist",
+        });
+      }
+
+      return reply.send({
+        ok: true,
+        profileId,
+        muscle,
       });
     },
   );
