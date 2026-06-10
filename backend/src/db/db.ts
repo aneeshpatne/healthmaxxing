@@ -382,6 +382,51 @@ db.run(`
 `);
 
 db.run(`
+  CREATE TABLE IF NOT EXISTS muscle_reports (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    body_composition_metrics_id TEXT NOT NULL,
+    total_muscle_kg REAL NOT NULL,
+    bone_mass_kg REAL NOT NULL,
+    muscle_ratio REAL NOT NULL,
+    skeletal_muscle_mass_kg REAL NOT NULL,
+    skeletal_muscle_ratio REAL NOT NULL,
+    model_name TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+    FOREIGN KEY(body_composition_metrics_id) REFERENCES body_composition_metrics_new(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_muscle_reports_profile_created
+  ON muscle_reports(profile_id, created_at DESC)
+`);
+
+db.run(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_muscle_reports_snapshot
+  ON muscle_reports(body_composition_metrics_id)
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS muscle_report_comments (
+    id TEXT PRIMARY KEY,
+    report_id TEXT NOT NULL,
+    factor TEXT NOT NULL,
+    remark TEXT NOT NULL DEFAULT '',
+    comment TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(report_id) REFERENCES muscle_reports(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_muscle_report_comments_report
+  ON muscle_report_comments(report_id)
+`);
+
+db.run(`
   INSERT INTO performance_reports (
     id,
     profile_id,
@@ -489,6 +534,41 @@ db.run(`
     SELECT 1
     FROM fat_reports
     WHERE fat_reports.body_composition_metrics_id = latest.id
+  )
+`);
+
+db.run(`
+  INSERT INTO muscle_reports (
+    id,
+    profile_id,
+    body_composition_metrics_id,
+    total_muscle_kg,
+    bone_mass_kg,
+    muscle_ratio,
+    skeletal_muscle_mass_kg,
+    skeletal_muscle_ratio,
+    created_at,
+    updated_at
+  )
+  SELECT
+    lower(hex(randomblob(16))),
+    metrics.profile_id,
+    metrics.id,
+    metrics.muscle_mass_kg,
+    ROUND(MAX(metrics.fat_free_mass_kg - metrics.muscle_mass_kg, 0), 2),
+    metrics.muscle_rate_pct,
+    metrics.skeletal_muscle_kg,
+    CASE
+      WHEN metrics.fat_mass_kg + metrics.fat_free_mass_kg <= 0 THEN 0
+      ELSE ROUND(metrics.skeletal_muscle_kg / (metrics.fat_mass_kg + metrics.fat_free_mass_kg) * 100, 2)
+    END,
+    metrics.created_at,
+    metrics.created_at
+  FROM body_composition_metrics_new AS metrics
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM muscle_reports
+    WHERE muscle_reports.body_composition_metrics_id = metrics.id
   )
 `);
 
