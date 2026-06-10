@@ -5,6 +5,7 @@ import {
   type ProfileId,
   TREND_COLUMNS,
   saveFatReportComments,
+  saveMuscleReportComments,
   upsertDerivedMetricsComments,
   upsertProfileAiOverview,
   upsertProfileEffortScore,
@@ -67,6 +68,11 @@ const bodyRatioCommentsSchema = z.object({
 });
 
 const fatReportCommentSchema = z.object({
+  remark: z.string().describe("Exactly 1 word. Positive or neutral tone."),
+  comment: z.string().describe("Concise coaching comment. No word limit."),
+});
+
+const muscleReportCommentSchema = z.object({
   remark: z.string().describe("Exactly 1 word. Positive or neutral tone."),
   comment: z.string().describe("Concise coaching comment. No word limit."),
 });
@@ -367,11 +373,65 @@ export function createProfileAiTools(
     },
   );
 
+  const muscle_report_comments = tool(
+    ({
+      total_muscle,
+      bone_mass,
+      muscle_ratio,
+      skeletal_muscle_mass,
+      skeletal_muscle_ratio,
+    }) => {
+      console.log({
+        profileId,
+        total_muscle,
+        bone_mass,
+        muscle_ratio,
+        skeletal_muscle_mass,
+        skeletal_muscle_ratio,
+      });
+
+      saveMuscleReportComments({
+        profileId,
+        comments: {
+          totalMuscle: total_muscle,
+          boneMass: bone_mass,
+          muscleRatio: muscle_ratio,
+          skeletalMuscleMass: skeletal_muscle_mass,
+          skeletalMuscleRatio: skeletal_muscle_ratio,
+        },
+        modelName,
+      });
+
+      return "Saved muscle report comments.";
+    },
+    {
+      name: "muscle_report_comments",
+      description:
+        "AI remarks and comments for the latest muscle report factors. Every remark must be exactly one word.",
+      schema: z.object({
+        total_muscle: muscleReportCommentSchema.describe("Total muscle mass."),
+        bone_mass: muscleReportCommentSchema.describe(
+          "Estimated bone and non-muscle lean mass.",
+        ),
+        muscle_ratio: muscleReportCommentSchema.describe(
+          "Muscle mass as a percentage of body weight.",
+        ),
+        skeletal_muscle_mass: muscleReportCommentSchema.describe(
+          "Skeletal muscle mass.",
+        ),
+        skeletal_muscle_ratio: muscleReportCommentSchema.describe(
+          "Skeletal muscle mass as a percentage of body weight.",
+        ),
+      }),
+    },
+  );
+
   return [
     ai_overview,
     body_analysis,
     effort_score,
     derived_metrics_comments,
     fat_report_comments,
+    muscle_report_comments,
   ];
 }
