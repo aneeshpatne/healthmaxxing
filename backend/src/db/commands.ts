@@ -213,6 +213,11 @@ export type FatReportComment = {
 
 export type FatReportComments = Partial<Record<FatReportFactor, FatReportComment>>;
 
+export type FatReportTrendPoint = {
+  createdAt: string;
+  value: number;
+};
+
 export type FatReport = {
   id: string;
   profileId: ProfileId;
@@ -230,12 +235,67 @@ export type FatReport = {
     subcutaneousFatMassKg: number;
     subcutaneousFatRatio: number;
   };
+  last30Days: {
+    fatMassKg: FatReportTrendPoint[];
+    visceralFatMassKg: FatReportTrendPoint[];
+    subcutaneousFatMassKg: FatReportTrendPoint[];
+    visceralFatPercent: FatReportTrendPoint[];
+    subcutaneousFatPercent: FatReportTrendPoint[];
+  };
   comments: FatReportComments;
 };
 
 export type FatReportCommentsInput = {
   profileId: ProfileId;
   comments: Record<FatReportFactor, FatReportComment>;
+  modelName?: string | null;
+};
+
+export type MuscleReportFactor =
+  | "totalMuscle"
+  | "boneMass"
+  | "muscleRatio"
+  | "skeletalMuscleMass"
+  | "skeletalMuscleRatio";
+
+export type MuscleReportComment = {
+  remark: string;
+  comment: string;
+};
+
+export type MuscleReportComments = Partial<
+  Record<MuscleReportFactor, MuscleReportComment>
+>;
+
+export type MuscleReportTrendPoint = {
+  createdAt: string;
+  value: number;
+};
+
+export type MuscleReport = {
+  id: string;
+  profileId: ProfileId;
+  bodyCompositionMetricsId: string;
+  createdAt: string;
+  metrics: {
+    totalMuscleKg: number;
+    boneMassKg: number;
+    muscleRatio: number;
+    skeletalMuscleMassKg: number;
+    skeletalMuscleRatio: number;
+  };
+  last30Days: {
+    boneMassKg: MuscleReportTrendPoint[];
+    muscleRatio: MuscleReportTrendPoint[];
+    skeletalMuscleMassKg: MuscleReportTrendPoint[];
+    skeletalMuscleRatio: MuscleReportTrendPoint[];
+  };
+  comments: MuscleReportComments;
+};
+
+export type MuscleReportCommentsInput = {
+  profileId: ProfileId;
+  comments: Record<MuscleReportFactor, MuscleReportComment>;
   modelName?: string | null;
 };
 
@@ -1027,6 +1087,77 @@ function getOrCreateFatReport(
   return id;
 }
 
+function getOrCreateMuscleReport(
+  profileId: ProfileId,
+  bodyCompositionMetricsId: string,
+  modelName: string | null = null,
+): string {
+  const existing = db
+    .prepare(
+      `
+  SELECT id
+  FROM muscle_reports
+  WHERE body_composition_metrics_id = ?
+  LIMIT 1
+`,
+    )
+    .get(bodyCompositionMetricsId) as { id: string } | null;
+
+  if (existing !== null) {
+    if (modelName !== null) {
+      db.prepare(
+        `
+  UPDATE muscle_reports
+  SET model_name = ?, updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
+`,
+      ).run(modelName, existing.id);
+    }
+
+    return existing.id;
+  }
+
+  const id = uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO muscle_reports (
+    id,
+    profile_id,
+    body_composition_metrics_id,
+    total_muscle_kg,
+    bone_mass_kg,
+    muscle_ratio,
+    skeletal_muscle_mass_kg,
+    skeletal_muscle_ratio,
+    model_name,
+    created_at,
+    updated_at
+  )
+  SELECT
+    ?,
+    profile_id,
+    id,
+    muscle_mass_kg,
+    ROUND(MAX(fat_free_mass_kg - muscle_mass_kg, 0), 2),
+    muscle_rate_pct,
+    skeletal_muscle_kg,
+    CASE
+      WHEN fat_mass_kg + fat_free_mass_kg <= 0 THEN 0
+      ELSE ROUND(skeletal_muscle_kg / (fat_mass_kg + fat_free_mass_kg) * 100, 2)
+    END,
+    ?,
+    created_at,
+    CURRENT_TIMESTAMP
+  FROM body_composition_metrics_new
+  WHERE id = ?
+    AND profile_id = ?
+`,
+  ).run(id, modelName, bodyCompositionMetricsId, profileId);
+
+  return id;
+}
+
 export function createSnapshotReports({
   profileId,
   bodyCompositionMetricsId,
@@ -1046,6 +1177,7 @@ export function createSnapshotReports({
   );
   getOrCreateProfileInsightReport(profileId, bodyCompositionMetricsId);
   getOrCreateFatReport(profileId, bodyCompositionMetricsId, modelName);
+  getOrCreateMuscleReport(profileId, bodyCompositionMetricsId, modelName);
 }
 
 function getLatestReportIds(profileId: ProfileId) {
@@ -1066,6 +1198,10 @@ function getLatestReportIds(profileId: ProfileId) {
       bodyCompositionMetricsId,
     ),
     fatReportId: getOrCreateFatReport(profileId, bodyCompositionMetricsId),
+    muscleReportId: getOrCreateMuscleReport(
+      profileId,
+      bodyCompositionMetricsId,
+    ),
   };
 }
 
@@ -1188,7 +1324,10 @@ export function upsertProfileAiOverview({
 }
 
 function replaceReportComments(
-  tableName: "performance_report_comments" | "fat_report_comments",
+  tableName:
+    | "performance_report_comments"
+    | "fat_report_comments"
+    | "muscle_report_comments",
   reportId: string,
   comments: ReportComment[],
 ): void {
@@ -1222,7 +1361,10 @@ function replaceReportComments(
 }
 
 function readReportComments(
-  tableName: "performance_report_comments" | "fat_report_comments",
+  tableName:
+    | "performance_report_comments"
+    | "fat_report_comments"
+    | "muscle_report_comments",
   reportId: string,
 ): ReportComment[] {
   return db
@@ -1286,6 +1428,44 @@ export function saveFatReportComments({
   ).run(modelName, reportIds.fatReportId);
 
   replaceReportComments("fat_report_comments", reportIds.fatReportId, rows);
+}
+
+export function saveMuscleReportComments({
+  profileId,
+  comments,
+  modelName = null,
+}: MuscleReportCommentsInput): void {
+  const reportIds = getLatestReportIds(profileId);
+
+  if (reportIds === null) {
+    return;
+  }
+
+  const rows: ReportComment[] = [
+    { factor: "total_muscle", ...comments.totalMuscle },
+    { factor: "bone_mass", ...comments.boneMass },
+    { factor: "muscle_ratio", ...comments.muscleRatio },
+    { factor: "skeletal_muscle_mass", ...comments.skeletalMuscleMass },
+    { factor: "skeletal_muscle_ratio", ...comments.skeletalMuscleRatio },
+  ].map((row) => ({
+    factor: row.factor,
+    remark: requireOneWordRemark(row.remark),
+    comment: row.comment,
+  }));
+
+  db.prepare(
+    `
+  UPDATE muscle_reports
+  SET model_name = ?, updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
+`,
+  ).run(modelName, reportIds.muscleReportId);
+
+  replaceReportComments(
+    "muscle_report_comments",
+    reportIds.muscleReportId,
+    rows,
+  );
 }
 
 export function getProfileAiOverview(
@@ -2030,6 +2210,40 @@ function parseFatReportComments(rows: ReportComment[]): FatReportComments {
   return comments;
 }
 
+function buildFatTrendPoints(
+  rows: Array<{
+    createdAt: string;
+    fatMassKg: number;
+    visceralFatMassKg: number;
+    visceralFatPercent: number;
+    subcutaneousFatMassKg: number;
+    subcutaneousFatPercent: number;
+  }>,
+): FatReport["last30Days"] {
+  return {
+    fatMassKg: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.fatMassKg,
+    })),
+    visceralFatMassKg: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.visceralFatMassKg,
+    })),
+    subcutaneousFatMassKg: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.subcutaneousFatMassKg,
+    })),
+    visceralFatPercent: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.visceralFatPercent,
+    })),
+    subcutaneousFatPercent: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.subcutaneousFatPercent,
+    })),
+  };
+}
+
 export function getProfileFatReport(profileId: ProfileId): FatReport | null {
   const row = db
     .prepare(
@@ -2079,6 +2293,31 @@ export function getProfileFatReport(profileId: ProfileId): FatReport | null {
     return getProfileFatReport(profileId);
   }
 
+  const trendRows = db
+    .prepare(
+      `
+  SELECT
+    created_at AS createdAt,
+    fat_mass_kg AS fatMassKg,
+    ROUND(fat_mass_kg - subcutaneous_fat_mass_kg, 2) AS visceralFatMassKg,
+    ROUND(body_fat_pct - subcutaneous_fat_pct, 2) AS visceralFatPercent,
+    subcutaneous_fat_mass_kg AS subcutaneousFatMassKg,
+    subcutaneous_fat_pct AS subcutaneousFatPercent
+  FROM body_composition_metrics_new
+  WHERE profile_id = ?
+    AND created_at >= datetime('now', '-30 days')
+  ORDER BY created_at ASC
+`,
+    )
+    .all(profileId) as Array<{
+    createdAt: string;
+    fatMassKg: number;
+    visceralFatMassKg: number;
+    visceralFatPercent: number;
+    subcutaneousFatMassKg: number;
+    subcutaneousFatPercent: number;
+  }>;
+
   return {
     id: row.id,
     profileId: row.profileId,
@@ -2096,8 +2335,154 @@ export function getProfileFatReport(profileId: ProfileId): FatReport | null {
       subcutaneousFatMassKg: row.subcutaneousFatMassKg,
       subcutaneousFatRatio: row.subcutaneousFatRatio,
     },
+    last30Days: buildFatTrendPoints(trendRows),
     comments: parseFatReportComments(
       readReportComments("fat_report_comments", row.id),
+    ),
+  };
+}
+
+function parseMuscleReportComments(rows: ReportComment[]): MuscleReportComments {
+  const factorMap: Record<string, MuscleReportFactor> = {
+    total_muscle: "totalMuscle",
+    bone_mass: "boneMass",
+    muscle_ratio: "muscleRatio",
+    skeletal_muscle_mass: "skeletalMuscleMass",
+    skeletal_muscle_ratio: "skeletalMuscleRatio",
+  };
+  const comments: MuscleReportComments = {};
+
+  for (const row of rows) {
+    const factor = factorMap[row.factor];
+
+    if (factor === undefined || row.remark === "" || row.comment === "") {
+      continue;
+    }
+
+    comments[factor] = {
+      remark: row.remark,
+      comment: row.comment,
+    };
+  }
+
+  return comments;
+}
+
+function buildMuscleTrendPoints(
+  rows: Array<{
+    createdAt: string;
+    boneMassKg: number;
+    muscleRatio: number;
+    skeletalMuscleMassKg: number;
+    skeletalMuscleRatio: number;
+  }>,
+): MuscleReport["last30Days"] {
+  return {
+    boneMassKg: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.boneMassKg,
+    })),
+    muscleRatio: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.muscleRatio,
+    })),
+    skeletalMuscleMassKg: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.skeletalMuscleMassKg,
+    })),
+    skeletalMuscleRatio: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.skeletalMuscleRatio,
+    })),
+  };
+}
+
+export function getProfileMuscleReport(
+  profileId: ProfileId,
+): MuscleReport | null {
+  const row = db
+    .prepare(
+      `
+  SELECT
+    id,
+    profile_id AS profileId,
+    body_composition_metrics_id AS bodyCompositionMetricsId,
+    total_muscle_kg AS totalMuscleKg,
+    bone_mass_kg AS boneMassKg,
+    muscle_ratio AS muscleRatio,
+    skeletal_muscle_mass_kg AS skeletalMuscleMassKg,
+    skeletal_muscle_ratio AS skeletalMuscleRatio,
+    created_at AS createdAt
+  FROM muscle_reports
+  WHERE profile_id = ?
+  ORDER BY created_at DESC
+  LIMIT 1
+`,
+    )
+    .get(profileId) as {
+    id: string;
+    profileId: ProfileId;
+    bodyCompositionMetricsId: string;
+    totalMuscleKg: number;
+    boneMassKg: number;
+    muscleRatio: number;
+    skeletalMuscleMassKg: number;
+    skeletalMuscleRatio: number;
+    createdAt: string;
+  } | null;
+
+  if (row === null) {
+    const bodyCompositionMetricsId = getLatestBodyCompositionMetricsId(profileId);
+
+    if (bodyCompositionMetricsId === null) {
+      return null;
+    }
+
+    getOrCreateMuscleReport(profileId, bodyCompositionMetricsId);
+    return getProfileMuscleReport(profileId);
+  }
+
+  const trendRows = db
+    .prepare(
+      `
+  SELECT
+    created_at AS createdAt,
+    ROUND(MAX(fat_free_mass_kg - muscle_mass_kg, 0), 2) AS boneMassKg,
+    muscle_rate_pct AS muscleRatio,
+    skeletal_muscle_kg AS skeletalMuscleMassKg,
+    CASE
+      WHEN fat_mass_kg + fat_free_mass_kg <= 0 THEN 0
+      ELSE ROUND(skeletal_muscle_kg / (fat_mass_kg + fat_free_mass_kg) * 100, 2)
+    END AS skeletalMuscleRatio
+  FROM body_composition_metrics_new
+  WHERE profile_id = ?
+    AND created_at >= datetime('now', '-30 days')
+  ORDER BY created_at ASC
+`,
+    )
+    .all(profileId) as Array<{
+    createdAt: string;
+    boneMassKg: number;
+    muscleRatio: number;
+    skeletalMuscleMassKg: number;
+    skeletalMuscleRatio: number;
+  }>;
+
+  return {
+    id: row.id,
+    profileId: row.profileId,
+    bodyCompositionMetricsId: row.bodyCompositionMetricsId,
+    createdAt: row.createdAt,
+    metrics: {
+      totalMuscleKg: row.totalMuscleKg,
+      boneMassKg: row.boneMassKg,
+      muscleRatio: row.muscleRatio,
+      skeletalMuscleMassKg: row.skeletalMuscleMassKg,
+      skeletalMuscleRatio: row.skeletalMuscleRatio,
+    },
+    last30Days: buildMuscleTrendPoints(trendRows),
+    comments: parseMuscleReportComments(
+      readReportComments("muscle_report_comments", row.id),
     ),
   };
 }
