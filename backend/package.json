@@ -18,7 +18,7 @@
     "@langchain/google": "^0.1.11",
     "@langchain/openai": "^1.4.5",
     "@langchain/openrouter": "^0.2.4",
-    "bullmq": "^5.76.8",
+    "bullmq": "^5.78.0",
     "dotenv": "^17.4.2",
     "fastify": "^5.8.5",
     "langchain": "^1.4.0",
