@@ -1,18 +1,16 @@
 syntax = "proto3";
 
-package objectstore;
+package markitdown.v1;
 
-service ObjectStore {
-  rpc UploadPdf(UploadPdfRequest) returns (UploadPdfResponse);
+service MarkItDownService {
+  rpc ConvertPdf(ConvertPdfRequest) returns (ConvertPdfResponse);
 }
 
-message UploadPdfRequest {
-  string server_name = 1;
-  string job_name = 2;
-  bytes data = 3;
-  string content_type = 4;
+message ConvertPdfRequest {
+  bytes pdf = 1;
+  string filename = 2;
 }
 
-message UploadPdfResponse {
-  bool success = 1;
+message ConvertPdfResponse {
+  string markdown = 1;
 }
