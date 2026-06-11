@@ -244,6 +244,213 @@ db.run(`
 `);
 
 db.run(`
+  CREATE TABLE IF NOT EXISTS reports (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    source_file_url TEXT,
+    lab_name TEXT,
+    report_date TEXT,
+    collection_date TEXT,
+    raw_text TEXT,
+    extraction_status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_reports_profile_report_date
+  ON reports(profile_id, report_date DESC, created_at DESC)
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_reports_extraction_status
+  ON reports(extraction_status)
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS report_sections (
+    id TEXT PRIMARY KEY,
+    report_id TEXT NOT NULL,
+    section_name_raw TEXT NOT NULL,
+    section_name_normalized TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_report_sections_report_sort
+  ON report_sections(report_id, sort_order)
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS observation_fields (
+    id TEXT PRIMARY KEY,
+    field_name TEXT NOT NULL,
+    field_name_normalized TEXT NOT NULL UNIQUE,
+    explanation TEXT NOT NULL DEFAULT '',
+    loinc_code TEXT,
+    default_unit TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_observation_fields_name
+  ON observation_fields(field_name_normalized)
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS observations (
+    id TEXT PRIMARY KEY,
+    report_id TEXT NOT NULL,
+    section_id TEXT,
+    observation_field_id TEXT,
+    test_name_raw TEXT NOT NULL,
+    test_name_normalized TEXT,
+    loinc_code TEXT,
+    value_raw TEXT NOT NULL,
+    value_numeric REAL,
+    value_text TEXT,
+    unit_raw TEXT,
+    unit_normalized TEXT,
+    reference_range_raw TEXT,
+    ref_low REAL,
+    ref_high REAL,
+    flag TEXT,
+    confidence_score REAL CHECK(confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)),
+    extraction_notes TEXT,
+    raw_json TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE,
+    FOREIGN KEY(section_id) REFERENCES report_sections(id) ON DELETE SET NULL,
+    FOREIGN KEY(observation_field_id) REFERENCES observation_fields(id) ON DELETE SET NULL
+  )
+`);
+
+const observationColumns = db
+  .prepare("PRAGMA table_info(observations)")
+  .all() as Array<{ name: string }>;
+const observationColumnNames = new Set(
+  observationColumns.map((column) => column.name),
+);
+
+if (!observationColumnNames.has("observation_field_id")) {
+  db.run("ALTER TABLE observations ADD COLUMN observation_field_id TEXT");
+}
+
+const observationForeignKeys = db
+  .prepare("PRAGMA foreign_key_list(observations)")
+  .all() as Array<{ table: string }>;
+const hasObservationFieldForeignKey = observationForeignKeys.some(
+  (foreignKey) => foreignKey.table === "observation_fields",
+);
+
+if (!hasObservationFieldForeignKey) {
+  db.run("DROP INDEX IF EXISTS idx_observations_report");
+  db.run("DROP INDEX IF EXISTS idx_observations_section");
+  db.run("DROP INDEX IF EXISTS idx_observations_test_name");
+  db.run("DROP INDEX IF EXISTS idx_observations_observation_field");
+  db.run("ALTER TABLE observations RENAME TO observations_legacy");
+  db.run(`
+    CREATE TABLE observations (
+      id TEXT PRIMARY KEY,
+      report_id TEXT NOT NULL,
+      section_id TEXT,
+      observation_field_id TEXT,
+      test_name_raw TEXT NOT NULL,
+      test_name_normalized TEXT,
+      loinc_code TEXT,
+      value_raw TEXT NOT NULL,
+      value_numeric REAL,
+      value_text TEXT,
+      unit_raw TEXT,
+      unit_normalized TEXT,
+      reference_range_raw TEXT,
+      ref_low REAL,
+      ref_high REAL,
+      flag TEXT,
+      confidence_score REAL CHECK(confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)),
+      extraction_notes TEXT,
+      raw_json TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE,
+      FOREIGN KEY(section_id) REFERENCES report_sections(id) ON DELETE SET NULL,
+      FOREIGN KEY(observation_field_id) REFERENCES observation_fields(id) ON DELETE SET NULL
+    )
+  `);
+  db.run(`
+    INSERT INTO observations (
+      id,
+      report_id,
+      section_id,
+      observation_field_id,
+      test_name_raw,
+      test_name_normalized,
+      loinc_code,
+      value_raw,
+      value_numeric,
+      value_text,
+      unit_raw,
+      unit_normalized,
+      reference_range_raw,
+      ref_low,
+      ref_high,
+      flag,
+      confidence_score,
+      extraction_notes,
+      raw_json,
+      created_at
+    )
+    SELECT
+      id,
+      report_id,
+      section_id,
+      observation_field_id,
+      test_name_raw,
+      test_name_normalized,
+      loinc_code,
+      value_raw,
+      value_numeric,
+      value_text,
+      unit_raw,
+      unit_normalized,
+      reference_range_raw,
+      ref_low,
+      ref_high,
+      flag,
+      confidence_score,
+      extraction_notes,
+      raw_json,
+      created_at
+    FROM observations_legacy
+  `);
+  db.run("DROP TABLE observations_legacy");
+}
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_observations_report
+  ON observations(report_id)
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_observations_section
+  ON observations(section_id)
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_observations_test_name
+  ON observations(test_name_normalized)
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_observations_observation_field
+  ON observations(observation_field_id)
+`);
+
+db.run(`
   CREATE TABLE IF NOT EXISTS performance_reports (
     id TEXT PRIMARY KEY,
     profile_id TEXT NOT NULL,
