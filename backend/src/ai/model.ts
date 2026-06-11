@@ -12,12 +12,12 @@ if (!apiKey) {
   throw new Error("API KEY is not set");
 }
 
-// export const model = new ChatDeepSeek("deepseek-v4-pro", {
-//   apiKey,
-//   modelKwargs: {
-//     reasoning_effort: "max",
-//   },
-// });
+export const model = new ChatDeepSeek("deepseek-v4-pro", {
+  apiKey,
+  modelKwargs: {
+    reasoning_effort: "max",
+  },
+});
 
 // export const model = await initChatModel("openai:gpt-5.5", {
 //   apiKey: openaiApiKey,
@@ -28,10 +28,10 @@ if (!apiKey) {
 //   model: "gemma-4-31b-it",
 // });
 
-export const model = new ChatOpenRouter({
-  apiKey: openRouterApiKey,
-  model: "minimax/minimax-m3",
-});
+// export const model = new ChatOpenRouter({
+//   apiKey: openRouterApiKey,
+//   model: "minimax/minimax-m3",
+// });
 
 // const response = await model.invoke("Why do parrots talk?");
 
