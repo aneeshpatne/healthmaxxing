@@ -15,7 +15,7 @@ if (!apiKey) {
 // export const model = new ChatDeepSeek("deepseek-v4-pro", {
 //   apiKey,
 //   modelKwargs: {
-//     reasoning_effort: "high",
+//     reasoning_effort: "max",
 //   },
 // });
 
@@ -30,7 +30,7 @@ if (!apiKey) {
 
 export const model = new ChatOpenRouter({
   apiKey: openRouterApiKey,
-  model: "qwen/qwen3.7-max",
+  model: "minimax/minimax-m3",
 });
 
 // const response = await model.invoke("Why do parrots talk?");
