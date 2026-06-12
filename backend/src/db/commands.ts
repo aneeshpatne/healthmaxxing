@@ -122,6 +122,31 @@ export type AddReportSectionInput = {
   section_name_normalized: string;
 };
 
+export type AddObservationFieldInput = {
+  field_name: string;
+  field_name_normalized: string;
+  explanation: string;
+  default_unit?: string | null;
+  is_trendable?: boolean;
+};
+
+export type AddObservationInput = {
+  report_id: string;
+  section_name_normalized: string;
+  observation_field_name_normalized: string;
+  test_name_raw: string;
+  test_name_normalized: string;
+  value_raw: string;
+  value_numeric?: number | null;
+  value_text?: string | null;
+  unit_raw?: string | null;
+  unit_normalized?: string | null;
+  reference_range_raw?: string | null;
+  ref_low?: number | null;
+  ref_high?: number | null;
+  confidence_score?: number | null;
+};
+
 export type LatestBodyCompositionSnapshot = {
   createdAt: string;
   metrics: BodyCompositionMetricsNewRow;
@@ -174,6 +199,39 @@ export function listObservationFieldNames(): ObservationFieldNameRow[] {
     .all() as ObservationFieldNameRow[];
 }
 
+export function addObservationField({
+  field_name,
+  field_name_normalized,
+  explanation,
+  default_unit = null,
+  is_trendable = false,
+}: AddObservationFieldInput): string {
+  const observationFieldId = uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO observation_fields (
+    id,
+    field_name,
+    field_name_normalized,
+    explanation,
+    default_unit,
+    is_trendable
+  )
+  VALUES (?, ?, ?, ?, ?, ?)
+`,
+  ).run(
+    observationFieldId,
+    field_name,
+    field_name_normalized,
+    explanation,
+    default_unit,
+    is_trendable ? 1 : 0,
+  );
+
+  return observationFieldId;
+}
+
 export function listReportSectionNames(
   reportId: string,
 ): ReportSectionNameRow[] {
@@ -210,6 +268,123 @@ export function addReportSection({
   ).run(sectionId, report_id, section_name_raw, section_name_normalized);
 
   return sectionId;
+}
+
+export function getReportSectionId({
+  report_id,
+  section_name_normalized,
+}: {
+  report_id: string;
+  section_name_normalized: string;
+}): string | null {
+  const row = db
+    .prepare(
+      `
+  SELECT id
+  FROM report_sections
+  WHERE report_id = ?
+    AND section_name_normalized = ?
+  LIMIT 1
+`,
+    )
+    .get(report_id, section_name_normalized) as { id: string } | null;
+
+  return row?.id ?? null;
+}
+
+export function getObservationFieldId(
+  field_name_normalized: string,
+): string | null {
+  const row = db
+    .prepare(
+      `
+  SELECT id
+  FROM observation_fields
+  WHERE field_name_normalized = ?
+  LIMIT 1
+`,
+    )
+    .get(field_name_normalized) as { id: string } | null;
+
+  return row?.id ?? null;
+}
+
+export function addObservation({
+  report_id,
+  section_name_normalized,
+  observation_field_name_normalized,
+  test_name_raw,
+  test_name_normalized,
+  value_raw,
+  value_numeric = null,
+  value_text = null,
+  unit_raw = null,
+  unit_normalized = null,
+  reference_range_raw = null,
+  ref_low = null,
+  ref_high = null,
+  confidence_score = null,
+}: AddObservationInput): string {
+  const sectionId = getReportSectionId({
+    report_id,
+    section_name_normalized,
+  });
+  const observationFieldId = getObservationFieldId(
+    observation_field_name_normalized,
+  );
+
+  if (sectionId === null) {
+    throw new Error(`Unknown report section: ${section_name_normalized}`);
+  }
+
+  if (observationFieldId === null) {
+    throw new Error(
+      `Unknown observation field: ${observation_field_name_normalized}`,
+    );
+  }
+
+  const observationId = uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO observations (
+    id,
+    report_id,
+    section_id,
+    observation_field_id,
+    test_name_raw,
+    test_name_normalized,
+    value_raw,
+    value_numeric,
+    value_text,
+    unit_raw,
+    unit_normalized,
+    reference_range_raw,
+    ref_low,
+    ref_high,
+    confidence_score
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`,
+  ).run(
+    observationId,
+    report_id,
+    sectionId,
+    observationFieldId,
+    test_name_raw,
+    test_name_normalized,
+    value_raw,
+    value_numeric,
+    value_text,
+    unit_raw,
+    unit_normalized,
+    reference_range_raw,
+    ref_low,
+    ref_high,
+    confidence_score,
+  );
+
+  return observationId;
 }
 
 export type BodyRatios = {
