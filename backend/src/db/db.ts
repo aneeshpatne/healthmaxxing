@@ -369,11 +369,9 @@ db.run(`
     field_name TEXT NOT NULL,
     field_name_normalized TEXT NOT NULL UNIQUE,
     explanation TEXT NOT NULL DEFAULT '',
-    loinc_code TEXT,
     default_unit TEXT,
     is_trendable INTEGER NOT NULL DEFAULT 0 CHECK(is_trendable IN (0, 1)),
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )
 `);
 
@@ -388,6 +386,46 @@ if (!observationFieldColumnNames.has("is_trendable")) {
   db.run(
     "ALTER TABLE observation_fields ADD COLUMN is_trendable INTEGER NOT NULL DEFAULT 0 CHECK(is_trendable IN (0, 1))",
   );
+}
+
+if (
+  observationFieldColumnNames.has("updated_at") ||
+  observationFieldColumnNames.has("loinc_code")
+) {
+  db.run("DROP INDEX IF EXISTS idx_observation_fields_name");
+  db.run("ALTER TABLE observation_fields RENAME TO observation_fields_legacy");
+  db.run(`
+    CREATE TABLE observation_fields (
+      id TEXT PRIMARY KEY,
+      field_name TEXT NOT NULL,
+      field_name_normalized TEXT NOT NULL UNIQUE,
+      explanation TEXT NOT NULL DEFAULT '',
+      default_unit TEXT,
+      is_trendable INTEGER NOT NULL DEFAULT 0 CHECK(is_trendable IN (0, 1)),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.run(`
+    INSERT INTO observation_fields (
+      id,
+      field_name,
+      field_name_normalized,
+      explanation,
+      default_unit,
+      is_trendable,
+      created_at
+    )
+    SELECT
+      id,
+      field_name,
+      field_name_normalized,
+      explanation,
+      default_unit,
+      is_trendable,
+      created_at
+    FROM observation_fields_legacy
+  `);
+  db.run("DROP TABLE observation_fields_legacy");
 }
 
 db.run(`
@@ -411,7 +449,6 @@ db.run(`
     reference_range_raw TEXT,
     ref_low REAL,
     ref_high REAL,
-    flag TEXT,
     confidence_score REAL CHECK(confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE,
@@ -439,6 +476,7 @@ const hasObservationFieldForeignKey = observationForeignKeys.some(
 );
 const hasLegacyObservationColumns =
   observationColumnNames.has("loinc_code") ||
+  observationColumnNames.has("flag") ||
   observationColumnNames.has("extraction_notes") ||
   observationColumnNames.has("raw_json");
 
@@ -464,7 +502,6 @@ if (!hasObservationFieldForeignKey || hasLegacyObservationColumns) {
       reference_range_raw TEXT,
       ref_low REAL,
       ref_high REAL,
-      flag TEXT,
       confidence_score REAL CHECK(confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE,
@@ -488,7 +525,6 @@ if (!hasObservationFieldForeignKey || hasLegacyObservationColumns) {
       reference_range_raw,
       ref_low,
       ref_high,
-      flag,
       confidence_score,
       created_at
     )
@@ -507,7 +543,6 @@ if (!hasObservationFieldForeignKey || hasLegacyObservationColumns) {
       reference_range_raw,
       ref_low,
       ref_high,
-      flag,
       confidence_score,
       created_at
     FROM observations_legacy
