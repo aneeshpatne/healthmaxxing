@@ -1,6 +1,10 @@
 import { tool } from "langchain";
 import * as z from "zod";
 import {
+  type BodyRatioComments,
+  type DerivedMetricComment,
+  type FatReportComment,
+  type MuscleReportComment,
   type ProfileAiAnalysisBlock,
   type ProfileId,
   TREND_COLUMNS,
@@ -95,6 +99,41 @@ type PendingProfileAiOverview = {
   effortScore?: EffortScorePayload;
 };
 
+type DerivedMetricsCommentsPayload = {
+  ffmi: DerivedMetricComment;
+  ffmi_vs_fmi: DerivedMetricComment;
+  composition_flow: DerivedMetricComment;
+  composition_trend: DerivedMetricComment;
+  recomp_vector: DerivedMetricComment;
+  excess_fat_gauge: DerivedMetricComment;
+  body_ratios: {
+    waist_height: BodyRatioComments["waistHeight"];
+    shoulder_waist: BodyRatioComments["shoulderWaist"];
+    chest_waist: BodyRatioComments["chestWaist"];
+    bicep_forearm: BodyRatioComments["bicepForearm"];
+    thigh_calf: BodyRatioComments["thighCalf"];
+    neck_calf: BodyRatioComments["neckCalf"];
+  };
+};
+
+type FatReportCommentsPayload = {
+  fat_percent: FatReportComment;
+  visceral_subcutaneous_30d_delta: FatReportComment;
+  fat_mass: FatReportComment;
+  visceral_fat_mass: FatReportComment;
+  visceral_fat_percent: FatReportComment;
+  subcutaneous_fat_mass: FatReportComment;
+  subcutaneous_fat_ratio: FatReportComment;
+};
+
+type MuscleReportCommentsPayload = {
+  total_muscle: MuscleReportComment;
+  bone_mass: MuscleReportComment;
+  muscle_ratio: MuscleReportComment;
+  skeletal_muscle_mass: MuscleReportComment;
+  skeletal_muscle_ratio: MuscleReportComment;
+};
+
 const pendingProfileAiOverviews = new Map<ProfileId, PendingProfileAiOverview>();
 
 function saveWhenComplete(profileId: ProfileId, modelName?: string | null) {
@@ -128,9 +167,9 @@ function saveWhenComplete(profileId: ProfileId, modelName?: string | null) {
 export function createProfileAiTools(
   profileId: ProfileId,
   modelName?: string | null,
-) {
+  ) {
   const ai_overview = tool(
-    ({ title, remarks }) => {
+    ({ title, remarks }: AiOverviewPayload) => {
       console.log({ profileId, title, remarks });
 
       const pending = pendingProfileAiOverviews.get(profileId) ?? {};
@@ -160,7 +199,12 @@ export function createProfileAiTools(
   );
 
   const body_analysis = tool(
-    ({ foundation, momentum, biggest_lever, physique_archetype }) => {
+    ({
+      foundation,
+      momentum,
+      biggest_lever,
+      physique_archetype,
+    }: BodyAnalysisPayload) => {
       console.log({
         profileId,
         foundation,
@@ -209,7 +253,7 @@ export function createProfileAiTools(
   );
 
   const effort_score = tool(
-    ({ score, remark }) => {
+    ({ score, remark }: EffortScorePayload) => {
       console.log({ profileId, score, remark });
 
       const pending = pendingProfileAiOverviews.get(profileId) ?? {};
@@ -251,7 +295,7 @@ export function createProfileAiTools(
       recomp_vector,
       excess_fat_gauge,
       body_ratios,
-    }) => {
+    }: DerivedMetricsCommentsPayload) => {
       console.log({
         profileId,
         ffmi,
@@ -321,7 +365,7 @@ export function createProfileAiTools(
       visceral_fat_percent,
       subcutaneous_fat_mass,
       subcutaneous_fat_ratio,
-    }) => {
+    }: FatReportCommentsPayload) => {
       console.log({
         profileId,
         fat_percent,
@@ -380,7 +424,7 @@ export function createProfileAiTools(
       muscle_ratio,
       skeletal_muscle_mass,
       skeletal_muscle_ratio,
-    }) => {
+    }: MuscleReportCommentsPayload) => {
       console.log({
         profileId,
         total_muscle,
