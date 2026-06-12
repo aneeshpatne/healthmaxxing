@@ -434,6 +434,21 @@ db.run(`
 `);
 
 db.run(`
+  CREATE TABLE IF NOT EXISTS observation_field_remarks (
+    id TEXT PRIMARY KEY,
+    observation_field_id TEXT NOT NULL UNIQUE,
+    remark TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(observation_field_id) REFERENCES observation_fields(id) ON DELETE CASCADE
+  )
+`);
+
+db.run(`
+  CREATE INDEX IF NOT EXISTS idx_observation_field_remarks_field
+  ON observation_field_remarks(observation_field_id)
+`);
+
+db.run(`
   CREATE TABLE IF NOT EXISTS observations (
     id TEXT PRIMARY KEY,
     report_id TEXT NOT NULL,
@@ -449,6 +464,7 @@ db.run(`
     reference_range_raw TEXT,
     ref_low REAL,
     ref_high REAL,
+    inference TEXT NOT NULL DEFAULT '',
     confidence_score REAL CHECK(confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE,
@@ -459,13 +475,20 @@ db.run(`
 
 const observationColumns = db
   .prepare("PRAGMA table_info(observations)")
-  .all() as Array<{ name: string }>;
+  .all() as Array<{ name: string; notnull: number }>;
 const observationColumnNames = new Set(
   observationColumns.map((column) => column.name),
+);
+const observationInferenceColumn = observationColumns.find(
+  (column) => column.name === "inference",
 );
 
 if (!observationColumnNames.has("observation_field_id")) {
   db.run("ALTER TABLE observations ADD COLUMN observation_field_id TEXT");
+}
+
+if (!observationColumnNames.has("inference")) {
+  db.run("ALTER TABLE observations ADD COLUMN inference TEXT NOT NULL DEFAULT ''");
 }
 
 const observationForeignKeys = db
@@ -479,8 +502,15 @@ const hasLegacyObservationColumns =
   observationColumnNames.has("flag") ||
   observationColumnNames.has("extraction_notes") ||
   observationColumnNames.has("raw_json");
+const hasNullableObservationInference =
+  observationInferenceColumn !== undefined &&
+  observationInferenceColumn.notnull === 0;
 
-if (!hasObservationFieldForeignKey || hasLegacyObservationColumns) {
+if (
+  !hasObservationFieldForeignKey ||
+  hasLegacyObservationColumns ||
+  hasNullableObservationInference
+) {
   db.run("DROP INDEX IF EXISTS idx_observations_report");
   db.run("DROP INDEX IF EXISTS idx_observations_section");
   db.run("DROP INDEX IF EXISTS idx_observations_test_name");
@@ -502,6 +532,7 @@ if (!hasObservationFieldForeignKey || hasLegacyObservationColumns) {
       reference_range_raw TEXT,
       ref_low REAL,
       ref_high REAL,
+      inference TEXT NOT NULL DEFAULT '',
       confidence_score REAL CHECK(confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE,
@@ -525,6 +556,7 @@ if (!hasObservationFieldForeignKey || hasLegacyObservationColumns) {
       reference_range_raw,
       ref_low,
       ref_high,
+      inference,
       confidence_score,
       created_at
     )
@@ -543,6 +575,11 @@ if (!hasObservationFieldForeignKey || hasLegacyObservationColumns) {
       reference_range_raw,
       ref_low,
       ref_high,
+      CASE
+        WHEN (SELECT COUNT(*) FROM pragma_table_info('observations_legacy') WHERE name = 'inference') > 0
+        THEN COALESCE(inference, '')
+        ELSE ''
+      END,
       confidence_score,
       created_at
     FROM observations_legacy

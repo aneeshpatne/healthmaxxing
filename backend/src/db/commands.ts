@@ -106,6 +106,20 @@ export type ObservationFieldNameRow = {
   field_name_normalized: string;
 };
 
+export type TrendableObservationValueRow = {
+  fieldName: string;
+  fieldNameNormalized: string;
+  explanation: string;
+  defaultUnit: string | null;
+  remark: string;
+  valueRaw: string;
+  valueNumeric: number | null;
+  valueText: string | null;
+  unitNormalized: string | null;
+  inference: string;
+  observedAt: string;
+};
+
 export type ReportSectionNameRow = {
   section_name_normalized: string | null;
 };
@@ -144,7 +158,13 @@ export type AddObservationInput = {
   reference_range_raw?: string | null;
   ref_low?: number | null;
   ref_high?: number | null;
+  inference: string;
   confidence_score?: number | null;
+};
+
+export type UpdateObservationFieldRemarkInput = {
+  field_name_normalized: string;
+  remark: string;
 };
 
 export type LatestBodyCompositionSnapshot = {
@@ -199,6 +219,40 @@ export function listObservationFieldNames(): ObservationFieldNameRow[] {
     .all() as ObservationFieldNameRow[];
 }
 
+export function listTrendableObservationValuesLastYear(
+  profileId: ProfileId,
+): TrendableObservationValueRow[] {
+  return db
+    .prepare(
+      `
+  SELECT
+    observation_fields.field_name AS fieldName,
+    observation_fields.field_name_normalized AS fieldNameNormalized,
+    observation_fields.explanation AS explanation,
+    observation_fields.default_unit AS defaultUnit,
+    COALESCE(observation_field_remarks.remark, '') AS remark,
+    observations.value_raw AS valueRaw,
+    observations.value_numeric AS valueNumeric,
+    observations.value_text AS valueText,
+    observations.unit_normalized AS unitNormalized,
+    observations.inference AS inference,
+    observations.created_at AS observedAt
+  FROM observations
+  INNER JOIN reports
+    ON reports.id = observations.report_id
+  INNER JOIN observation_fields
+    ON observation_fields.id = observations.observation_field_id
+  LEFT JOIN observation_field_remarks
+    ON observation_field_remarks.observation_field_id = observation_fields.id
+  WHERE reports.profile_id = ?
+    AND observation_fields.is_trendable = 1
+    AND observations.created_at >= datetime('now', '-1 year')
+  ORDER BY observation_fields.field_name_normalized ASC, observations.created_at ASC
+`,
+    )
+    .all(profileId) as TrendableObservationValueRow[];
+}
+
 export function addObservationField({
   field_name,
   field_name_normalized,
@@ -229,7 +283,44 @@ export function addObservationField({
     is_trendable ? 1 : 0,
   );
 
+  if (is_trendable) {
+    db.prepare(
+      `
+  INSERT INTO observation_field_remarks (
+    id,
+    observation_field_id,
+    remark
+  )
+  VALUES (?, ?, '')
+`,
+    ).run(uuidv7(), observationFieldId);
+  }
+
   return observationFieldId;
+}
+
+export function updateObservationFieldRemark({
+  field_name_normalized,
+  remark,
+}: UpdateObservationFieldRemarkInput): void {
+  const observationFieldId = getObservationFieldId(field_name_normalized);
+
+  if (observationFieldId === null) {
+    throw new Error(`Unknown observation field: ${field_name_normalized}`);
+  }
+
+  db.prepare(
+    `
+  INSERT INTO observation_field_remarks (
+    id,
+    observation_field_id,
+    remark
+  )
+  VALUES (?, ?, ?)
+  ON CONFLICT(observation_field_id)
+  DO UPDATE SET remark = excluded.remark
+`,
+  ).run(uuidv7(), observationFieldId, remark);
 }
 
 export function listReportSectionNames(
@@ -323,6 +414,7 @@ export function addObservation({
   reference_range_raw = null,
   ref_low = null,
   ref_high = null,
+  inference,
   confidence_score = null,
 }: AddObservationInput): string {
   const sectionId = getReportSectionId({
@@ -362,9 +454,10 @@ export function addObservation({
     reference_range_raw,
     ref_low,
     ref_high,
+    inference,
     confidence_score
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
   ).run(
     observationId,
@@ -381,6 +474,7 @@ export function addObservation({
     reference_range_raw,
     ref_low,
     ref_high,
+    inference,
     confidence_score,
   );
 

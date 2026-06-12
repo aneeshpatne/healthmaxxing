@@ -7,6 +7,7 @@ import {
   insertIntoLabReport,
   listObservationFieldNames,
   listReportSectionNames,
+  updateObservationFieldRemark,
 } from "../../db/commands";
 
 type MakeReportToolsArgs = {
@@ -135,6 +136,7 @@ export function makeReportTools({ reportId }: MakeReportToolsArgs) {
         reference_range_raw,
         ref_low,
         ref_high,
+        inference,
         confidence_score,
       }) => {
         const observationId = addObservation({
@@ -151,6 +153,7 @@ export function makeReportTools({ reportId }: MakeReportToolsArgs) {
           reference_range_raw,
           ref_low,
           ref_high,
+          inference,
           confidence_score,
         });
 
@@ -176,7 +179,31 @@ export function makeReportTools({ reportId }: MakeReportToolsArgs) {
           reference_range_raw: z.string().nullable().optional(),
           ref_low: z.number().nullable().optional(),
           ref_high: z.number().nullable().optional(),
+          inference: z.string(),
           confidence_score: z.number().min(0).max(1).nullable().optional(),
+        }),
+      },
+    ),
+    tool(
+      async ({ field_name_normalized, remark }) => {
+        updateObservationFieldRemark({
+          field_name_normalized,
+          remark,
+        });
+
+        return `Saved trend remark for ${field_name_normalized}.`;
+      },
+      {
+        name: "updateObservationFieldRemark",
+        description:
+          "Populate or update the trend remark for one trendable observation field.",
+        schema: z.object({
+          field_name_normalized: z.string(),
+          remark: z
+            .string()
+            .describe(
+              "Dense one-sentence trend remark based on the last year of values for this normalized observation field.",
+            ),
         }),
       },
     ),
