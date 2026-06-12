@@ -310,7 +310,6 @@ db.run(`
     observation_field_id TEXT,
     test_name_raw TEXT NOT NULL,
     test_name_normalized TEXT,
-    loinc_code TEXT,
     value_raw TEXT NOT NULL,
     value_numeric REAL,
     value_text TEXT,
@@ -321,8 +320,6 @@ db.run(`
     ref_high REAL,
     flag TEXT,
     confidence_score REAL CHECK(confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)),
-    extraction_notes TEXT,
-    raw_json TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE,
     FOREIGN KEY(section_id) REFERENCES report_sections(id) ON DELETE SET NULL,
@@ -347,8 +344,12 @@ const observationForeignKeys = db
 const hasObservationFieldForeignKey = observationForeignKeys.some(
   (foreignKey) => foreignKey.table === "observation_fields",
 );
+const hasLegacyObservationColumns =
+  observationColumnNames.has("loinc_code") ||
+  observationColumnNames.has("extraction_notes") ||
+  observationColumnNames.has("raw_json");
 
-if (!hasObservationFieldForeignKey) {
+if (!hasObservationFieldForeignKey || hasLegacyObservationColumns) {
   db.run("DROP INDEX IF EXISTS idx_observations_report");
   db.run("DROP INDEX IF EXISTS idx_observations_section");
   db.run("DROP INDEX IF EXISTS idx_observations_test_name");
@@ -362,7 +363,6 @@ if (!hasObservationFieldForeignKey) {
       observation_field_id TEXT,
       test_name_raw TEXT NOT NULL,
       test_name_normalized TEXT,
-      loinc_code TEXT,
       value_raw TEXT NOT NULL,
       value_numeric REAL,
       value_text TEXT,
@@ -373,8 +373,6 @@ if (!hasObservationFieldForeignKey) {
       ref_high REAL,
       flag TEXT,
       confidence_score REAL CHECK(confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1)),
-      extraction_notes TEXT,
-      raw_json TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE,
       FOREIGN KEY(section_id) REFERENCES report_sections(id) ON DELETE SET NULL,
@@ -389,7 +387,6 @@ if (!hasObservationFieldForeignKey) {
       observation_field_id,
       test_name_raw,
       test_name_normalized,
-      loinc_code,
       value_raw,
       value_numeric,
       value_text,
@@ -400,8 +397,6 @@ if (!hasObservationFieldForeignKey) {
       ref_high,
       flag,
       confidence_score,
-      extraction_notes,
-      raw_json,
       created_at
     )
     SELECT
@@ -411,7 +406,6 @@ if (!hasObservationFieldForeignKey) {
       observation_field_id,
       test_name_raw,
       test_name_normalized,
-      loinc_code,
       value_raw,
       value_numeric,
       value_text,
@@ -422,8 +416,6 @@ if (!hasObservationFieldForeignKey) {
       ref_high,
       flag,
       confidence_score,
-      extraction_notes,
-      raw_json,
       created_at
     FROM observations_legacy
   `);
