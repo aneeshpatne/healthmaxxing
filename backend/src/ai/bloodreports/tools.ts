@@ -1,8 +1,11 @@
 import { tool } from "langchain";
 import * as z from "zod";
 import {
+  addObservation,
+  addObservationField,
   addReportSection,
   insertIntoLabReport,
+  listObservationFieldNames,
   listReportSectionNames,
 } from "../../db/commands";
 
@@ -14,6 +17,9 @@ export function makeReportTools({ reportId }: MakeReportToolsArgs) {
   const knownSectionNames = listReportSectionNames(reportId)
     .map((row) => row.section_name_normalized)
     .filter((name): name is string => name !== null);
+  const knownObservationFieldNames = listObservationFieldNames().map(
+    (row) => row.field_name_normalized,
+  );
 
   return [
     tool(
@@ -67,6 +73,110 @@ export function makeReportTools({ reportId }: MakeReportToolsArgs) {
         schema: z.object({
           section_name_raw: z.string(),
           section_name_normalized: z.string(),
+        }),
+      },
+    ),
+    tool(
+      async () => {
+        return knownObservationFieldNames;
+      },
+      {
+        name: "getSavedObservationFieldNames",
+        description:
+          "Return the normalized observation field names already saved so duplicates are not created.",
+        schema: z.object({}),
+      },
+    ),
+    tool(
+      async ({
+        field_name,
+        field_name_normalized,
+        explanation,
+        default_unit,
+        is_trendable,
+      }) => {
+        const observationFieldId = addObservationField({
+          field_name,
+          field_name_normalized,
+          explanation,
+          default_unit,
+          is_trendable,
+        });
+
+        return {
+          observationFieldId,
+          field_name_normalized,
+        };
+      },
+      {
+        name: "addObservationField",
+        description:
+          "Add one observation field using the raw field name, normalized field name, and dense explanation.",
+        schema: z.object({
+          field_name: z.string(),
+          field_name_normalized: z.string(),
+          explanation: z.string(),
+          default_unit: z.string().nullable().optional(),
+          is_trendable: z.boolean().optional(),
+        }),
+      },
+    ),
+    tool(
+      async ({
+        section_name_normalized,
+        observation_field_name_normalized,
+        test_name_raw,
+        test_name_normalized,
+        value_raw,
+        value_numeric,
+        value_text,
+        unit_raw,
+        unit_normalized,
+        reference_range_raw,
+        ref_low,
+        ref_high,
+        confidence_score,
+      }) => {
+        const observationId = addObservation({
+          report_id: reportId,
+          section_name_normalized,
+          observation_field_name_normalized,
+          test_name_raw,
+          test_name_normalized,
+          value_raw,
+          value_numeric,
+          value_text,
+          unit_raw,
+          unit_normalized,
+          reference_range_raw,
+          ref_low,
+          ref_high,
+          confidence_score,
+        });
+
+        return {
+          observationId,
+          test_name_normalized,
+        };
+      },
+      {
+        name: "addObservation",
+        description:
+          "Add one extracted lab observation to the current report. The referenced section and observation field must already exist.",
+        schema: z.object({
+          section_name_normalized: z.string(),
+          observation_field_name_normalized: z.string(),
+          test_name_raw: z.string(),
+          test_name_normalized: z.string(),
+          value_raw: z.string(),
+          value_numeric: z.number().nullable().optional(),
+          value_text: z.string().nullable().optional(),
+          unit_raw: z.string().nullable().optional(),
+          unit_normalized: z.string().nullable().optional(),
+          reference_range_raw: z.string().nullable().optional(),
+          ref_low: z.number().nullable().optional(),
+          ref_high: z.number().nullable().optional(),
+          confidence_score: z.number().min(0).max(1).nullable().optional(),
         }),
       },
     ),
