@@ -5,40 +5,70 @@ import { makeReportTools } from "./tools";
 import { createLabReport } from "../../db/commands";
 
 const profileId = "019e8724-ccf0-73cb-9c7d-822478474e90";
-const sampleReportText = `Apollo Diagnostics
-Report Date: 2026-06-10
-Collection Date: 2026-06-09
-Patient: Test User
-Section: Complete Blood Count
-Hemoglobin: 13.5 g/dL
-WBC: 7200 /uL
-
-Section: Lipid Profile
-Total Cholesterol: 182 mg/dL
-HDL Cholesterol: 52 mg/dL`;
+const reportPath = new URL("./report.md", import.meta.url);
 
 const systemMsg = new SystemMessage(
-  `You extract lab report metadata and section names from blood test text.
+  `You extract structured lab report metadata, section names, and observation field names from blood test text.
 
-You have three tools:
+Available tools:
 - saveReportMetaData
 - getSavedSectionNames
 - addReportSection
+- getSavedObservationFieldNames
+- addObservationField
+- addObservation
 
-Execution order:
-1. Call saveReportMetaData exactly once with:
-- lab_name
-- report_date
-- collection_date
-2. Call getSavedSectionNames exactly once to see which normalized section names already exist for this report.
-3. For each section present in the report text, if its normalized section name is not already saved, call addReportSection once for that section.
+Execution flow:
+1. Call saveReportMetaData exactly once.
+   Required values:
+   - lab_name
+   - report_date
+   - collection_date
+2. Call getSavedSectionNames exactly once.
+3. For each section present in the report:
+   - normalize it to lowercase snake_case
+   - if that normalized name is not already returned by getSavedSectionNames, call addReportSection once
+4. Call getSavedObservationFieldNames exactly once.
+5. For each observation/test name present in the report:
+   - normalize it to lowercase snake_case
+   - if that normalized field name is not already returned by getSavedObservationFieldNames, call addObservationField once
+   - include a dense explanation of what the field measures, what specimen/context it belongs to, and how it is typically interpreted structurally
+6. After all required sections and observation fields exist, call addObservation once for each observation row in the report.
+   Required values:
+   - section_name_normalized
+   - observation_field_name_normalized
+   - test_name_raw
+   - test_name_normalized
+   - value_raw
+   Optional values:
+   - value_numeric
+   - value_text
+   - unit_raw
+   - unit_normalized
+   - reference_range_raw
+   - ref_low
+   - ref_high
+   - confidence_score
+
+Normalization examples:
+- "Complete Blood Count" -> "complete_blood_count"
+- "Lipid Profile" -> "lipid_profile"
+- "HDL Cholesterol" -> "hdl_cholesterol"
+- "Total Cholesterol" -> "total_cholesterol"
 
 Rules:
-- Use the values exactly as written in the report when possible.
+- Use values exactly as written when possible.
 - If a date is missing, use an empty string.
-- Normalize section names to lowercase snake_case.
+- Observation field explanations must be 1-2 dense sentences, specific to the biomarker or ratio, and should define the measurement rather than interpret this patient's result.
+- Good explanation style: "Low-density lipoprotein cholesterol measured in serum, representing cholesterol carried by LDL particles and commonly used as a core lipid marker for atherogenic cholesterol burden."
+- Put numeric measurement values in value_numeric when a clear number is present.
+- Put non-numeric measurements in value_text.
+- Keep value_raw as the original report value with unit when present.
+- Use null or omit optional values when they are not present in the report text.
 - Do not create duplicate sections.
-- Do not explain your work outside the tool call.`,
+- Do not create duplicate observation fields.
+- Only call addObservation after the matching section and observation field have been created or confirmed to exist.
+- Do not explain your work outside tool calls.`,
 );
 
 function getNumericField(record: Record<string, unknown>, keys: string[]) {
@@ -116,7 +146,7 @@ export async function createReport(reportText: string) {
   const result = await bloodworkAgent.invoke({
     messages: [
       systemMsg,
-      new HumanMessage(`Extract lab report metadata from this text:
+      new HumanMessage(`Extract report metadata, sections, observation field names, and observations from this text:
 
 ${reportText}`),
     ],
@@ -128,6 +158,7 @@ ${reportText}`),
 }
 
 if (import.meta.main) {
-  const output = await createReport(sampleReportText);
+  const reportText = await Bun.file(reportPath).text();
+  const output = await createReport(reportText);
   console.log(output);
 }
