@@ -36,3 +36,5 @@ src/calculations/proprietaryMetrics.ts
 
 # Finder (MacOS) folder config
 .DS_Store
+
+report.md
