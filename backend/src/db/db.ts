@@ -318,14 +318,49 @@ db.run(`
     report_id TEXT NOT NULL,
     section_name_raw TEXT NOT NULL,
     section_name_normalized TEXT,
-    sort_order INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE
   )
 `);
 
+const reportSectionColumns = db
+  .prepare("PRAGMA table_info(report_sections)")
+  .all() as Array<{ name: string }>;
+const reportSectionColumnNames = new Set(
+  reportSectionColumns.map((column) => column.name),
+);
+
+if (reportSectionColumnNames.has("sort_order")) {
+  db.run("DROP INDEX IF EXISTS idx_report_sections_report_sort");
+  db.run("ALTER TABLE report_sections RENAME TO report_sections_legacy");
+  db.run(`
+    CREATE TABLE report_sections (
+      id TEXT PRIMARY KEY,
+      report_id TEXT NOT NULL,
+      section_name_raw TEXT NOT NULL,
+      section_name_normalized TEXT,
+      FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE
+    )
+  `);
+  db.run(`
+    INSERT INTO report_sections (
+      id,
+      report_id,
+      section_name_raw,
+      section_name_normalized
+    )
+    SELECT
+      id,
+      report_id,
+      section_name_raw,
+      section_name_normalized
+    FROM report_sections_legacy
+  `);
+  db.run("DROP TABLE report_sections_legacy");
+}
+
 db.run(`
-  CREATE INDEX IF NOT EXISTS idx_report_sections_report_sort
-  ON report_sections(report_id, sort_order)
+  CREATE INDEX IF NOT EXISTS idx_report_sections_report_id
+  ON report_sections(report_id)
 `);
 
 db.run(`
