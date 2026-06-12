@@ -247,16 +247,60 @@ db.run(`
   CREATE TABLE IF NOT EXISTS reports (
     id TEXT PRIMARY KEY,
     profile_id TEXT NOT NULL,
-    source_file_url TEXT,
     lab_name TEXT,
     report_date TEXT,
     collection_date TEXT,
-    raw_text TEXT,
     extraction_status TEXT NOT NULL DEFAULT 'pending',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
   )
 `);
+
+const reportColumns = db
+  .prepare("PRAGMA table_info(reports)")
+  .all() as Array<{ name: string }>;
+const reportColumnNames = new Set(reportColumns.map((column) => column.name));
+const hasLegacyReportColumns =
+  reportColumnNames.has("raw_text") || reportColumnNames.has("source_file_url");
+
+if (hasLegacyReportColumns) {
+  db.run("DROP INDEX IF EXISTS idx_reports_profile_report_date");
+  db.run("DROP INDEX IF EXISTS idx_reports_extraction_status");
+  db.run("ALTER TABLE reports RENAME TO reports_legacy");
+  db.run(`
+    CREATE TABLE reports (
+      id TEXT PRIMARY KEY,
+      profile_id TEXT NOT NULL,
+      lab_name TEXT,
+      report_date TEXT,
+      collection_date TEXT,
+      extraction_status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE CASCADE
+    )
+  `);
+  db.run(`
+    INSERT INTO reports (
+      id,
+      profile_id,
+      lab_name,
+      report_date,
+      collection_date,
+      extraction_status,
+      created_at
+    )
+    SELECT
+      id,
+      profile_id,
+      lab_name,
+      report_date,
+      collection_date,
+      extraction_status,
+      created_at
+    FROM reports_legacy
+  `);
+  db.run("DROP TABLE reports_legacy");
+}
 
 db.run(`
   CREATE INDEX IF NOT EXISTS idx_reports_profile_report_date
