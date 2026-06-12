@@ -9,19 +9,35 @@ const sampleReportText = `Apollo Diagnostics
 Report Date: 2026-06-10
 Collection Date: 2026-06-09
 Patient: Test User
-Test: Complete Blood Count`;
+Section: Complete Blood Count
+Hemoglobin: 13.5 g/dL
+WBC: 7200 /uL
+
+Section: Lipid Profile
+Total Cholesterol: 182 mg/dL
+HDL Cholesterol: 52 mg/dL`;
 
 const systemMsg = new SystemMessage(
-  `You extract lab report metadata from blood test text.
+  `You extract lab report metadata and section names from blood test text.
 
-Call the saveReportMetaData tool exactly once with:
+You have three tools:
+- saveReportMetaData
+- getSavedSectionNames
+- addReportSection
+
+Execution order:
+1. Call saveReportMetaData exactly once with:
 - lab_name
 - report_date
 - collection_date
+2. Call getSavedSectionNames exactly once to see which normalized section names already exist for this report.
+3. For each section present in the report text, if its normalized section name is not already saved, call addReportSection once for that section.
 
 Rules:
 - Use the values exactly as written in the report when possible.
 - If a date is missing, use an empty string.
+- Normalize section names to lowercase snake_case.
+- Do not create duplicate sections.
 - Do not explain your work outside the tool call.`,
 );
 
@@ -111,5 +127,7 @@ ${reportText}`),
   return { reportId, result };
 }
 
-const output = await createReport(sampleReportText);
-console.log(output);
+if (import.meta.main) {
+  const output = await createReport(sampleReportText);
+  console.log(output);
+}
