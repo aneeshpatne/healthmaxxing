@@ -292,10 +292,24 @@ db.run(`
     explanation TEXT NOT NULL DEFAULT '',
     loinc_code TEXT,
     default_unit TEXT,
+    is_trendable INTEGER NOT NULL DEFAULT 0 CHECK(is_trendable IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )
 `);
+
+const observationFieldColumns = db
+  .prepare("PRAGMA table_info(observation_fields)")
+  .all() as Array<{ name: string }>;
+const observationFieldColumnNames = new Set(
+  observationFieldColumns.map((column) => column.name),
+);
+
+if (!observationFieldColumnNames.has("is_trendable")) {
+  db.run(
+    "ALTER TABLE observation_fields ADD COLUMN is_trendable INTEGER NOT NULL DEFAULT 0 CHECK(is_trendable IN (0, 1))",
+  );
+}
 
 db.run(`
   CREATE INDEX IF NOT EXISTS idx_observation_fields_name
