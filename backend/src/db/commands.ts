@@ -102,6 +102,16 @@ export type WeightSummary = {
   last30DaysWeightTrend: WeightTrendPoint[];
 };
 
+export type ObservationFieldNameRow = {
+  field_name_normalized: string;
+};
+
+export type InsertIntoLabReportInput = {
+  lab_name: string;
+  report_date: string;
+  collection_date: string;
+};
+
 export type LatestBodyCompositionSnapshot = {
   createdAt: string;
   metrics: BodyCompositionMetricsNewRow;
@@ -113,6 +123,46 @@ export type CompositionTrendMassPoint = {
   leanMassKg: number;
   fatMassKg: number;
 };
+
+export function createLabReport(profileId: ProfileId): string {
+  const reportId = uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO reports (id, profile_id)
+  VALUES (?, ?)
+`,
+  ).run(reportId, profileId);
+
+  return reportId;
+}
+
+export function insertIntoLabReport(
+  reportId: string,
+  { lab_name, report_date, collection_date }: InsertIntoLabReportInput,
+): void {
+  db.prepare(
+    `
+  UPDATE reports
+  SET
+    lab_name = ?,
+    report_date = ?,
+    collection_date = ?
+  WHERE id = ?
+`,
+  ).run(lab_name, report_date, collection_date, reportId);
+}
+
+export function listObservationFieldNames(): ObservationFieldNameRow[] {
+  return db
+    .prepare(
+      `
+  SELECT field_name_normalized
+  FROM observation_fields
+`,
+    )
+    .all() as ObservationFieldNameRow[];
+}
 
 export type BodyRatios = {
   waistHeight: number | null;
