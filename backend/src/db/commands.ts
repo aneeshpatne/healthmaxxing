@@ -106,10 +106,20 @@ export type ObservationFieldNameRow = {
   field_name_normalized: string;
 };
 
+export type ReportSectionNameRow = {
+  section_name_normalized: string | null;
+};
+
 export type InsertIntoLabReportInput = {
   lab_name: string;
   report_date: string;
   collection_date: string;
+};
+
+export type AddReportSectionInput = {
+  report_id: string;
+  section_name_raw: string;
+  section_name_normalized: string;
 };
 
 export type LatestBodyCompositionSnapshot = {
@@ -162,6 +172,44 @@ export function listObservationFieldNames(): ObservationFieldNameRow[] {
 `,
     )
     .all() as ObservationFieldNameRow[];
+}
+
+export function listReportSectionNames(
+  reportId: string,
+): ReportSectionNameRow[] {
+  return db
+    .prepare(
+      `
+  SELECT DISTINCT section_name_normalized
+  FROM report_sections
+  WHERE report_id = ?
+    AND section_name_normalized IS NOT NULL
+  ORDER BY section_name_normalized ASC
+`,
+    )
+    .all(reportId) as ReportSectionNameRow[];
+}
+
+export function addReportSection({
+  report_id,
+  section_name_raw,
+  section_name_normalized,
+}: AddReportSectionInput): string {
+  const sectionId = uuidv7();
+
+  db.prepare(
+    `
+  INSERT INTO report_sections (
+    id,
+    report_id,
+    section_name_raw,
+    section_name_normalized
+  )
+  VALUES (?, ?, ?, ?)
+`,
+  ).run(sectionId, report_id, section_name_raw, section_name_normalized);
+
+  return sectionId;
 }
 
 export type BodyRatios = {
