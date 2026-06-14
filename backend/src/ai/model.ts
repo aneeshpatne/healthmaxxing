@@ -1,19 +1,33 @@
-import { HumanMessage, initChatModel, SystemMessage } from "langchain";
 import { ChatGoogle } from "@langchain/google";
 import { ChatOpenRouter } from "@langchain/openrouter";
 import { ChatDeepSeek } from "@langchain/deepseek";
-
-export const apiKey = process.env.DEEPSEEK_API_KEY;
+import { ChatOpenAI } from "@langchain/openai";
+import { initChatModel } from "langchain";
+export const apiKey = process.env.NVIDIA_API_KEY;
+export const deepSeekApiKey = process.env.DEEPSEEK_API_KEY;
 export const openaiApiKey = process.env.OPENAI_API_KEY;
 export const googleApiKey = process.env.GOOGLE_API_KEY;
 export const openRouterApiKey = process.env.OPENROUTER_API_KEY;
 
 if (!apiKey) {
-  throw new Error("API KEY is not set");
+  throw new Error("NVIDIA_API_KEY is not set");
 }
 
+// export const model = new ChatOpenAI({
+//   apiKey: process.env.NVIDIA_API_KEY,
+//   model: "moonshotai/kimi-k2.6",
+//   temperature: 1,
+//   maxTokens: 65536,
+//   configuration: {
+//     baseURL: "https://integrate.api.nvidia.com/v1",
+//     defaultHeaders: {
+//       Accept: "application/json",
+//     },
+//   },
+// });
+
 export const model = new ChatDeepSeek("deepseek-v4-pro", {
-  apiKey,
+  apiKey: deepSeekApiKey,
   modelKwargs: {
     reasoning_effort: "max",
   },
@@ -30,7 +44,7 @@ export const model = new ChatDeepSeek("deepseek-v4-pro", {
 
 // export const model = new ChatOpenRouter({
 //   apiKey: openRouterApiKey,
-//   model: "minimax/minimax-m3",
+//   model: "google/gemini-3.5-flash",
 // });
 
 // const response = await model.invoke("Why do parrots talk?");
