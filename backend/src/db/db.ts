@@ -200,6 +200,47 @@ db.run(`
 `);
 
 db.run(`
+  CREATE TABLE IF NOT EXISTS workouts (
+    id TEXT PRIMARY KEY,
+    source_workout_id TEXT NOT NULL UNIQUE,
+    profile_id TEXT,
+    name TEXT NOT NULL,
+    location TEXT,
+    is_indoor INTEGER,
+    started_at TEXT,
+    ended_at TEXT,
+    duration_seconds REAL,
+    distance_qty REAL,
+    distance_units TEXT,
+    active_energy_qty REAL,
+    active_energy_units TEXT,
+    total_energy_qty REAL,
+    total_energy_units TEXT,
+    avg_heart_rate_qty REAL,
+    avg_heart_rate_units TEXT,
+    min_heart_rate_qty REAL,
+    min_heart_rate_units TEXT,
+    max_heart_rate_qty REAL,
+    max_heart_rate_units TEXT,
+    speed_qty REAL,
+    speed_units TEXT,
+    step_cadence_qty REAL,
+    step_cadence_units TEXT,
+    intensity_qty REAL,
+    intensity_units TEXT,
+    temperature_qty REAL,
+    temperature_units TEXT,
+    humidity_qty REAL,
+    humidity_units TEXT,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    raw_payload TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(profile_id) REFERENCES profiles(id) ON DELETE SET NULL
+  )
+`);
+
+db.run(`
   CREATE TABLE IF NOT EXISTS profile_ai_overviews (
     profile_id TEXT PRIMARY KEY,
     overview_title TEXT NOT NULL,
