@@ -4,9 +4,11 @@ import {
   addDerivedBodyComposition,
   addMeasurement,
   addProprietaryBodyCompositionMetrics,
+  addWorkout,
   createSnapshotReports,
   getProfileById,
   profileExists,
+  type WorkoutInput,
   type profile,
 } from "../db/commands";
 import { calculateDesiredWeightKg } from "../calculations/compositionSummary";
@@ -37,6 +39,67 @@ export function calculateAgeYears(dateOfBirth: string): number {
 }
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
+  app.post("/workouts", async (request, reply) => {
+    const body = request.body as {
+      data?: {
+        workouts?: WorkoutInput[];
+      };
+    };
+    const headerProfileId =
+      request.headers.profileid ?? request.headers["x-profile-id"];
+    const profileId = Array.isArray(headerProfileId)
+      ? headerProfileId[0]
+      : headerProfileId;
+    const workouts = body.data?.workouts;
+
+    if (!profileId) {
+      return reply.code(400).send({
+        ok: false,
+        error: "profileId header is required",
+      });
+    }
+
+    if (!profileExists(profileId)) {
+      return reply.code(404).send({
+        ok: false,
+        error: "Profile id does not exist",
+      });
+    }
+
+    if (!Array.isArray(workouts)) {
+      return reply.code(400).send({
+        ok: false,
+        error: "data.workouts must be an array",
+      });
+    }
+
+    const invalidWorkout = workouts.find(
+      (workout) => typeof workout.id !== "string" || workout.id.length === 0,
+    );
+    if (invalidWorkout) {
+      return reply.code(400).send({
+        ok: false,
+        error: "Each workout must include an id",
+      });
+    }
+
+    const latestWorkoutsBySourceId = new Map<string, WorkoutInput>();
+    for (const workout of workouts) {
+      latestWorkoutsBySourceId.set(workout.id, workout);
+    }
+
+    const ids = Array.from(latestWorkoutsBySourceId.values()).map((workout) =>
+      addWorkout(workout, profileId),
+    );
+
+    return {
+      ok: true,
+      received: workouts.length,
+      count: ids.length,
+      ids,
+    };
+  });
+
   app.post(
     "/add_measurement",
     {
