@@ -6,6 +6,7 @@ import ingestRoutes from "./routes/ingest.ts";
 export function buildApp() {
   const app = Fastify({
     logger: true,
+    bodyLimit: 10 * 1024 * 1024,
   });
 
   app.get("/health", async () => {
