@@ -731,6 +731,38 @@ export type ProgressMeasurement = {
   notes: "postWorkOut" | "preWorkOut";
 };
 
+type QuantityValue = {
+  qty?: number;
+  units?: string;
+};
+
+export type WorkoutInput = {
+  id: string;
+  name: string;
+  location?: string | null;
+  isIndoor?: boolean | null;
+  start?: string | null;
+  end?: string | null;
+  duration?: number | null;
+  distance?: QuantityValue | null;
+  activeEnergyBurned?: QuantityValue | null;
+  totalEnergy?: QuantityValue | null;
+  avgHeartRate?: QuantityValue | null;
+  heartRate?: {
+    min?: QuantityValue | null;
+    max?: QuantityValue | null;
+    avg?: QuantityValue | null;
+  } | null;
+  maxHeartRate?: QuantityValue | null;
+  speed?: QuantityValue | null;
+  stepCadence?: QuantityValue | null;
+  intensity?: QuantityValue | null;
+  temperature?: QuantityValue | null;
+  humidity?: QuantityValue | null;
+  metadata?: Record<string, unknown> | null;
+  [key: string]: unknown;
+};
+
 export type ProfileAiAnalysisBlock = {
   headline: string;
   supporting_description: string;
@@ -890,6 +922,147 @@ export function addMeasurement(
   ).run(id, profileId, weight, heartbeat, impedance);
 
   return id;
+}
+
+function quantityQty(value: QuantityValue | null | undefined): number | null {
+  return typeof value?.qty === "number" ? value.qty : null;
+}
+
+function quantityUnits(value: QuantityValue | null | undefined): string | null {
+  return typeof value?.units === "string" ? value.units : null;
+}
+
+export function addWorkout(workout: WorkoutInput, profileId?: ProfileId | null): string {
+  const id = uuidv7();
+  const avgHeartRate = workout.avgHeartRate ?? workout.heartRate?.avg ?? null;
+  const minHeartRate = workout.heartRate?.min ?? null;
+  const maxHeartRate = workout.maxHeartRate ?? workout.heartRate?.max ?? null;
+
+  db.prepare(
+    `
+  INSERT INTO workouts (
+    id,
+    source_workout_id,
+    profile_id,
+    name,
+    location,
+    is_indoor,
+    started_at,
+    ended_at,
+    duration_seconds,
+    distance_qty,
+    distance_units,
+    active_energy_qty,
+    active_energy_units,
+    total_energy_qty,
+    total_energy_units,
+    avg_heart_rate_qty,
+    avg_heart_rate_units,
+    min_heart_rate_qty,
+    min_heart_rate_units,
+    max_heart_rate_qty,
+    max_heart_rate_units,
+    speed_qty,
+    speed_units,
+    step_cadence_qty,
+    step_cadence_units,
+    intensity_qty,
+    intensity_units,
+    temperature_qty,
+    temperature_units,
+    humidity_qty,
+    humidity_units,
+    metadata,
+    raw_payload,
+    created_at,
+    updated_at
+  )
+  VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+  )
+  ON CONFLICT(source_workout_id) DO UPDATE SET
+    profile_id = excluded.profile_id,
+    name = excluded.name,
+    location = excluded.location,
+    is_indoor = excluded.is_indoor,
+    started_at = excluded.started_at,
+    ended_at = excluded.ended_at,
+    duration_seconds = excluded.duration_seconds,
+    distance_qty = excluded.distance_qty,
+    distance_units = excluded.distance_units,
+    active_energy_qty = excluded.active_energy_qty,
+    active_energy_units = excluded.active_energy_units,
+    total_energy_qty = excluded.total_energy_qty,
+    total_energy_units = excluded.total_energy_units,
+    avg_heart_rate_qty = excluded.avg_heart_rate_qty,
+    avg_heart_rate_units = excluded.avg_heart_rate_units,
+    min_heart_rate_qty = excluded.min_heart_rate_qty,
+    min_heart_rate_units = excluded.min_heart_rate_units,
+    max_heart_rate_qty = excluded.max_heart_rate_qty,
+    max_heart_rate_units = excluded.max_heart_rate_units,
+    speed_qty = excluded.speed_qty,
+    speed_units = excluded.speed_units,
+    step_cadence_qty = excluded.step_cadence_qty,
+    step_cadence_units = excluded.step_cadence_units,
+    intensity_qty = excluded.intensity_qty,
+    intensity_units = excluded.intensity_units,
+    temperature_qty = excluded.temperature_qty,
+    temperature_units = excluded.temperature_units,
+    humidity_qty = excluded.humidity_qty,
+    humidity_units = excluded.humidity_units,
+    metadata = excluded.metadata,
+    raw_payload = excluded.raw_payload,
+    updated_at = CURRENT_TIMESTAMP
+`,
+  ).run(
+    id,
+    workout.id,
+    profileId ?? null,
+    workout.name,
+    workout.location ?? null,
+    typeof workout.isIndoor === "boolean" ? (workout.isIndoor ? 1 : 0) : null,
+    workout.start ?? null,
+    workout.end ?? null,
+    typeof workout.duration === "number" ? workout.duration : null,
+    quantityQty(workout.distance),
+    quantityUnits(workout.distance),
+    quantityQty(workout.activeEnergyBurned),
+    quantityUnits(workout.activeEnergyBurned),
+    quantityQty(workout.totalEnergy),
+    quantityUnits(workout.totalEnergy),
+    quantityQty(avgHeartRate),
+    quantityUnits(avgHeartRate),
+    quantityQty(minHeartRate),
+    quantityUnits(minHeartRate),
+    quantityQty(maxHeartRate),
+    quantityUnits(maxHeartRate),
+    quantityQty(workout.speed),
+    quantityUnits(workout.speed),
+    quantityQty(workout.stepCadence),
+    quantityUnits(workout.stepCadence),
+    quantityQty(workout.intensity),
+    quantityUnits(workout.intensity),
+    quantityQty(workout.temperature),
+    quantityUnits(workout.temperature),
+    quantityQty(workout.humidity),
+    quantityUnits(workout.humidity),
+    JSON.stringify(workout.metadata ?? {}),
+    JSON.stringify(workout),
+  );
+
+  const savedWorkout = db
+    .prepare(
+      `
+  SELECT id
+  FROM workouts
+  WHERE source_workout_id = ?
+  LIMIT 1
+`,
+    )
+    .get(workout.id) as { id: string } | null;
+
+  return savedWorkout?.id ?? id;
 }
 export function registerUser({ mailAddress }: RegisterUserInput): AccountId {
   const accountId: AccountId = uuidv7();
