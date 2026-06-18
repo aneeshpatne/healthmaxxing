@@ -1,16 +1,19 @@
+import { db } from "./db";
 import {
-  addReportSection,
-  createLabReport,
-  listObservationFieldNames,
+  normalizeWorkout,
+  type AppleHealthWorkoutName,
+  type Workout,
+  type WorkoutData,
 } from "./commands";
 
-const profileId = "019e8724-ccf0-73cb-9c7d-822478474e90";
-const observationFields = listObservationFieldNames();
-const reportId = createLabReport(profileId);
-const sectionId = addReportSection({
-  report_id: reportId,
-  section_name_raw: "Complete Blood Count",
-  section_name_normalized: "complete_blood_count",
-});
+const workoutName: AppleHealthWorkoutName = "Traditional Strength Training";
+const data = db
+  .prepare("SELECT raw_payload FROM workouts WHERE name= ?")
+  .all(workoutName) as { raw_payload: string }[];
 
-console.log({ observationFields, reportId, sectionId });
+const workouts: WorkoutData[] = data.map(
+  (d) => JSON.parse(d.raw_payload) as WorkoutData,
+);
+const normalizedWorkouts: Workout[] = workouts.map(normalizeWorkout);
+
+console.log(normalizedWorkouts.map((workout) => workout.type));

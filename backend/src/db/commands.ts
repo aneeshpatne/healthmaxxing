@@ -736,9 +736,77 @@ type QuantityValue = {
   units?: string;
 };
 
-export type WorkoutInput = {
+export type WorkoutType =
+  | "Traditional Strength Training"
+  | "Indoor Walking"
+  | "Outdoor Walking"
+  | "Running"
+  | "Cycling";
+
+export type AppleHealthWorkoutName =
+  | WorkoutType
+  | "Indoor Cycling"
+  | "Indoor Run"
+  | "Outdoor Walk"
+  | (string & {});
+
+type WorkoutMetricsBase = {
+  start?: string | null;
+  end?: string | null;
+  duration?: number | null;
+  activeEnergyBurned?: QuantityValue | null;
+  totalEnergy?: QuantityValue | null;
+  avgHeartRate?: QuantityValue | null;
+  heartRate?: {
+    min?: QuantityValue | null;
+    max?: QuantityValue | null;
+    avg?: QuantityValue | null;
+  } | null;
+  maxHeartRate?: QuantityValue | null;
+  intensity?: QuantityValue | null;
+  temperature?: QuantityValue | null;
+  humidity?: QuantityValue | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type StrengthMetrics = WorkoutMetricsBase & {
+  stepCadence?: QuantityValue | null;
+};
+
+export type WalkingMetrics = WorkoutMetricsBase & {
+  distance?: QuantityValue | null;
+  speed?: QuantityValue | null;
+  stepCadence?: QuantityValue | null;
+};
+
+export type RunningMetrics = WorkoutMetricsBase & {
+  distance?: QuantityValue | null;
+  speed?: QuantityValue | null;
+  stepCadence?: QuantityValue | null;
+};
+
+export type CyclingMetrics = WorkoutMetricsBase & {
+  distance?: QuantityValue | null;
+  speed?: QuantityValue | null;
+};
+
+export type WorkoutMetrics =
+  | StrengthMetrics
+  | WalkingMetrics
+  | RunningMetrics
+  | CyclingMetrics;
+
+export interface Workout {
   id: string;
-  name: string;
+  type: WorkoutType;
+  metrics: WorkoutMetrics;
+}
+
+export interface WorkoutInput {
+  id: string;
+  name: AppleHealthWorkoutName;
+  type?: WorkoutType;
+  metrics?: WorkoutMetrics;
   location?: string | null;
   isIndoor?: boolean | null;
   start?: string | null;
@@ -761,7 +829,9 @@ export type WorkoutInput = {
   humidity?: QuantityValue | null;
   metadata?: Record<string, unknown> | null;
   [key: string]: unknown;
-};
+}
+
+export type WorkoutData = WorkoutInput;
 
 export type ProfileAiAnalysisBlock = {
   headline: string;
@@ -930,6 +1000,74 @@ function quantityQty(value: QuantityValue | null | undefined): number | null {
 
 function quantityUnits(value: QuantityValue | null | undefined): string | null {
   return typeof value?.units === "string" ? value.units : null;
+}
+
+export function workoutTypeFromName(name: AppleHealthWorkoutName): WorkoutType {
+  switch (name) {
+    case "Traditional Strength Training":
+      return "Traditional Strength Training";
+    case "Indoor Walking":
+      return "Indoor Walking";
+    case "Outdoor Walking":
+    case "Outdoor Walk":
+      return "Outdoor Walking";
+    case "Running":
+    case "Indoor Run":
+      return "Running";
+    case "Cycling":
+    case "Indoor Cycling":
+      return "Cycling";
+    default:
+      throw new Error(`Unsupported workout type: ${name}`);
+  }
+}
+
+function workoutMetricsFromInput(workout: WorkoutInput): WorkoutMetrics {
+  const metrics = {
+    start: workout.start ?? null,
+    end: workout.end ?? null,
+    duration: workout.duration ?? null,
+    activeEnergyBurned: workout.activeEnergyBurned ?? null,
+    totalEnergy: workout.totalEnergy ?? null,
+    avgHeartRate: workout.avgHeartRate ?? workout.heartRate?.avg ?? null,
+    heartRate: workout.heartRate ?? null,
+    maxHeartRate: workout.maxHeartRate ?? workout.heartRate?.max ?? null,
+    intensity: workout.intensity ?? null,
+    temperature: workout.temperature ?? null,
+    humidity: workout.humidity ?? null,
+    metadata: workout.metadata ?? null,
+  };
+
+  switch (workout.type ?? workoutTypeFromName(workout.name)) {
+    case "Traditional Strength Training":
+      return {
+        ...metrics,
+        stepCadence: workout.stepCadence ?? null,
+      };
+    case "Indoor Walking":
+    case "Outdoor Walking":
+    case "Running":
+      return {
+        ...metrics,
+        distance: workout.distance ?? null,
+        speed: workout.speed ?? null,
+        stepCadence: workout.stepCadence ?? null,
+      };
+    case "Cycling":
+      return {
+        ...metrics,
+        distance: workout.distance ?? null,
+        speed: workout.speed ?? null,
+      };
+  }
+}
+
+export function normalizeWorkout(workout: WorkoutInput): Workout {
+  return {
+    id: workout.id,
+    type: workout.type ?? workoutTypeFromName(workout.name),
+    metrics: workout.metrics ?? workoutMetricsFromInput(workout),
+  };
 }
 
 export function addWorkout(workout: WorkoutInput, profileId?: ProfileId | null): string {

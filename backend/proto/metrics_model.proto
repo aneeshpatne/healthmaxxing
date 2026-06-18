@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package metrics_model;
+
+service MetricsModel {
+  rpc Calculate (CalculateRequest) returns (CalculateResponse);
+}
+
+message CalculateRequest {
+  double age = 1;
+  double height_cm = 2;
+  double weight_kg = 3;
+  Sex sex = 4;
+  double impedance = 5;
+}
+
+enum Sex {
+  SEX_UNSPECIFIED = 0;
+  SEX_FEMALE = 1;
+  SEX_MALE = 2;
+}
+
+message CalculateResponse {
+  map<string, double> metrics = 1;
+}

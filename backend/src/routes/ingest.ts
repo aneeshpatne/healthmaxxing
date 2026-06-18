@@ -157,7 +157,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       //     "male",
       //   ),
       // );
-      const metricsBase = calculateProprietaryMetrics({
+      const metricsBase = await calculateProprietaryMetrics({
         weight_kg: weight,
         impedance_ohms: impedance,
         height_cm: profile.heightCm,
