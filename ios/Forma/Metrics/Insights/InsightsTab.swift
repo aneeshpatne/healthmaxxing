@@ -216,6 +216,70 @@ struct InsightsTab: View {
                         .shadow(color: .black.opacity(0.03), radius: 10, x: 0, y: 4)
                 )
                 .padding(.horizontal, 16)
+
+                // MARK: - Waist Focus Card
+                VStack(alignment: .leading, spacing: 18) {
+                    // Header
+                    HStack(spacing: 8) {
+                        Image(systemName: "ruler.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.green)
+                            .frame(width: 24, height: 24)
+                            .background(.green.opacity(0.12), in: Circle())
+
+                        Text("Waist Focus")
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                            .tracking(0.8)
+
+                        Spacer()
+                    }
+
+                    // Headline
+                    Text("A smaller waist will make your upper body stand out")
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // Body
+                    Text("With a 90 cm waist, 103 cm shoulders, and 106 cm chest, you already have the structure for a strong V-taper. Reducing your waist will make that shape more pronounced.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Divider()
+                        .background(.secondary.opacity(0.1))
+
+                    // Insight row
+                    HStack(spacing: 14) {
+                        Image(systemName: "arrow.up.forward.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.green)
+                            .frame(width: 38, height: 38)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(.green.opacity(0.12))
+                            )
+
+                        Text("Even a modest reduction in waist size can significantly improve your shoulder-to-waist ratio.")
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer()
+                    }
+                }
+                .padding(20)
+                .background(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(Color.appSecondaryBackground)
+                        .shadow(color: .black.opacity(0.03), radius: 10, x: 0, y: 4)
+                )
+                .padding(.horizontal, 16)
             }
         }
     }
