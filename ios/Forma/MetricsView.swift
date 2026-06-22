@@ -6,6 +6,8 @@
 //
 import SwiftUI
 
+let glassTabBarHeight: CGFloat = 52
+
 struct MetricsView: View {
     @Binding var selectedTab: MetricsTab
 
@@ -22,7 +24,6 @@ struct MetricsView: View {
                 MuscleTab()
             }
         }
-        .safeAreaPadding(.top, headerHeight)
         .scrollEdgeEffectStyle(.hard, for: .top)
     }
 }
