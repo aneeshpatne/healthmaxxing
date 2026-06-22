@@ -7,25 +7,23 @@
 import SwiftUI
 
 struct MetricsView: View {
-    @State private var selectedTab: MetricsTab = .insights
+    @Binding var selectedTab: MetricsTab
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollableTabBar(selectedTab: $selectedTab)
-
-            ScrollView {
-                switch selectedTab {
-                case .insights:
-                    InsightsTab()
-                case .performance:
-                    PerformanceTab()
-                case .fat:
-                    FatTab()
-                case .muscle:
-                    MuscleTab()
-                }
+        ScrollView {
+            switch selectedTab {
+            case .insights:
+                InsightsTab()
+            case .performance:
+                PerformanceTab()
+            case .fat:
+                FatTab()
+            case .muscle:
+                MuscleTab()
             }
         }
+        .safeAreaPadding(.top, headerHeight)
+        .scrollEdgeEffectStyle(.hard, for: .top)
     }
 }
 
@@ -40,115 +38,85 @@ enum MetricsTab: String, CaseIterable {
     }
 }
 
-struct ScrollableTabBar: View {
+struct GlassTabBar: View {
     @Binding var selectedTab: MetricsTab
-    @Namespace private var namespace
 
     var body: some View {
-        GeometryReader { geometry in
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(MetricsTab.allCases, id: \.self) { tab in
-                            tabButton(for: tab)
-                                .id(tab)
-
-                            if tab != MetricsTab.allCases.last {
-                                Spacer(minLength: 30)
-                            }
-                        }
-                    }
-                    .frame(minWidth: geometry.size.width)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 6)
-                }
-                .padding(.vertical, 4)
-                .onChange(of: selectedTab) { _, newValue in
+        HStack(spacing: 10) {
+            ForEach(MetricsTab.allCases, id: \.self) { tab in
+                Button {
                     withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
-                        proxy.scrollTo(newValue, anchor: .center)
+                        selectedTab = tab
                     }
+                } label: {
+                    Text(tab.title)
+                        .font(.subheadline.weight(selectedTab == tab ? .semibold : .medium))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .foregroundStyle(selectedTab == tab ? .primary : .secondary)
                 }
+                .buttonStyle(.plain)
+                .glassEffect(
+                    selectedTab == tab
+                        ? .regular.tint(.accentColor.opacity(0.3)).interactive()
+                        : .regular
+                )
             }
         }
-        .frame(height: 52)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(.systemBackground),
-                    Color(.secondarySystemBackground).opacity(0.7)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-    }
-
-    private func tabButton(for tab: MetricsTab) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
-                selectedTab = tab
-            }
-        } label: {
-            VStack(spacing: 6) {
-                Text(tab.title)
-                    .font(.subheadline)
-                    .fontWeight(selectedTab == tab ? .semibold : .medium)
-                    .kerning(0.3)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .foregroundStyle(selectedTab == tab ? .primary : .secondary)
-
-                ZStack {
-                    Capsule()
-                        .fill(Color.clear)
-                        .frame(height: 2)
-
-                    if selectedTab == tab {
-                        Capsule()
-                            .fill(Color.primary)
-                            .frame(height: 2)
-                            .matchedGeometryEffect(id: "selector", in: namespace)
-                    }
-                }
-            }
-            .padding(.vertical, 4)
-        }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
     }
 }
 
 struct InsightsTab: View {
     var body: some View {
-        Text("Insights")
-            .frame(maxWidth: .infinity)
-            .padding()
+        MetricsPlaceholderContent(title: "Insights")
     }
 }
 
 struct PerformanceTab: View {
     var body: some View {
-        Text("Performance")
-            .frame(maxWidth: .infinity)
-            .padding()
+        MetricsPlaceholderContent(title: "Performance")
     }
 }
 
 struct FatTab: View {
     var body: some View {
-        Text("Fat")
-            .frame(maxWidth: .infinity)
-            .padding()
+        MetricsPlaceholderContent(title: "Fat")
     }
 }
 
 struct MuscleTab: View {
     var body: some View {
-        Text("Muscle")
-            .frame(maxWidth: .infinity)
-            .padding()
+        MetricsPlaceholderContent(title: "Muscle")
+    }
+}
+
+private struct MetricsPlaceholderContent: View {
+    let title: String
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: 16) {
+            ForEach(0..<14, id: \.self) { index in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("\(title) — card \(index + 1)")
+                        .font(.headline)
+                    Text("Placeholder content for \(title). Replace with real metrics, charts and summaries.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 16))
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
     }
 }
 
 #Preview {
-    MetricsView()
+    MetricsView(selectedTab: .constant(.insights))
 }
