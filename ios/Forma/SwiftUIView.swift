@@ -20,39 +20,32 @@ struct SwiftUIView: View {
 
     var body: some View {
         TabView(selection: $activeTab) {
-            MetricsView(selectedTab: $selectedMetricsTab)
-                .safeAreaPadding(.top, headerHeight + glassTabBarHeight)
-                .overlay(alignment: .top) {
-                    GlassTabBar(selectedTab: $selectedMetricsTab)
-                        .padding(.top, headerHeight)
-                }
-                .ignoresSafeArea(.container, edges: .top)
-                .tabItem {
-                    Image(systemName: "chart.xyaxis.line")
-                    Text("Metrics")
-                }
+            Tab("Metrics", systemImage: "chart.xyaxis.line", value: .metrics) {
+                MetricsView(selectedTab: $selectedMetricsTab)
+                    .safeAreaPadding(.top, headerHeight + glassTabBarHeight)
+                    .overlay(alignment: .top) {
+                        GlassTabBar(selectedTab: $selectedMetricsTab)
+                            .padding(.top, headerHeight)
+                    }
+                    .ignoresSafeArea(.container, edges: .top)
+            }
 
-            WorkoutsView()
-                .ignoresSafeArea(.container, edges: .top)
-                .tabItem {
-                    Image(systemName: "figure.strengthtraining.traditional")
-                    Text("Workouts")
-                }
+            Tab("Workouts", systemImage: "figure.strengthtraining.traditional", value: .workouts) {
+                WorkoutsView()
+                    .ignoresSafeArea(.container, edges: .top)
+            }
 
-            RecordView()
-                .ignoresSafeArea(.container, edges: .top)
-                .tabItem {
-                    Image(systemName: "record.circle")
-                    Text("Record")
-                }
+            Tab("Record", systemImage: "record.circle", value: .record) {
+                RecordView()
+                    .ignoresSafeArea(.container, edges: .top)
+            }
 
-            VitalsView()
-                .ignoresSafeArea(.container, edges: .top)
-                .tabItem {
-                    Image(systemName: "heart.text.square")
-                    Text("Vitals")
-                }
+            Tab("Vitals", systemImage: "heart.text.square", value: .vitals) {
+                VitalsView()
+                    .ignoresSafeArea(.container, edges: .top)
+            }
         }
+        .tabBarMinimizeBehavior(.onScrollDown)
         .overlay(alignment: .top) {
             FormaHeader()
         }
