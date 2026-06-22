@@ -13,5 +13,6 @@ struct WorkoutsView: View {
             Text("Workouts")
         }
         .safeAreaPadding(.top, headerHeight)
+        .background(Color.appBackground)
     }
 }

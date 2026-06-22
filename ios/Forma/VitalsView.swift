@@ -13,5 +13,6 @@ struct VitalsView: View {
             Text("Vitals")
         }
         .safeAreaPadding(.top, headerHeight)
+        .background(Color.appBackground)
     }
 }

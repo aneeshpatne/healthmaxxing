@@ -13,5 +13,6 @@ struct RecordView: View {
             Text("Record")
         }
         .safeAreaPadding(.top, headerHeight)
+        .background(Color.appBackground)
     }
 }
