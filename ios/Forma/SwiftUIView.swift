@@ -21,6 +21,11 @@ struct SwiftUIView: View {
     var body: some View {
         TabView(selection: $activeTab) {
             MetricsView(selectedTab: $selectedMetricsTab)
+                .safeAreaPadding(.top, headerHeight + glassTabBarHeight)
+                .overlay(alignment: .top) {
+                    GlassTabBar(selectedTab: $selectedMetricsTab)
+                        .padding(.top, headerHeight)
+                }
                 .ignoresSafeArea(.container, edges: .top)
                 .tabItem {
                     Image(systemName: "chart.xyaxis.line")
