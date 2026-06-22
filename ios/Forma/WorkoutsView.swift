@@ -9,6 +9,9 @@ import SwiftUI
 
 struct WorkoutsView: View {
     var body: some View {
-        Text("Workouts")
+        ScrollView {
+            Text("Workouts")
+        }
+        .safeAreaPadding(.top, headerHeight)
     }
 }
