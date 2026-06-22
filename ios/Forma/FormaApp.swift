@@ -12,6 +12,7 @@ struct FormaApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .tint(.sleekAccent)
         }
     }
 }
