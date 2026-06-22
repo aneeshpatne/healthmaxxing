@@ -4,6 +4,7 @@
 //
 //  Created by Aneesh Patne on 19/06/26.
 //
+
 import SwiftUI
 
 let glassTabBarHeight: CGFloat = 52
@@ -71,31 +72,7 @@ struct GlassTabBar: View {
     }
 }
 
-struct InsightsTab: View {
-    var body: some View {
-        MetricsPlaceholderContent(title: "Insights")
-    }
-}
-
-struct PerformanceTab: View {
-    var body: some View {
-        MetricsPlaceholderContent(title: "Performance")
-    }
-}
-
-struct FatTab: View {
-    var body: some View {
-        MetricsPlaceholderContent(title: "Fat")
-    }
-}
-
-struct MuscleTab: View {
-    var body: some View {
-        MetricsPlaceholderContent(title: "Muscle")
-    }
-}
-
-private struct MetricsPlaceholderContent: View {
+struct MetricsPlaceholderContent: View {
     let title: String
 
     var body: some View {
