@@ -6,9 +6,9 @@
 //
 import SwiftUI
 
-let headerHeight: CGFloat = 150
+let headerHeight: CGFloat = 128
 
-private let headerContentHeight: CGFloat = 90
+private let headerContentHeight: CGFloat = 68
 
 struct FormaHeader: View {
     // Dynamic greeting based on the current time of day
@@ -51,10 +51,15 @@ struct FormaHeader: View {
         .background {
             GeometryReader { geo in
                 Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .overlay {
-                        Color.appBackground
-                            .opacity(0.55)
+                    .fill(.clear)
+                    .glassEffect(
+                        .regular.tint(Color.appBackground.opacity(0.12)),
+                        in: Rectangle()
+                    )
+                    .overlay(alignment: .bottom) {
+                        Rectangle()
+                            .fill(.white.opacity(0.12))
+                            .frame(height: 0.5)
                     }
                     // Extend the background into the safe area above
                     .padding(.top, -geo.safeAreaInsets.top)
