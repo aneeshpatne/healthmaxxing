@@ -48,6 +48,21 @@ struct FormaHeader: View {
         }
         .frame(height: headerContentHeight)
         .padding(.horizontal, 20)
-        .background(.ultraThinMaterial)
+        .background {
+            GeometryReader { geo in
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .overlay {
+                        Color.appBackground
+                            .opacity(0.55)
+                    }
+                    // Extend the background into the safe area above
+                    .padding(.top, -geo.safeAreaInsets.top)
+            }
+        }
     }
+}
+
+#Preview {
+    FormaHeader()
 }
