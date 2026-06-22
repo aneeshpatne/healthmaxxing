@@ -224,6 +224,9 @@ struct InsightsTab: View {
 // MARK: - Progress Trend Chart
 
 private struct ProgressTrendChart: View {
+    @State private var chartReveal: CGFloat = 0
+    @State private var shimmerOffset: CGFloat = -0.5
+
     private let data: [FatMetric] = [
         // Body Fat %
         FatMetric(date: "May 24", value: 18.5, metric: "Body Fat %"),
@@ -281,6 +284,11 @@ private struct ProgressTrendChart: View {
                 .foregroundStyle(by: .value("Metric", item.metric))
                 .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                 .interpolationMethod(.catmullRom)
+                .symbol {
+                    Circle()
+                        .fill(colorForMetric(item.metric))
+                        .frame(width: 5, height: 5)
+                }
             }
             .chartForegroundStyleScale([
                 "Body Fat %": Color.green,
@@ -290,6 +298,27 @@ private struct ProgressTrendChart: View {
             .chartLegend(.hidden)
             .chartYAxis(.hidden)
             .frame(height: 160)
+            .mask(
+                GeometryReader { geo in
+                    Rectangle()
+                        .frame(width: geo.size.width * chartReveal)
+                }
+            )
+            .overlay(
+                GeometryReader { geo in
+                    LinearGradient(
+                        colors: [.clear, .white.opacity(0.35), .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: geo.size.width * 0.35)
+                    .offset(x: geo.size.width * shimmerOffset)
+                    .mask(
+                        Rectangle()
+                            .frame(width: geo.size.width * chartReveal)
+                    )
+                }
+            )
         }
         .padding(16)
         .background(
@@ -300,6 +329,23 @@ private struct ProgressTrendChart: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(.secondary.opacity(0.08), lineWidth: 1)
         )
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.5)) {
+                chartReveal = 1
+            }
+            withAnimation(.linear(duration: 2.2).repeatForever(autoreverses: false)) {
+                shimmerOffset = 1.5
+            }
+        }
+    }
+
+    private func colorForMetric(_ metric: String) -> Color {
+        switch metric {
+        case "Body Fat %": return .green
+        case "Subcut. Fat %": return .blue
+        case "Visceral Fat": return .orange
+        default: return .secondary
+        }
     }
 }
 
