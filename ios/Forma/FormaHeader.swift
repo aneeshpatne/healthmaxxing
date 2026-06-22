@@ -6,6 +6,10 @@
 //
 import SwiftUI
 
+let headerHeight: CGFloat = 150
+
+private let headerContentHeight: CGFloat = 90
+
 struct FormaHeader: View {
     // Dynamic greeting based on the current time of day
     private var greeting: String {
@@ -42,9 +46,8 @@ struct FormaHeader: View {
                 .frame(width: 36, height: 36)
                 .foregroundStyle(.secondary)
         }
+        .frame(height: headerContentHeight)
         .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .background(.ultraThinMaterial)
     }
 }
-
-
