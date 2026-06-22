@@ -26,6 +26,7 @@ struct MetricsView: View {
             }
         }
         .scrollEdgeEffectStyle(.hard, for: .top)
+        .background(Color.appBackground)
     }
 }
 
@@ -87,7 +88,7 @@ struct MetricsPlaceholderContent: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
-                .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 16))
+                .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 16))
             }
         }
         .padding(.horizontal, 20)
@@ -97,4 +98,5 @@ struct MetricsPlaceholderContent: View {
 
 #Preview {
     MetricsView(selectedTab: .constant(.insights))
+        .background(Color.appBackground)
 }
