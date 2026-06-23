@@ -23,10 +23,6 @@ struct SwiftUIView: View {
             Tab("Metrics", systemImage: "chart.xyaxis.line", value: .metrics) {
                 MetricsView(selectedTab: $selectedMetricsTab)
                     .safeAreaPadding(.top, headerHeight + glassTabBarHeight)
-                    .overlay(alignment: .top) {
-                        GlassTabBar(selectedTab: $selectedMetricsTab)
-                            .padding(.top, headerHeight)
-                    }
                     .ignoresSafeArea(.container, edges: .top)
             }
 
@@ -47,7 +43,7 @@ struct SwiftUIView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .overlay(alignment: .top) {
-            FormaHeader()
+            FormaHeader(activeTab: $activeTab, selectedMetricsTab: $selectedMetricsTab)
         }
     }
 }
