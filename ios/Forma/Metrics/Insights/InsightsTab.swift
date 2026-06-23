@@ -265,6 +265,169 @@ struct InsightsTab: View {
                     }
                 }
                 .insightsCard()
+
+                // MARK: - Broad Frame Card
+                VStack(alignment: .leading, spacing: 18) {
+                    // Header
+                    HStack(spacing: 8) {
+                        Image(systemName: "figure.strengthtraining.traditional")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.blue)
+                            .frame(width: 26, height: 26)
+                            .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                        Text("Broad Frame")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                            .tracking(1.0)
+
+                        Spacer()
+                    }
+
+                    // Headline
+                    Text("Strong Foundation Frame")
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // Body
+                    Text("Your frame is broad and solid, giving you a strong base to build on. As your waist leans out, your natural shape will become even more defined.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // Body-shape illustration
+                    Image("body-normal")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 180)
+                        .background(Color.appTertiaryBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(Color.appSeparator, lineWidth: 0.5)
+                        }
+                        .accessibilityLabel("Broad body frame illustration")
+
+                    // Subtle separator
+                    Rectangle()
+                        .fill(Color.appSeparator)
+                        .frame(height: 1)
+
+                    // Insight row
+                    HStack(alignment: .top, spacing: 14) {
+                        Image(systemName: "dumbbell.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.blue)
+                            .frame(width: 36, height: 36)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(.blue.opacity(0.1))
+                            )
+
+                        Text("Keep developing your shoulders, back, and upper chest. These are your strongest visual assets and will make the biggest impact as you lean out.")
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer()
+                    }
+                }
+                .insightsCard()
+
+                // MARK: - Effort Score Card
+                VStack(alignment: .leading, spacing: 18) {
+                    // Header and primary score
+                    HStack(spacing: 8) {
+                        Image(systemName: "speedometer")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.green)
+                            .frame(width: 26, height: 26)
+                            .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                        Text("Effort Score")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                            .tracking(1.0)
+
+                        Spacer()
+
+                        Text("82")
+                            .font(.subheadline.weight(.bold))
+                            .monospacedDigit()
+                            .foregroundStyle(.green)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(.green.opacity(0.12), in: Capsule())
+                    }
+
+                    // Low-to-high score range and current position
+                    GeometryReader { geometry in
+                        let markerRadius: CGFloat = 8
+                        let markerX = min(
+                            geometry.size.width - markerRadius,
+                            max(markerRadius, geometry.size.width * 0.82)
+                        )
+
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [.red, .orange, .yellow, .green],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(height: 8)
+
+                            Circle()
+                                .fill(Color.appSecondaryBackground)
+                                .frame(width: markerRadius * 2, height: markerRadius * 2)
+                                .overlay {
+                                    Circle()
+                                        .stroke(.green, lineWidth: 3)
+                                }
+                                .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
+                                .position(x: markerX, y: markerRadius)
+                        }
+                    }
+                    .frame(height: 16)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Effort score")
+                    .accessibilityValue("82 out of 100")
+
+                    // Subtle separator
+                    Rectangle()
+                        .fill(Color.appSeparator)
+                        .frame(height: 1)
+
+                    // Contextual insight
+                    HStack(alignment: .top, spacing: 14) {
+                        Image(systemName: "chart.line.downtrend.xyaxis")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.green)
+                            .frame(width: 36, height: 36)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(.green.opacity(0.1))
+                            )
+
+                        Text("Your body fat is trending down while muscle remains stable, which is driving a strong effort score.")
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .lineSpacing(3)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer()
+                    }
+                }
+                .insightsCard()
             }
             .padding(.top, 4)
             .padding(.bottom, 24)
