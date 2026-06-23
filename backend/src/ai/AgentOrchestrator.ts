@@ -34,33 +34,33 @@ function getDesiredWeightTarget(
   };
 }
 
-export function fetchHealthData(profileId: string) {
-  const profileMetadata = getProfileMetadata(profileId);
+export async function fetchHealthData(profileId: string) {
+  const profileMetadata = await getProfileMetadata(profileId);
   const latestBodyCompositionMeasurement =
-    getLatestBodyCompositionMeasurement(profileId);
+    await getLatestBodyCompositionMeasurement(profileId);
 
   return {
     profileMetadata,
-    firstHealthDataEntry: getFirstHealthDataEntry(profileId),
+    firstHealthDataEntry: await getFirstHealthDataEntry(profileId),
     latestBodyCompositionMeasurement,
     desiredWeightTarget: getDesiredWeightTarget(
       profileMetadata,
       latestBodyCompositionMeasurement,
     ),
-    latestBodyMeasurement: getLatestBodyMeasurement(profileId),
-    latestWeightMeasurement: getLatestWeightMeasurement(profileId),
+    latestBodyMeasurement: await getLatestBodyMeasurement(profileId),
+    latestWeightMeasurement: await getLatestWeightMeasurement(profileId),
     bodyCompositionMeasurementDelta:
-      getBodyCompositionMeasurementDelta(profileId),
-    bodyMeasurementDelta: getBodyMeasurementDelta(profileId),
-    fatReport: getProfileFatReport(profileId),
-    muscleReport: getProfileMuscleReport(profileId),
+      await getBodyCompositionMeasurementDelta(profileId),
+    bodyMeasurementDelta: await getBodyMeasurementDelta(profileId),
+    fatReport: await getProfileFatReport(profileId),
+    muscleReport: await getProfileMuscleReport(profileId),
   };
 }
 
 export async function runHealthAgent(profileId = defaultProfileId) {
-  const healthData = fetchHealthData(profileId);
+  const healthData = await fetchHealthData(profileId);
 
-  return analyzeHealthData(profileId, healthData);
+  return await analyzeHealthData(profileId, healthData);
 }
 
 export const response = await runHealthAgent();

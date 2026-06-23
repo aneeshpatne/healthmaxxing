@@ -87,8 +87,8 @@ Rules:
 - Do not explain your work outside tool calls.`,
 );
 
-function formatTrendableObservationContext(profileId: string) {
-  const trendableValues = listTrendableObservationValuesLastYear(profileId);
+ async function formatTrendableObservationContext(profileId: string) {
+  const trendableValues = await listTrendableObservationValuesLastYear(profileId);
 
   if (trendableValues.length === 0) {
     return "No trendable observation values found in the last year.";
@@ -207,13 +207,13 @@ function logTokenUsage(result: unknown) {
 }
 
 export async function createReport(reportText: string) {
-  const reportId = createLabReport(profileId);
+  const reportId = await createLabReport(profileId);
   const trendableObservationContext =
-    formatTrendableObservationContext(profileId);
+    await formatTrendableObservationContext(profileId);
 
   const bloodworkAgent = createAgent({
     model,
-    tools: makeReportTools({ reportId }),
+    tools: await makeReportTools({ reportId }),
   });
 
   const result = await bloodworkAgent.invoke({

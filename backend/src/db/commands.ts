@@ -179,10 +179,10 @@ export type CompositionTrendMassPoint = {
   fatMassKg: number;
 };
 
-export function createLabReport(profileId: ProfileId): string {
+export async function createLabReport(profileId: ProfileId) {
   const reportId = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO reports (id, profile_id)
   VALUES (?, ?)
@@ -192,11 +192,11 @@ export function createLabReport(profileId: ProfileId): string {
   return reportId;
 }
 
-export function insertIntoLabReport(
+export async function insertIntoLabReport(
   reportId: string,
   { lab_name, report_date, collection_date }: InsertIntoLabReportInput,
-): void {
-  db.prepare(
+) {
+  await db.prepare(
     `
   UPDATE reports
   SET
@@ -208,8 +208,8 @@ export function insertIntoLabReport(
   ).run(lab_name, report_date, collection_date, reportId);
 }
 
-export function listObservationFieldNames(): ObservationFieldNameRow[] {
-  return db
+export async function listObservationFieldNames() {
+  return await db
     .prepare(
       `
   SELECT field_name_normalized
@@ -219,10 +219,10 @@ export function listObservationFieldNames(): ObservationFieldNameRow[] {
     .all() as ObservationFieldNameRow[];
 }
 
-export function listTrendableObservationValuesLastYear(
+export async function listTrendableObservationValuesLastYear(
   profileId: ProfileId,
-): TrendableObservationValueRow[] {
-  return db
+) {
+  return await db
     .prepare(
       `
   SELECT
@@ -253,16 +253,16 @@ export function listTrendableObservationValuesLastYear(
     .all(profileId) as TrendableObservationValueRow[];
 }
 
-export function addObservationField({
+export async function addObservationField({
   field_name,
   field_name_normalized,
   explanation,
   default_unit = null,
   is_trendable = false,
-}: AddObservationFieldInput): string {
+}: AddObservationFieldInput) {
   const observationFieldId = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO observation_fields (
     id,
@@ -280,11 +280,11 @@ export function addObservationField({
     field_name_normalized,
     explanation,
     default_unit,
-    is_trendable ? 1 : 0,
+    is_trendable,
   );
 
   if (is_trendable) {
-    db.prepare(
+    await db.prepare(
       `
   INSERT INTO observation_field_remarks (
     id,
@@ -299,17 +299,17 @@ export function addObservationField({
   return observationFieldId;
 }
 
-export function updateObservationFieldRemark({
+export async function updateObservationFieldRemark({
   field_name_normalized,
   remark,
-}: UpdateObservationFieldRemarkInput): void {
-  const observationFieldId = getObservationFieldId(field_name_normalized);
+}: UpdateObservationFieldRemarkInput) {
+  const observationFieldId = await getObservationFieldId(field_name_normalized);
 
   if (observationFieldId === null) {
     throw new Error(`Unknown observation field: ${field_name_normalized}`);
   }
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO observation_field_remarks (
     id,
@@ -323,10 +323,10 @@ export function updateObservationFieldRemark({
   ).run(uuidv7(), observationFieldId, remark);
 }
 
-export function listReportSectionNames(
+export async function listReportSectionNames(
   reportId: string,
-): ReportSectionNameRow[] {
-  return db
+) {
+  return await db
     .prepare(
       `
   SELECT DISTINCT section_name_normalized
@@ -339,14 +339,14 @@ export function listReportSectionNames(
     .all(reportId) as ReportSectionNameRow[];
 }
 
-export function addReportSection({
+export async function addReportSection({
   report_id,
   section_name_raw,
   section_name_normalized,
-}: AddReportSectionInput): string {
+}: AddReportSectionInput) {
   const sectionId = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO report_sections (
     id,
@@ -361,15 +361,14 @@ export function addReportSection({
   return sectionId;
 }
 
-export function getReportSectionId({
+export async function getReportSectionId({
   report_id,
   section_name_normalized,
 }: {
   report_id: string;
   section_name_normalized: string;
-}): string | null {
-  const row = db
-    .prepare(
+}) {
+  const row = await db    .prepare(
       `
   SELECT id
   FROM report_sections
@@ -383,11 +382,10 @@ export function getReportSectionId({
   return row?.id ?? null;
 }
 
-export function getObservationFieldId(
+export async function getObservationFieldId(
   field_name_normalized: string,
-): string | null {
-  const row = db
-    .prepare(
+) {
+  const row = await db    .prepare(
       `
   SELECT id
   FROM observation_fields
@@ -400,7 +398,7 @@ export function getObservationFieldId(
   return row?.id ?? null;
 }
 
-export function addObservation({
+export async function addObservation({
   report_id,
   section_name_normalized,
   observation_field_name_normalized,
@@ -416,12 +414,12 @@ export function addObservation({
   ref_high = null,
   inference,
   confidence_score = null,
-}: AddObservationInput): string {
-  const sectionId = getReportSectionId({
+}: AddObservationInput) {
+  const sectionId = await getReportSectionId({
     report_id,
     section_name_normalized,
   });
-  const observationFieldId = getObservationFieldId(
+  const observationFieldId = await getObservationFieldId(
     observation_field_name_normalized,
   );
 
@@ -437,7 +435,7 @@ export function addObservation({
 
   const observationId = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO observations (
     id,
@@ -864,12 +862,12 @@ type ProfileAiOverviewRow = {
   updatedAt: string;
 };
 
-function parseProfileAiAnalysisBlock(raw: string): ProfileAiAnalysisBlock {
-  return JSON.parse(raw) as ProfileAiAnalysisBlock;
+ function parseProfileAiAnalysisBlock(raw: unknown): ProfileAiAnalysisBlock {
+  return (typeof raw === "string" ? JSON.parse(raw) : raw) as ProfileAiAnalysisBlock;
 }
 
-function parseProfileAiMomentumBlock(raw: string): ProfileAiAnalysisBlock {
-  const block = JSON.parse(raw) as ProfileAiAnalysisBlock;
+ function parseProfileAiMomentumBlock(raw: unknown): ProfileAiAnalysisBlock {
+  const block = (typeof raw === "string" ? JSON.parse(raw) : raw) as ProfileAiAnalysisBlock;
 
   return {
     ...block,
@@ -895,9 +893,8 @@ type ProfileRow = Omit<profile, "isPrimary"> & {
   isPrimary: number;
 };
 
-export function jobExists(jobId: JobId): boolean {
-  const job = db
-    .prepare(
+export async function jobExists(jobId: JobId) {
+  const job = await db    .prepare(
       `
   SELECT 1
   FROM jobs
@@ -910,9 +907,8 @@ export function jobExists(jobId: JobId): boolean {
   return job !== null;
 }
 
-export function profileExists(profileId: ProfileId): boolean {
-  const profile = db
-    .prepare(
+export async function profileExists(profileId: ProfileId) {
+  const profile = await db    .prepare(
       `
   SELECT 1
   FROM profiles
@@ -925,9 +921,8 @@ export function profileExists(profileId: ProfileId): boolean {
   return profile !== null;
 }
 
-export function accountExists(accountId: AccountId): boolean {
-  const account = db
-    .prepare(
+export async function accountExists(accountId: AccountId) {
+  const account = await db    .prepare(
       `
   SELECT 1
   FROM accounts
@@ -940,9 +935,8 @@ export function accountExists(accountId: AccountId): boolean {
   return account !== null;
 }
 
-export function getProfileIdByJobId(jobId: JobId): ProfileId | null {
-  const job = db
-    .prepare(
+export async function getProfileIdByJobId(jobId: JobId) {
+  const job = await db    .prepare(
       `
   SELECT profile_id
   FROM jobs
@@ -955,8 +949,8 @@ export function getProfileIdByJobId(jobId: JobId): ProfileId | null {
   return job?.profile_id ?? null;
 }
 
-export function initJob(jobId: JobId, profileId: ProfileId): void {
-  db.prepare(
+export async function initJob(jobId: JobId, profileId: ProfileId) {
+  await db.prepare(
     `
   INSERT INTO jobs (
     id,
@@ -969,15 +963,15 @@ export function initJob(jobId: JobId, profileId: ProfileId): void {
 `,
   ).run(jobId, profileId, "created");
 }
-export function addMeasurement(
+export async function addMeasurement(
   profileId: ProfileId,
   weight: number,
   heartbeat: number,
   impedance: number,
-): string {
+) {
   const id = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO measurements (
     id,
@@ -994,15 +988,15 @@ export function addMeasurement(
   return id;
 }
 
-function quantityQty(value: QuantityValue | null | undefined): number | null {
+ function quantityQty(value: QuantityValue | null | undefined): number | null {
   return typeof value?.qty === "number" ? value.qty : null;
 }
 
-function quantityUnits(value: QuantityValue | null | undefined): string | null {
+ function quantityUnits(value: QuantityValue | null | undefined): string | null {
   return typeof value?.units === "string" ? value.units : null;
 }
 
-export function workoutTypeFromName(name: AppleHealthWorkoutName): WorkoutType {
+export  function workoutTypeFromName(name: AppleHealthWorkoutName): WorkoutType {
   switch (name) {
     case "Traditional Strength Training":
       return "Traditional Strength Training";
@@ -1022,7 +1016,7 @@ export function workoutTypeFromName(name: AppleHealthWorkoutName): WorkoutType {
   }
 }
 
-function workoutMetricsFromInput(workout: WorkoutInput): WorkoutMetrics {
+ function workoutMetricsFromInput(workout: WorkoutInput): WorkoutMetrics {
   const metrics = {
     start: workout.start ?? null,
     end: workout.end ?? null,
@@ -1062,7 +1056,7 @@ function workoutMetricsFromInput(workout: WorkoutInput): WorkoutMetrics {
   }
 }
 
-export function normalizeWorkout(workout: WorkoutInput): Workout {
+export  function normalizeWorkout(workout: WorkoutInput): Workout {
   return {
     id: workout.id,
     type: workout.type ?? workoutTypeFromName(workout.name),
@@ -1070,13 +1064,13 @@ export function normalizeWorkout(workout: WorkoutInput): Workout {
   };
 }
 
-export function addWorkout(workout: WorkoutInput, profileId?: ProfileId | null): string {
+export async function addWorkout(workout: WorkoutInput, profileId?: ProfileId | null) {
   const id = uuidv7();
   const avgHeartRate = workout.avgHeartRate ?? workout.heartRate?.avg ?? null;
   const minHeartRate = workout.heartRate?.min ?? null;
   const maxHeartRate = workout.maxHeartRate ?? workout.heartRate?.max ?? null;
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO workouts (
     id,
@@ -1159,7 +1153,7 @@ export function addWorkout(workout: WorkoutInput, profileId?: ProfileId | null):
     profileId ?? null,
     workout.name,
     workout.location ?? null,
-    typeof workout.isIndoor === "boolean" ? (workout.isIndoor ? 1 : 0) : null,
+    typeof workout.isIndoor === "boolean" ? workout.isIndoor : null,
     workout.start ?? null,
     workout.end ?? null,
     typeof workout.duration === "number" ? workout.duration : null,
@@ -1189,8 +1183,7 @@ export function addWorkout(workout: WorkoutInput, profileId?: ProfileId | null):
     JSON.stringify(workout),
   );
 
-  const savedWorkout = db
-    .prepare(
+  const savedWorkout = await db    .prepare(
       `
   SELECT id
   FROM workouts
@@ -1202,10 +1195,10 @@ export function addWorkout(workout: WorkoutInput, profileId?: ProfileId | null):
 
   return savedWorkout?.id ?? id;
 }
-export function registerUser({ mailAddress }: RegisterUserInput): AccountId {
+export async function registerUser({ mailAddress }: RegisterUserInput) {
   const accountId: AccountId = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO accounts (
     id,
@@ -1219,14 +1212,14 @@ export function registerUser({ mailAddress }: RegisterUserInput): AccountId {
   return accountId;
 }
 
-export function registerProfile({
+export async function registerProfile({
   accountId,
   name,
   isPrimary = false,
-}: RegisterProfileInput): ProfileId {
+}: RegisterProfileInput) {
   const profileId: ProfileId = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO profiles (
     id,
@@ -1237,12 +1230,12 @@ export function registerProfile({
   )
   VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
 `,
-  ).run(profileId, accountId, name, isPrimary ? 1 : 0);
+  ).run(profileId, accountId, name, isPrimary);
 
   return profileId;
 }
 
-export function registerProfileMetadata({
+export async function registerProfileMetadata({
   profileId,
   dateOfBirth,
   gender,
@@ -1250,8 +1243,8 @@ export function registerProfileMetadata({
   peopleType,
   profileImage = null,
   preferredBodyFatPct = 18,
-}: RegisterProfileMetadataInput): void {
-  db.prepare(
+}: RegisterProfileMetadataInput) {
+  await db.prepare(
     `
   INSERT INTO profile_metadata (
     profile_id,
@@ -1284,8 +1277,8 @@ export function registerProfileMetadata({
   );
 }
 
-export function listUserWeight(profileId: ProfileId): UserWeight[] {
-  return db
+export async function listUserWeight(profileId: ProfileId) {
+  return await db
     .prepare(
       `
   SELECT
@@ -1300,7 +1293,7 @@ export function listUserWeight(profileId: ProfileId): UserWeight[] {
     .all(profileId) as UserWeight[];
 }
 
-export function addBodyMeasurement(
+export async function addBodyMeasurement(
   profileId: ProfileId,
   {
     neckCm = null,
@@ -1313,7 +1306,7 @@ export function addBodyMeasurement(
     bicepCm = null,
     forearmCm = null,
   }: BodyMeasurementInput,
-): BodyMeasurementCreateResult {
+) {
   if (
     neckCm === null &&
     shoulderCm === null &&
@@ -1330,7 +1323,7 @@ export function addBodyMeasurement(
 
   const id = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO body_measurements (
     id,
@@ -1362,8 +1355,7 @@ export function addBodyMeasurement(
     forearmCm,
   );
 
-  const created = db
-    .prepare(
+  const created = await db    .prepare(
       `
   SELECT created_at AS createdAt
   FROM body_measurements
@@ -1379,10 +1371,10 @@ export function addBodyMeasurement(
   };
 }
 
-export function listUserBodyMeasurements(
+export async function listUserBodyMeasurements(
   profileId: ProfileId,
-): BodyMeasurement[] {
-  return db
+) {
+  return await db
     .prepare(
       `
   SELECT
@@ -1405,12 +1397,12 @@ export function listUserBodyMeasurements(
     .all(profileId) as BodyMeasurement[];
 }
 
-export function addBodyCompositionMetrics(
+export async function addBodyCompositionMetrics(
   metrics: BodyCompositionMetrics,
-): string {
+) {
   const id = metrics.id ?? uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO body_composition_metrics (
     id,
@@ -1439,11 +1431,11 @@ export function addBodyCompositionMetrics(
   return id;
 }
 
-export function saveBodyCompositionMetrics(
+export async  function saveBodyCompositionMetrics(
   profileId: ProfileId,
   metrics: CalculatedBodyCompositionMetrics,
-): string {
-  return addBodyCompositionMetrics({
+) {
+  return await addBodyCompositionMetrics({
     profileId,
     bodyFatPct: metrics.body_fat_pct,
     muscleMassKg: metrics.muscle_mass_kg,
@@ -1454,13 +1446,13 @@ export function saveBodyCompositionMetrics(
   });
 }
 
-export function addProprietaryBodyCompositionMetrics(
+export async function addProprietaryBodyCompositionMetrics(
   profileId: ProfileId,
   metrics: BodyCompositionMetricsNewRow,
-): string {
+) {
   const id = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO body_composition_metrics_new (
     id,
@@ -1515,13 +1507,13 @@ export function addProprietaryBodyCompositionMetrics(
   return id;
 }
 
-export function addDerivedBodyComposition(
+export async function addDerivedBodyComposition(
   profileId: ProfileId,
   metrics: DerivedBodyCompositionMetrics,
-): string {
+) {
   const id = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO derived_body_composition_metrics (
     id,
@@ -1537,9 +1529,8 @@ export function addDerivedBodyComposition(
   return id;
 }
 
-function getLatestBodyCompositionMetricsId(profileId: ProfileId): string | null {
-  const row = db
-    .prepare(
+async function getLatestBodyCompositionMetricsId(profileId: ProfileId) {
+  const row = await db    .prepare(
       `
   SELECT id
   FROM body_composition_metrics_new
@@ -1553,14 +1544,13 @@ function getLatestBodyCompositionMetricsId(profileId: ProfileId): string | null 
   return row?.id ?? null;
 }
 
-function getOrCreatePerformanceReport(
+async function getOrCreatePerformanceReport(
   profileId: ProfileId,
   bodyCompositionMetricsId: string,
   metrics?: Partial<DerivedBodyCompositionMetrics>,
   modelName: string | null = null,
-): string {
-  const existing = db
-    .prepare(
+) {
+  const existing = await db    .prepare(
       `
   SELECT id
   FROM performance_reports
@@ -1572,7 +1562,7 @@ function getOrCreatePerformanceReport(
 
   if (existing !== null) {
     if (metrics?.fmi !== undefined || metrics?.ffmi !== undefined || modelName !== null) {
-      db.prepare(
+      await db.prepare(
         `
   UPDATE performance_reports
   SET
@@ -1590,7 +1580,7 @@ function getOrCreatePerformanceReport(
 
   const id = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO performance_reports (
     id,
@@ -1635,12 +1625,11 @@ function getOrCreatePerformanceReport(
   return id;
 }
 
-function getOrCreateProfileInsightReport(
+async function getOrCreateProfileInsightReport(
   profileId: ProfileId,
   bodyCompositionMetricsId: string,
-): string {
-  const existing = db
-    .prepare(
+) {
+  const existing = await db    .prepare(
       `
   SELECT id
   FROM profile_insight_reports
@@ -1656,7 +1645,7 @@ function getOrCreateProfileInsightReport(
 
   const id = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO profile_insight_reports (
     id,
@@ -1674,13 +1663,12 @@ function getOrCreateProfileInsightReport(
   return id;
 }
 
-function getOrCreateFatReport(
+async function getOrCreateFatReport(
   profileId: ProfileId,
   bodyCompositionMetricsId: string,
   modelName: string | null = null,
-): string {
-  const existing = db
-    .prepare(
+) {
+  const existing = await db    .prepare(
       `
   SELECT id
   FROM fat_reports
@@ -1692,7 +1680,7 @@ function getOrCreateFatReport(
 
   if (existing !== null) {
     if (modelName !== null) {
-      db.prepare(
+      await db.prepare(
         `
   UPDATE fat_reports
   SET model_name = ?, updated_at = CURRENT_TIMESTAMP
@@ -1706,7 +1694,7 @@ function getOrCreateFatReport(
 
   const id = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO fat_reports (
     id,
@@ -1765,13 +1753,12 @@ function getOrCreateFatReport(
   return id;
 }
 
-function getOrCreateMuscleReport(
+async function getOrCreateMuscleReport(
   profileId: ProfileId,
   bodyCompositionMetricsId: string,
   modelName: string | null = null,
-): string {
-  const existing = db
-    .prepare(
+) {
+  const existing = await db    .prepare(
       `
   SELECT id
   FROM muscle_reports
@@ -1783,7 +1770,7 @@ function getOrCreateMuscleReport(
 
   if (existing !== null) {
     if (modelName !== null) {
-      db.prepare(
+      await db.prepare(
         `
   UPDATE muscle_reports
   SET model_name = ?, updated_at = CURRENT_TIMESTAMP
@@ -1797,7 +1784,7 @@ function getOrCreateMuscleReport(
 
   const id = uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO muscle_reports (
     id,
@@ -1836,7 +1823,7 @@ function getOrCreateMuscleReport(
   return id;
 }
 
-export function createSnapshotReports({
+export async  function createSnapshotReports({
   profileId,
   bodyCompositionMetricsId,
   derivedMetrics,
@@ -1846,20 +1833,20 @@ export function createSnapshotReports({
   bodyCompositionMetricsId: string;
   derivedMetrics?: DerivedBodyCompositionMetrics;
   modelName?: string | null;
-}): void {
-  getOrCreatePerformanceReport(
+}) {
+  await getOrCreatePerformanceReport(
     profileId,
     bodyCompositionMetricsId,
     derivedMetrics,
     modelName,
   );
-  getOrCreateProfileInsightReport(profileId, bodyCompositionMetricsId);
-  getOrCreateFatReport(profileId, bodyCompositionMetricsId, modelName);
-  getOrCreateMuscleReport(profileId, bodyCompositionMetricsId, modelName);
+  await getOrCreateProfileInsightReport(profileId, bodyCompositionMetricsId);
+  await getOrCreateFatReport(profileId, bodyCompositionMetricsId, modelName);
+  await getOrCreateMuscleReport(profileId, bodyCompositionMetricsId, modelName);
 }
 
-function getLatestReportIds(profileId: ProfileId) {
-  const bodyCompositionMetricsId = getLatestBodyCompositionMetricsId(profileId);
+  async function getLatestReportIds(profileId: ProfileId) {
+  const bodyCompositionMetricsId = await getLatestBodyCompositionMetricsId(profileId);
 
   if (bodyCompositionMetricsId === null) {
     return null;
@@ -1867,35 +1854,35 @@ function getLatestReportIds(profileId: ProfileId) {
 
   return {
     bodyCompositionMetricsId,
-    performanceReportId: getOrCreatePerformanceReport(
+    performanceReportId: await getOrCreatePerformanceReport(
       profileId,
       bodyCompositionMetricsId,
     ),
-    insightReportId: getOrCreateProfileInsightReport(
+    insightReportId: await getOrCreateProfileInsightReport(
       profileId,
       bodyCompositionMetricsId,
     ),
-    fatReportId: getOrCreateFatReport(profileId, bodyCompositionMetricsId),
-    muscleReportId: getOrCreateMuscleReport(
+    fatReportId: await getOrCreateFatReport(profileId, bodyCompositionMetricsId),
+    muscleReportId: await getOrCreateMuscleReport(
       profileId,
       bodyCompositionMetricsId,
     ),
   };
 }
 
-export function isBodyCompositionTrendMetric(
+export  function isBodyCompositionTrendMetric(
   metric: string,
 ): metric is BodyCompositionTrendMetric {
   return TREND_COLUMNS.includes(metric as BodyCompositionTrendMetric);
 }
 
-export function isBodyCompositionTrendPeriod(
+export  function isBodyCompositionTrendPeriod(
   period: string,
 ): period is BodyCompositionTrendPeriod {
   return Object.hasOwn(PERIODS, period);
 }
 
-export function listBodyCompositionTrends({
+export async function listBodyCompositionTrends({
   metric,
   period,
   profileId,
@@ -1903,7 +1890,7 @@ export function listBodyCompositionTrends({
   metric: BodyCompositionTrendMetric;
   period: BodyCompositionTrendPeriod;
   profileId?: ProfileId;
-}): BodyCompositionTrendPoint[] {
+}) {
   const range = PERIODS[period];
   const profileFilter = profileId === undefined ? "" : "AND profile_id = ?";
   const rangeFilter = range === null ? "" : "AND created_at >= datetime('now', ?)";
@@ -1912,7 +1899,7 @@ export function listBodyCompositionTrends({
     ...(range === null ? [] : [range]),
   ];
 
-  return db
+  return await db
     .prepare(
       `
   SELECT
@@ -1929,12 +1916,12 @@ export function listBodyCompositionTrends({
     .all(...params) as BodyCompositionTrendPoint[];
 }
 
-export function addProgressMeasurement(
+export async function addProgressMeasurement(
   measurement: ProgressMeasurement,
-): string {
+) {
   const id = measurement.id ?? uuidv7();
 
-  db.prepare(
+  await db.prepare(
     `
   INSERT INTO progress_measurements (
     id,
@@ -1959,7 +1946,7 @@ export function addProgressMeasurement(
   return id;
 }
 
-export function upsertProfileAiOverview({
+export async function upsertProfileAiOverview({
   profileId,
   overviewTitle,
   overviewRemarks,
@@ -1968,14 +1955,14 @@ export function upsertProfileAiOverview({
   biggestLever,
   physiqueArchetype,
   modelName = null,
-}: ProfileAiOverview): void {
-  const reportIds = getLatestReportIds(profileId);
+}: ProfileAiOverview) {
+  const reportIds = await getLatestReportIds(profileId);
 
   if (reportIds === null) {
     return;
   }
 
-  db.prepare(
+  await db.prepare(
     `
   UPDATE profile_insight_reports
   SET
@@ -2001,18 +1988,18 @@ export function upsertProfileAiOverview({
   );
 }
 
-function replaceReportComments(
+async function replaceReportComments(
   tableName:
     | "performance_report_comments"
     | "fat_report_comments"
     | "muscle_report_comments",
   reportId: string,
   comments: ReportComment[],
-): void {
-  const replace = db.transaction(() => {
-    db.prepare(`DELETE FROM ${tableName} WHERE report_id = ?`).run(reportId);
+) {
+  await db.transaction(async (tx) => {
+    await tx.prepare(`DELETE FROM ${tableName} WHERE report_id = ?`).run(reportId);
 
-    const insert = db.prepare(`
+    const insert = tx.prepare(`
   INSERT INTO ${tableName} (
     id,
     report_id,
@@ -2025,7 +2012,7 @@ function replaceReportComments(
 `);
 
     for (const comment of comments) {
-      insert.run(
+      await insert.run(
         uuidv7(),
         reportId,
         comment.factor,
@@ -2034,18 +2021,16 @@ function replaceReportComments(
       );
     }
   });
-
-  replace();
 }
 
-function readReportComments(
+async function readReportComments(
   tableName:
     | "performance_report_comments"
     | "fat_report_comments"
     | "muscle_report_comments",
   reportId: string,
-): ReportComment[] {
-  return db
+) {
+  return await db
     .prepare(
       `
   SELECT
@@ -2059,7 +2044,7 @@ function readReportComments(
     .all(reportId) as ReportComment[];
 }
 
-function requireOneWordRemark(remark: string): string {
+ function requireOneWordRemark(remark: string): string {
   const trimmed = remark.trim();
 
   if (!trimmed || /\s/.test(trimmed)) {
@@ -2069,12 +2054,12 @@ function requireOneWordRemark(remark: string): string {
   return trimmed;
 }
 
-export function saveFatReportComments({
+export async function saveFatReportComments({
   profileId,
   comments,
   modelName = null,
-}: FatReportCommentsInput): void {
-  const reportIds = getLatestReportIds(profileId);
+}: FatReportCommentsInput) {
+  const reportIds = await getLatestReportIds(profileId);
 
   if (reportIds === null) {
     return;
@@ -2097,7 +2082,7 @@ export function saveFatReportComments({
     comment: row.comment,
   }));
 
-  db.prepare(
+  await db.prepare(
     `
   UPDATE fat_reports
   SET model_name = ?, updated_at = CURRENT_TIMESTAMP
@@ -2105,15 +2090,15 @@ export function saveFatReportComments({
 `,
   ).run(modelName, reportIds.fatReportId);
 
-  replaceReportComments("fat_report_comments", reportIds.fatReportId, rows);
+  await replaceReportComments("fat_report_comments", reportIds.fatReportId, rows);
 }
 
-export function saveMuscleReportComments({
+export async function saveMuscleReportComments({
   profileId,
   comments,
   modelName = null,
-}: MuscleReportCommentsInput): void {
-  const reportIds = getLatestReportIds(profileId);
+}: MuscleReportCommentsInput) {
+  const reportIds = await getLatestReportIds(profileId);
 
   if (reportIds === null) {
     return;
@@ -2131,7 +2116,7 @@ export function saveMuscleReportComments({
     comment: row.comment,
   }));
 
-  db.prepare(
+  await db.prepare(
     `
   UPDATE muscle_reports
   SET model_name = ?, updated_at = CURRENT_TIMESTAMP
@@ -2139,18 +2124,17 @@ export function saveMuscleReportComments({
 `,
   ).run(modelName, reportIds.muscleReportId);
 
-  replaceReportComments(
+  await replaceReportComments(
     "muscle_report_comments",
     reportIds.muscleReportId,
     rows,
   );
 }
 
-export function getProfileAiOverview(
+export async function getProfileAiOverview(
   profileId: ProfileId,
-): ProfileAiOverview | null {
-  const row = db
-    .prepare(
+) {
+  const row = await db    .prepare(
       `
   SELECT
     profile_id AS profileId,
@@ -2196,19 +2180,19 @@ export type ProfileEffortScore = {
   updatedAt?: string;
 };
 
-export function upsertProfileEffortScore({
+export async function upsertProfileEffortScore({
   profileId,
   score,
   remark,
   modelName = null,
-}: ProfileEffortScore): void {
-  const reportIds = getLatestReportIds(profileId);
+}: ProfileEffortScore) {
+  const reportIds = await getLatestReportIds(profileId);
 
   if (reportIds === null) {
     return;
   }
 
-  db.prepare(
+  await db.prepare(
     `
   UPDATE profile_insight_reports
   SET
@@ -2221,7 +2205,7 @@ export function upsertProfileEffortScore({
   ).run(score, remark, modelName, reportIds.insightReportId);
 }
 
-export function upsertDerivedMetricsComments({
+export async function upsertDerivedMetricsComments({
   profileId,
   ffmi,
   ffmiVsFmi,
@@ -2231,14 +2215,14 @@ export function upsertDerivedMetricsComments({
   excessFatGauge,
   bodyRatios,
   modelName = null,
-}: DerivedMetricsComments): void {
-  const reportIds = getLatestReportIds(profileId);
+}: DerivedMetricsComments) {
+  const reportIds = await getLatestReportIds(profileId);
 
   if (reportIds === null) {
     return;
   }
 
-  db.prepare(
+  await db.prepare(
     `
   UPDATE performance_reports
   SET model_name = ?, updated_at = CURRENT_TIMESTAMP
@@ -2246,7 +2230,7 @@ export function upsertDerivedMetricsComments({
 `,
   ).run(modelName, reportIds.performanceReportId);
 
-  replaceReportComments("performance_report_comments", reportIds.performanceReportId, [
+  await replaceReportComments("performance_report_comments", reportIds.performanceReportId, [
     { factor: "ffmi", remark: "", comment: ffmi.comment },
     { factor: "ffmi_vs_fmi", remark: "", comment: ffmiVsFmi.comment },
     { factor: "composition_flow", remark: "", comment: compositionFlow.comment },
@@ -2290,10 +2274,10 @@ export function upsertDerivedMetricsComments({
   ]);
 }
 
-export function getProfileEffortScore(
+export async function getProfileEffortScore(
   profileId: ProfileId,
-): ProfileEffortScore | null {
-  return db
+) {
+  return await db
     .prepare(
       `
   SELECT
@@ -2313,9 +2297,8 @@ export function getProfileEffortScore(
     .get(profileId) as ProfileEffortScore | null;
 }
 
-export function getProfileFormaScore(profileId: ProfileId): FormaScore | null {
-  const metrics = db
-    .prepare(
+export async function getProfileFormaScore(profileId: ProfileId) {
+  const metrics = await db    .prepare(
       `
   SELECT
     bmi,
@@ -2352,11 +2335,10 @@ export function getProfileFormaScore(profileId: ProfileId): FormaScore | null {
   return calculateFormaScore(metrics);
 }
 
-export function getLatestBodyCompositionSnapshot(
+export async function getLatestBodyCompositionSnapshot(
   profileId: ProfileId,
-): LatestBodyCompositionSnapshot | null {
-  const row = db
-    .prepare(
+) {
+  const row = await db    .prepare(
       `
   SELECT
     bmi,
@@ -2400,10 +2382,10 @@ export function getLatestBodyCompositionSnapshot(
   };
 }
 
-export function getLatestUserBodyMeasurement(
+export async function getLatestUserBodyMeasurement(
   profileId: ProfileId,
-): BodyMeasurement | null {
-  return db
+) {
+  return await db
     .prepare(
       `
   SELECT
@@ -2427,11 +2409,11 @@ export function getLatestUserBodyMeasurement(
     .get(profileId) as BodyMeasurement | null;
 }
 
-function roundMetric(value: number, digits: number): number {
+ function roundMetric(value: number, digits: number): number {
   return Number(value.toFixed(digits));
 }
 
-function ratioOrNull(
+ function ratioOrNull(
   numerator: number | null,
   denominator: number | null,
 ): number | null {
@@ -2448,7 +2430,7 @@ function ratioOrNull(
   return roundMetric(numerator / denominator, 2);
 }
 
-function normalizeTrend(
+ function normalizeTrend(
   points: Array<{ createdAt: string; value: number }>,
 ): Array<{ createdAt: string; value: number }> {
   const baseline = points[0]?.value;
@@ -2473,15 +2455,15 @@ type DerivedMetricsCommentsRow = {
   bodyRatios: string;
 };
 
-function parseJsonField<T>(raw: string): T | null {
+ function parseJsonField<T>(raw: unknown): T | null {
   try {
-    return JSON.parse(raw) as T;
+    return (typeof raw === "string" ? JSON.parse(raw) : raw) as T;
   } catch {
     return null;
   }
 }
 
-function normalizeDerivedComment(comment: unknown): DerivedMetricComment | null {
+ function normalizeDerivedComment(comment: unknown): DerivedMetricComment | null {
   if (comment === null || typeof comment !== "object") {
     return null;
   }
@@ -2497,7 +2479,7 @@ function normalizeDerivedComment(comment: unknown): DerivedMetricComment | null 
   };
 }
 
-function normalizeRatioComment(comment: unknown): BodyRatioComment | null {
+ function normalizeRatioComment(comment: unknown): BodyRatioComment | null {
   if (comment === null || typeof comment !== "object") {
     return null;
   }
@@ -2514,7 +2496,7 @@ function normalizeRatioComment(comment: unknown): BodyRatioComment | null {
   };
 }
 
-function normalizeBodyRatioComments(
+ function normalizeBodyRatioComments(
   comments: unknown,
 ): BodyRatioComments | null {
   if (comments === null || typeof comments !== "object") {
@@ -2550,7 +2532,7 @@ function normalizeBodyRatioComments(
   };
 }
 
-function parseDerivedMetricsComments(
+ function parseDerivedMetricsComments(
   row: DerivedMetricsCommentsRow | null,
 ): Omit<DerivedMetricsComments, "profileId" | "modelName"> | null {
   if (row === null) {
@@ -2600,7 +2582,7 @@ function parseDerivedMetricsComments(
   };
 }
 
-function parsePerformanceReportComments(
+ function parsePerformanceReportComments(
   rows: ReportComment[],
 ): Omit<DerivedMetricsComments, "profileId" | "modelName"> | null {
   const byFactor = new Map(rows.map((row) => [row.factor, row]));
@@ -2673,11 +2655,10 @@ function parsePerformanceReportComments(
   };
 }
 
-export function getProfilePerformance(
+export async function getProfilePerformance(
   profileId: ProfileId,
-): ProfilePerformance {
-  const latestComposition = db
-    .prepare(
+) {
+  const latestComposition = await db    .prepare(
       `
   SELECT
     fat_mass_kg AS fatMassKg,
@@ -2697,8 +2678,7 @@ export function getProfilePerformance(
     createdAt: string;
   } | null;
 
-  const initialComposition = db
-    .prepare(
+  const initialComposition = await db    .prepare(
       `
   SELECT
     fat_mass_kg AS fatMassKg,
@@ -2716,8 +2696,7 @@ export function getProfilePerformance(
     createdAt: string;
   } | null;
 
-  const performanceReport = db
-    .prepare(
+  const performanceReport = await db    .prepare(
       `
   SELECT
     id,
@@ -2737,8 +2716,7 @@ export function getProfilePerformance(
     createdAt: string;
   } | null;
 
-  const compositionTrend = db
-    .prepare(
+  const compositionTrend = await db    .prepare(
       `
   SELECT
     created_at AS createdAt,
@@ -2755,14 +2733,14 @@ export function getProfilePerformance(
   const performanceComments =
     performanceReport === null
       ? []
-      : readReportComments(
+      : await readReportComments(
           "performance_report_comments",
           performanceReport.id,
         );
 
-  const bodyMeasurements = listUserBodyMeasurements(profileId);
+  const bodyMeasurements = await listUserBodyMeasurements(profileId);
   const latestMeasurement = bodyMeasurements[0] ?? null;
-  const profile = getProfileById(profileId);
+  const profile = await getProfileById(profileId);
   const fallbackFmi =
     latestComposition === null || profile.heightCm === null
       ? null
@@ -2860,7 +2838,7 @@ export function getProfilePerformance(
   };
 }
 
-function parseFatReportComments(rows: ReportComment[]): FatReportComments {
+ function parseFatReportComments(rows: ReportComment[]): FatReportComments {
   const factorMap: Record<string, FatReportFactor> = {
     fat_percent: "fatPercent",
     visceral_subcutaneous_30d_delta: "visceralSubcutaneous30dDelta",
@@ -2888,7 +2866,7 @@ function parseFatReportComments(rows: ReportComment[]): FatReportComments {
   return comments;
 }
 
-function buildFatTrendPoints(
+ function buildFatTrendPoints(
   rows: Array<{
     createdAt: string;
     fatMassKg: number;
@@ -2922,9 +2900,8 @@ function buildFatTrendPoints(
   };
 }
 
-export function getProfileFatReport(profileId: ProfileId): FatReport | null {
-  const row = db
-    .prepare(
+export async function getProfileFatReport(profileId: ProfileId): Promise<FatReport | null> {
+  const row = await db    .prepare(
       `
   SELECT
     id,
@@ -2961,18 +2938,17 @@ export function getProfileFatReport(profileId: ProfileId): FatReport | null {
   } | null;
 
   if (row === null) {
-    const bodyCompositionMetricsId = getLatestBodyCompositionMetricsId(profileId);
+    const bodyCompositionMetricsId = await getLatestBodyCompositionMetricsId(profileId);
 
     if (bodyCompositionMetricsId === null) {
       return null;
     }
 
-    getOrCreateFatReport(profileId, bodyCompositionMetricsId);
-    return getProfileFatReport(profileId);
+    await getOrCreateFatReport(profileId, bodyCompositionMetricsId);
+    return await getProfileFatReport(profileId);
   }
 
-  const trendRows = db
-    .prepare(
+  const trendRows = await db    .prepare(
       `
   SELECT
     created_at AS createdAt,
@@ -3015,12 +2991,12 @@ export function getProfileFatReport(profileId: ProfileId): FatReport | null {
     },
     last30Days: buildFatTrendPoints(trendRows),
     comments: parseFatReportComments(
-      readReportComments("fat_report_comments", row.id),
+      await readReportComments("fat_report_comments", row.id),
     ),
   };
 }
 
-function parseMuscleReportComments(rows: ReportComment[]): MuscleReportComments {
+ function parseMuscleReportComments(rows: ReportComment[]): MuscleReportComments {
   const factorMap: Record<string, MuscleReportFactor> = {
     total_muscle: "totalMuscle",
     bone_mass: "boneMass",
@@ -3046,7 +3022,7 @@ function parseMuscleReportComments(rows: ReportComment[]): MuscleReportComments 
   return comments;
 }
 
-function buildMuscleTrendPoints(
+ function buildMuscleTrendPoints(
   rows: Array<{
     createdAt: string;
     boneMassKg: number;
@@ -3075,11 +3051,10 @@ function buildMuscleTrendPoints(
   };
 }
 
-export function getProfileMuscleReport(
+export async function getProfileMuscleReport(
   profileId: ProfileId,
-): MuscleReport | null {
-  const row = db
-    .prepare(
+): Promise<MuscleReport | null> {
+  const row = await db    .prepare(
       `
   SELECT
     id,
@@ -3110,18 +3085,17 @@ export function getProfileMuscleReport(
   } | null;
 
   if (row === null) {
-    const bodyCompositionMetricsId = getLatestBodyCompositionMetricsId(profileId);
+    const bodyCompositionMetricsId = await getLatestBodyCompositionMetricsId(profileId);
 
     if (bodyCompositionMetricsId === null) {
       return null;
     }
 
-    getOrCreateMuscleReport(profileId, bodyCompositionMetricsId);
-    return getProfileMuscleReport(profileId);
+    await getOrCreateMuscleReport(profileId, bodyCompositionMetricsId);
+    return await getProfileMuscleReport(profileId);
   }
 
-  const trendRows = db
-    .prepare(
+  const trendRows = await db    .prepare(
       `
   SELECT
     created_at AS createdAt,
@@ -3160,14 +3134,13 @@ export function getProfileMuscleReport(
     },
     last30Days: buildMuscleTrendPoints(trendRows),
     comments: parseMuscleReportComments(
-      readReportComments("muscle_report_comments", row.id),
+      await readReportComments("muscle_report_comments", row.id),
     ),
   };
 }
 
-export function getWeightSummary(profileId: ProfileId): WeightSummary {
-  const currentWeightRow = db
-    .prepare(
+export async function getWeightSummary(profileId: ProfileId) {
+  const currentWeightRow = await db    .prepare(
       `
   SELECT
     weight
@@ -3180,8 +3153,7 @@ export function getWeightSummary(profileId: ProfileId): WeightSummary {
     )
     .get(profileId) as { weight: number } | null;
 
-  const goalWeightRow = db
-    .prepare(
+  const goalWeightRow = await db    .prepare(
       `
   SELECT
     desired_weight_kg AS goalWeight
@@ -3193,8 +3165,7 @@ export function getWeightSummary(profileId: ProfileId): WeightSummary {
     )
     .get(profileId) as { goalWeight: number } | null;
 
-  const summaryRow = db
-    .prepare(
+  const summaryRow = await db    .prepare(
       `
   SELECT
     AVG(weight) AS averageWeight30d,
@@ -3210,8 +3181,7 @@ export function getWeightSummary(profileId: ProfileId): WeightSummary {
     lowestWeight30d: number | null;
   } | null;
 
-  const last30DaysWeightTrend = db
-    .prepare(
+  const last30DaysWeightTrend = await db    .prepare(
       `
   SELECT
     weight,
@@ -3234,9 +3204,8 @@ export function getWeightSummary(profileId: ProfileId): WeightSummary {
   };
 }
 
-export function listUsers(): Users[] {
-  const rows = db
-    .prepare(
+export async function listUsers() {
+  const rows = await db    .prepare(
       `
   SELECT
     profiles.id,
@@ -3267,9 +3236,8 @@ export function listUsers(): Users[] {
   }));
 }
 
-export function getProfileById(id: ProfileId) {
-  const row = db
-    .prepare(
+export async function getProfileById(id: ProfileId) {
+  const row = await db    .prepare(
       `
   SELECT
     profiles.id,

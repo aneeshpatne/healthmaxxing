@@ -6,6 +6,7 @@ import {
   calculateProprietaryMetrics,
 } from "../calculations/proprietaryMetrics";
 import { db } from "../db/db";
+import type { DatabaseClient } from "../db/client";
 import { calculateAgeYears } from "../utils/calculateAgeYears";
 
 type BackfillOptions = {
@@ -46,8 +47,8 @@ type BackfillResult = {
   };
 };
 
-function listMeasurements(profileId?: string): MeasurementRow[] {
-  return db
+async function listMeasurements(profileId?: string) {
+  return await db
     .prepare(
       `
   SELECT
@@ -76,8 +77,8 @@ function listMeasurements(profileId?: string): MeasurementRow[] {
     .all(profileId ?? null, profileId ?? null) as MeasurementRow[];
 }
 
-function listExistingRows(table: string, profileId: string): ExistingMetricRow[] {
-  return db
+async function listExistingRows(table: string, profileId: string) {
+  return await db
     .prepare(
       `
   SELECT id
@@ -89,19 +90,19 @@ function listExistingRows(table: string, profileId: string): ExistingMetricRow[]
     .all(profileId) as ExistingMetricRow[];
 }
 
-function deleteRows(table: string, ids: string[]): void {
+async function deleteRows(table: string, ids: string[], client: DatabaseClient = db) {
   if (ids.length === 0) {
     return;
   }
 
   const placeholders = ids.map(() => "?").join(", ");
-  db.prepare(`DELETE FROM ${table} WHERE id IN (${placeholders})`).run(...ids);
+  await client.prepare(`DELETE FROM ${table} WHERE id IN (${placeholders})`).run(...ids);
 }
 
 export async function backfillBodyCompositionFromGrpc({
   profileId,
-}: BackfillOptions = {}): Promise<BackfillResult> {
-  const measurements = listMeasurements(profileId);
+}: BackfillOptions = {}) {
+  const measurements = await listMeasurements(profileId);
   const measurementsByProfile = Map.groupBy(
     measurements,
     (measurement) => measurement.profileId,
@@ -125,15 +126,15 @@ export async function backfillBodyCompositionFromGrpc({
   };
 
   for (const [currentProfileId, profileMeasurements] of measurementsByProfile) {
-    const bodyRows = listExistingRows(
+    const bodyRows = await listExistingRows(
       "body_composition_metrics",
       currentProfileId,
     );
-    const bodyNewRows = listExistingRows(
+    const bodyNewRows = await listExistingRows(
       "body_composition_metrics_new",
       currentProfileId,
     );
-    const derivedRows = listExistingRows(
+    const derivedRows = await listExistingRows(
       "derived_body_composition_metrics",
       currentProfileId,
     );
@@ -161,8 +162,8 @@ export async function backfillBodyCompositionFromGrpc({
           measurement.heightCm,
         );
 
-        db.transaction(() => {
-          db.prepare(
+        await db.transaction(async (tx) => {
+          await tx.prepare(
             `
   INSERT INTO body_composition_metrics (
     id,
@@ -197,7 +198,7 @@ export async function backfillBodyCompositionFromGrpc({
             measurement.createdAt,
           );
 
-          db.prepare(
+          await tx.prepare(
             `
   INSERT INTO body_composition_metrics_new (
     id,
@@ -271,7 +272,7 @@ export async function backfillBodyCompositionFromGrpc({
             measurement.createdAt,
           );
 
-          db.prepare(
+          await tx.prepare(
             `
   INSERT INTO derived_body_composition_metrics (
     id,
@@ -293,7 +294,7 @@ export async function backfillBodyCompositionFromGrpc({
             ffmi,
             measurement.createdAt,
           );
-        })();
+        });
 
         result.processed += 1;
         result.bodyCompositionMetrics.upserted += 1;
@@ -318,11 +319,11 @@ export async function backfillBodyCompositionFromGrpc({
       .slice(profileMeasurements.length)
       .map((row) => row.id);
 
-    db.transaction(() => {
-      deleteRows("body_composition_metrics", extraBodyRows);
-      deleteRows("body_composition_metrics_new", extraBodyNewRows);
-      deleteRows("derived_body_composition_metrics", extraDerivedRows);
-    })();
+    await db.transaction(async (tx) => {
+      await deleteRows("body_composition_metrics", extraBodyRows, tx);
+      await deleteRows("body_composition_metrics_new", extraBodyNewRows, tx);
+      await deleteRows("derived_body_composition_metrics", extraDerivedRows, tx);
+    });
 
     result.bodyCompositionMetrics.deleted += extraBodyRows.length;
     result.bodyCompositionMetricsNew.deleted += extraBodyNewRows.length;

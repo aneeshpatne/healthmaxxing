@@ -14,18 +14,18 @@ type MakeReportToolsArgs = {
   reportId: string;
 };
 
-export function makeReportTools({ reportId }: MakeReportToolsArgs) {
-  const knownSectionNames = listReportSectionNames(reportId)
+export async function makeReportTools({ reportId }: MakeReportToolsArgs) {
+  const knownSectionNames = await (await listReportSectionNames(reportId))
     .map((row) => row.section_name_normalized)
     .filter((name): name is string => name !== null);
-  const knownObservationFieldNames = listObservationFieldNames().map(
+  const knownObservationFieldNames = await (await listObservationFieldNames()).map(
     (row) => row.field_name_normalized,
   );
 
   return [
     tool(
       async ({ lab_name, report_date, collection_date }) => {
-        insertIntoLabReport(reportId, {
+        await insertIntoLabReport(reportId, {
           lab_name,
           report_date,
           collection_date,
@@ -56,7 +56,7 @@ export function makeReportTools({ reportId }: MakeReportToolsArgs) {
     ),
     tool(
       async ({ section_name_raw, section_name_normalized }) => {
-        const sectionId = addReportSection({
+        const sectionId = await addReportSection({
           report_id: reportId,
           section_name_raw,
           section_name_normalized,
@@ -96,7 +96,7 @@ export function makeReportTools({ reportId }: MakeReportToolsArgs) {
         default_unit,
         is_trendable,
       }) => {
-        const observationFieldId = addObservationField({
+        const observationFieldId = await addObservationField({
           field_name,
           field_name_normalized,
           explanation,
@@ -139,7 +139,7 @@ export function makeReportTools({ reportId }: MakeReportToolsArgs) {
         inference,
         confidence_score,
       }) => {
-        const observationId = addObservation({
+        const observationId = await addObservation({
           report_id: reportId,
           section_name_normalized,
           observation_field_name_normalized,
@@ -186,7 +186,7 @@ export function makeReportTools({ reportId }: MakeReportToolsArgs) {
     ),
     tool(
       async ({ field_name_normalized, remark }) => {
-        updateObservationFieldRemark({
+        await updateObservationFieldRemark({
           field_name_normalized,
           remark,
         });

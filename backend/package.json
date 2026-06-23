@@ -3,6 +3,16 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "start": "bun run index.ts",
+    "db:up": "docker-compose up -d postgres",
+    "db:down": "docker-compose down",
+    "db:migrate": "bun run scripts/migrate.ts",
+    "db:import": "bun run scripts/import-sqlite.ts",
+    "db:verify": "bun run scripts/verify-migration.ts",
+    "typecheck": "bunx tsc --noEmit",
+    "test": "bun test"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
@@ -19,7 +29,6 @@
     "@langchain/openai": "^1.4.5",
     "@langchain/openrouter": "^0.2.4",
     "bullmq": "^5.78.0",
-    "dotenv": "^17.4.2",
     "fastify": "^5.8.5",
     "langchain": "^1.4.0",
     "uuid": "^14.0.0"

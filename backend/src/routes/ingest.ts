@@ -42,7 +42,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    if (!profileExists(profileId)) {
+    if (!await profileExists(profileId)) {
       return reply.code(404).send({
         ok: false,
         error: "Profile id does not exist",
@@ -71,8 +71,8 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       latestWorkoutsBySourceId.set(workout.id, workout);
     }
 
-    const ids = Array.from(latestWorkoutsBySourceId.values()).map((workout) =>
-      addWorkout(workout, profileId),
+    const ids = Array.from(latestWorkoutsBySourceId.values()).map( async(workout) =>
+      await addWorkout(workout, profileId),
     );
 
     return {
@@ -89,7 +89,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       const body = (request.body ?? {}) as { profileId?: string };
       const profileId = body.profileId?.trim();
 
-      if (profileId && !profileExists(profileId)) {
+      if (profileId && !await profileExists(profileId)) {
         return reply.code(404).send({
           ok: false,
           error: "Profile id does not exist",
@@ -139,21 +139,21 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         impedance: number;
       };
 
-      if (!profileExists(profileId)) {
+      if (!await profileExists(profileId)) {
         return reply.code(404).send({
           ok: false,
           error: "Profile id does not exist",
         });
       }
 
-      const measurementId = addMeasurement(
+      const measurementId = await addMeasurement(
         profileId,
         weight,
         heartbeat,
         impedance,
       );
 
-      const profile: profile = getProfileById(profileId);
+      const profile: profile = await getProfileById(profileId);
 
       // console.log(
       //   calculateHealthMetricsV2(
@@ -179,7 +179,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
           target_body_fat_pct: profile.preferredBodyFatPct,
         }),
       };
-      const metricsId = addProprietaryBodyCompositionMetrics(
+      const metricsId = await addProprietaryBodyCompositionMetrics(
         profileId,
         metrics,
       );
@@ -187,8 +187,8 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         fmi: calculateFmi(metricsBase.fat_mass_kg, profile.heightCm),
         ffmi: calculateFfmi(metricsBase.fat_free_mass_kg, profile.heightCm),
       };
-      addDerivedBodyComposition(profileId, derivedMetrics);
-      createSnapshotReports({
+      await addDerivedBodyComposition(profileId, derivedMetrics);
+      await createSnapshotReports({
         profileId,
         bodyCompositionMetricsId: metricsId,
         derivedMetrics,

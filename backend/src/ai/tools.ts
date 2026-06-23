@@ -136,14 +136,14 @@ type MuscleReportCommentsPayload = {
 
 const pendingProfileAiOverviews = new Map<ProfileId, PendingProfileAiOverview>();
 
-function saveWhenComplete(profileId: ProfileId, modelName?: string | null) {
+ async function saveWhenComplete(profileId: ProfileId, modelName?: string | null) {
   const pending = pendingProfileAiOverviews.get(profileId);
 
   if (!pending?.overview || !pending.analysis || !pending.effortScore) {
     return;
   }
 
-  upsertProfileAiOverview({
+  await upsertProfileAiOverview({
     profileId,
     overviewTitle: pending.overview.title,
     overviewRemarks: pending.overview.remarks,
@@ -154,7 +154,7 @@ function saveWhenComplete(profileId: ProfileId, modelName?: string | null) {
     modelName,
   });
 
-  upsertProfileEffortScore({
+  await upsertProfileEffortScore({
     profileId,
     score: pending.effortScore.score,
     remark: pending.effortScore.remark,
@@ -169,14 +169,14 @@ export function createProfileAiTools(
   modelName?: string | null,
   ) {
   const ai_overview = tool(
-    ({ title, remarks }: AiOverviewPayload) => {
+    async ({ title, remarks }: AiOverviewPayload) => {
       console.log({ profileId, title, remarks });
 
       const pending = pendingProfileAiOverviews.get(profileId) ?? {};
 
       pending.overview = { title, remarks };
       pendingProfileAiOverviews.set(profileId, pending);
-      saveWhenComplete(profileId, modelName);
+      await saveWhenComplete(profileId, modelName);
 
       return "Saved profile AI overview.";
     },
@@ -199,7 +199,7 @@ export function createProfileAiTools(
   );
 
   const body_analysis = tool(
-    ({
+    async ({
       foundation,
       momentum,
       biggest_lever,
@@ -222,7 +222,7 @@ export function createProfileAiTools(
         physique_archetype,
       };
       pendingProfileAiOverviews.set(profileId, pending);
-      saveWhenComplete(profileId, modelName);
+      await saveWhenComplete(profileId, modelName);
 
       return "Saved profile body analysis.";
     },
@@ -253,14 +253,14 @@ export function createProfileAiTools(
   );
 
   const effort_score = tool(
-    ({ score, remark }: EffortScorePayload) => {
+    async ({ score, remark }: EffortScorePayload) => {
       console.log({ profileId, score, remark });
 
       const pending = pendingProfileAiOverviews.get(profileId) ?? {};
 
       pending.effortScore = { score, remark };
       pendingProfileAiOverviews.set(profileId, pending);
-      saveWhenComplete(profileId, modelName);
+      await saveWhenComplete(profileId, modelName);
 
       return "Saved profile effort score.";
     },
@@ -287,7 +287,7 @@ export function createProfileAiTools(
   );
 
   const derived_metrics_comments = tool(
-    ({
+     async({
       ffmi,
       ffmi_vs_fmi,
       composition_flow,
@@ -307,7 +307,7 @@ export function createProfileAiTools(
         body_ratios,
       });
 
-      upsertDerivedMetricsComments({
+      await upsertDerivedMetricsComments({
         profileId,
         ffmi,
         ffmiVsFmi: ffmi_vs_fmi,
@@ -357,7 +357,7 @@ export function createProfileAiTools(
   );
 
   const fat_report_comments = tool(
-    ({
+     async({
       fat_percent,
       visceral_subcutaneous_30d_delta,
       fat_mass,
@@ -377,7 +377,7 @@ export function createProfileAiTools(
         subcutaneous_fat_ratio,
       });
 
-      saveFatReportComments({
+      await saveFatReportComments({
         profileId,
         comments: {
           fatPercent: fat_percent,
@@ -418,7 +418,7 @@ export function createProfileAiTools(
   );
 
   const muscle_report_comments = tool(
-    ({
+     async({
       total_muscle,
       bone_mass,
       muscle_ratio,
@@ -434,7 +434,7 @@ export function createProfileAiTools(
         skeletal_muscle_ratio,
       });
 
-      saveMuscleReportComments({
+      await saveMuscleReportComments({
         profileId,
         comments: {
           totalMuscle: total_muscle,
