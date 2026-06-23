@@ -11,6 +11,9 @@ let headerHeight: CGFloat = 128
 private let headerContentHeight: CGFloat = 68
 
 struct FormaHeader: View {
+    @Binding var activeTab: AppTab
+    @Binding var selectedMetricsTab: MetricsTab
+
     // Dynamic greeting based on the current time of day
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -25,42 +28,60 @@ struct FormaHeader: View {
     }
     
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Forma")
-                    .font(Font.cormorantGaramond(size: 34).weight(.bold))
-                    .foregroundStyle(.primary)
-                    .kerning(0.5)
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Forma")
+                        .font(Font.cormorantGaramond(size: 34).weight(.bold))
+                        .foregroundStyle(.primary)
+                        .kerning(0.5)
 
-                Text(greeting)
-                    .font(.subheadline)
+                    Text(greeting)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "person.crop.circle")
+                    .font(.system(size: 24, weight: .medium))
+                    .frame(width: 42, height: 42)
                     .foregroundStyle(.secondary)
+                    .glassEffect(.regular, in: Circle())
             }
+            .frame(height: headerContentHeight)
+            .padding(.horizontal, 20)
 
-            Spacer()
-
-            // Simple profile image placeholder
-            Image(systemName: "person.crop.circle")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 36, height: 36)
-                .foregroundStyle(.secondary)
+            if activeTab == .metrics {
+                GlassTabBar(selectedTab: $selectedMetricsTab)
+            }
         }
-        .frame(height: headerContentHeight)
-        .padding(.horizontal, 20)
         .background {
             GeometryReader { geo in
                 Rectangle()
                     .fill(.clear)
                     .glassEffect(
-                        .regular.tint(Color.appBackground.opacity(0.12)),
+                        .regular.tint(Color.appBackground.opacity(0.06)),
                         in: Rectangle()
                     )
+                    .overlay {
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(0.18),
+                                .clear,
+                                .white.opacity(0.04)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .allowsHitTesting(false)
+                    }
                     .overlay(alignment: .bottom) {
                         Rectangle()
-                            .fill(.white.opacity(0.12))
+                            .fill(.white.opacity(0.16))
                             .frame(height: 0.5)
                     }
+                    .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
                     // Extend the background into the safe area above
                     .padding(.top, -geo.safeAreaInsets.top)
             }
@@ -69,5 +90,5 @@ struct FormaHeader: View {
 }
 
 #Preview {
-    FormaHeader()
+    FormaHeader(activeTab: .constant(.metrics), selectedMetricsTab: .constant(.insights))
 }
