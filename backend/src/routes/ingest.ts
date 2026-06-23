@@ -17,26 +17,9 @@ import {
   calculateFmi,
   calculateProprietaryMetrics,
 } from "../calculations/proprietaryMetrics";
+import { backfillBodyCompositionFromGrpc } from "../lib/backfillBodyComposition";
+import { calculateAgeYears } from "../utils/calculateAgeYears";
 const pub = new RedisClient("redis://localhost:6379");
-
-export function calculateAgeYears(dateOfBirth: string): number {
-  const birthDate = new Date(dateOfBirth);
-  const now = new Date();
-  let age = now.getUTCFullYear() - birthDate.getUTCFullYear();
-  const birthdayThisYear = new Date(
-    Date.UTC(
-      now.getUTCFullYear(),
-      birthDate.getUTCMonth(),
-      birthDate.getUTCDate(),
-    ),
-  );
-
-  if (now < birthdayThisYear) {
-    age -= 1;
-  }
-
-  return age;
-}
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
   app.post("/workouts", async (request, reply) => {
@@ -99,6 +82,30 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       ids,
     };
   });
+
+  app.post(
+    "/backfill_body_composition",
+    async (request, reply) => {
+      const body = (request.body ?? {}) as { profileId?: string };
+      const profileId = body.profileId?.trim();
+
+      if (profileId && !profileExists(profileId)) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const result = await backfillBodyCompositionFromGrpc({
+        profileId: profileId || undefined,
+      });
+
+      return {
+        ok: true,
+        ...result,
+      };
+    },
+  );
 
   app.post(
     "/add_measurement",
