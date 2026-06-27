@@ -20,6 +20,7 @@ struct PerformanceTab: View {
                 CompositionTrendsCard()
                 RecompVectorPlotCard()
                 ExcessFatGaugeCard()
+                BodyMeasurementsCard()
             }
             .padding(.top, 4)
             .padding(.bottom, 24)
@@ -1212,5 +1213,209 @@ struct ExcessFatSemicircularGauge: View {
             }
         }
         .aspectRatio(2.0, contentMode: .fit)
+    }
+}
+
+// MARK: - Body Measurements Card
+
+private enum MeasurementSide {
+    case left
+    case right
+}
+
+private struct BodyMeasurement: Identifiable {
+    let id = UUID()
+    let name: String
+    let value: Double
+    let side: MeasurementSide
+    let labelY: CGFloat
+    let markerOffset: CGPoint
+}
+
+struct BodyMeasurementsCard: View {
+    private let measurements: [BodyMeasurement] = [
+        BodyMeasurement(name: "Neck", value: 37, side: .left, labelY: 82, markerOffset: CGPoint(x: 0, y: 118)),
+        BodyMeasurement(name: "Chest", value: 106, side: .left, labelY: 138, markerOffset: CGPoint(x: -11, y: 139)),
+        BodyMeasurement(name: "Waist", value: 90, side: .left, labelY: 194, markerOffset: CGPoint(x: -10, y: 163)),
+        BodyMeasurement(name: "Calf", value: 37, side: .left, labelY: 262, markerOffset: CGPoint(x: -11, y: 219)),
+        BodyMeasurement(name: "Shoulder", value: 103, side: .right, labelY: 82, markerOffset: CGPoint(x: 14, y: 126)),
+        BodyMeasurement(name: "Bicep", value: 35, side: .right, labelY: 138, markerOffset: CGPoint(x: 22, y: 145)),
+        BodyMeasurement(name: "Stomach", value: 97, side: .right, labelY: 194, markerOffset: CGPoint(x: 5, y: 172)),
+        BodyMeasurement(name: "Thigh", value: 52, side: .right, labelY: 250, markerOffset: CGPoint(x: 8, y: 198))
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            BodyMeasurementsHeader()
+            BodyMeasurementsMap(measurements: measurements)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.appSecondaryBackground)
+                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.appSeparator, lineWidth: 0.5)
+        )
+        .padding(.horizontal, 16)
+    }
+}
+
+private struct BodyMeasurementsHeader: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Body Measurements")
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Text("A spatial overview of circumference and body proportions.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct BodyMeasurementsMap: View {
+    let measurements: [BodyMeasurement]
+
+    var body: some View {
+        GeometryReader { geometry in
+            let centerX = geometry.size.width / 2
+            let imageCenterY: CGFloat = 174 // Center Y of the map area
+            let imageWidth: CGFloat = 160
+            let imageHeight: CGFloat = 240
+            
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.appTertiaryBackground)
+
+                // Subtle radial glow behind the body
+                Ellipse()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.performancePrimary.opacity(0.08),
+                                Color.performancePrimary.opacity(0.02),
+                                Color.clear
+                            ],
+                            center: .center,
+                            startRadius: 10,
+                            endRadius: 110
+                        )
+                    )
+                    .frame(width: 180, height: 260)
+                    .position(x: centerX, y: imageCenterY)
+
+                Image("body")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: imageWidth, height: imageHeight)
+                    .position(x: centerX, y: imageCenterY)
+
+                ForEach(measurements) { measurement in
+                    BodyMeasurementConnector(
+                        measurement: measurement,
+                        containerWidth: geometry.size.width,
+                        containerHeight: geometry.size.height,
+                        centerX: centerX
+                    )
+
+                    BodyMeasurementLabel(measurement: measurement)
+                        .position(
+                            x: measurement.side == .left ? 50 : geometry.size.width - 50,
+                            y: measurement.labelY
+                        )
+                }
+            }
+        }
+        .frame(height: 320)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.appSeparator, lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Body circumference measurements")
+    }
+}
+
+private struct BodyMeasurementConnector: View {
+    let measurement: BodyMeasurement
+    let containerWidth: CGFloat
+    let containerHeight: CGFloat
+    let centerX: CGFloat
+
+    var body: some View {
+        let marker = CGPoint(
+            x: centerX + measurement.markerOffset.x,
+            y: measurement.markerOffset.y
+        )
+        // Labels have a fixed width (88), so we connect to their edge
+        let labelEdgeX: CGFloat = measurement.side == .left ? 94 : containerWidth - 94
+        
+        // Ensure the elbow always moves inward towards the body before breaking to the marker
+        let elbowX: CGFloat = measurement.side == .left 
+            ? min(marker.x - 20, labelEdgeX + 20) 
+            : max(marker.x + 20, labelEdgeX - 20)
+
+        ZStack {
+            Path { path in
+                path.move(to: CGPoint(x: labelEdgeX, y: measurement.labelY))
+                path.addLine(to: CGPoint(x: elbowX, y: measurement.labelY))
+                path.addLine(to: marker)
+            }
+            .stroke(
+                Color.performancePrimary.opacity(0.35),
+                style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round, dash: [4, 3])
+            )
+
+            Circle()
+                .fill(Color.appSecondaryBackground)
+                .frame(width: 10, height: 10)
+                .overlay(Circle().stroke(Color.performancePrimary.opacity(0.8), lineWidth: 2))
+                .shadow(color: Color.performancePrimary.opacity(0.2), radius: 3, x: 0, y: 0)
+                .position(marker)
+        }
+        .frame(width: containerWidth, height: containerHeight)
+    }
+}
+
+private struct BodyMeasurementLabel: View {
+    let measurement: BodyMeasurement
+
+    var body: some View {
+        VStack(
+            alignment: measurement.side == .left ? .leading : .trailing,
+            spacing: 3
+        ) {
+            Text(measurement.name.uppercased())
+                .font(.system(size: 9, weight: .bold))
+                .tracking(0.6)
+                .foregroundStyle(.secondary)
+
+            Text(measurement.value, format: .number.precision(.fractionLength(1)))
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.performancePrimary.opacity(0.10))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(Color.performancePrimary.opacity(0.15), lineWidth: 0.5)
+                )
+
+            Text("cm")
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(.tertiary)
+        }
+        .frame(width: 88, alignment: measurement.side == .left ? .leading : .trailing)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(measurement.name), \(measurement.value, specifier: "%.1f") centimeters")
     }
 }
