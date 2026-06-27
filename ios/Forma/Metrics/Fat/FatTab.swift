@@ -83,13 +83,13 @@ struct FatRatioMetrics {
     
     var remarkText: String {
         if value < 6.0 {
-            return "Below optimal essential range.\nEnsure healthy fat intake."
+            return "Below optimal essential range. Ensure healthy fat intake."
         } else if value < 18.0 {
-            return "Within optimal athletic range.\nGreat job keeping it steady!"
+            return "Within optimal athletic range. Great job keeping it steady!"
         } else if value < 25.0 {
-            return "Above your target of 18%.\nAim for steady fat reduction."
+            return "Above your target of 18%. Aim for steady fat reduction."
         } else {
-            return "Significantly above target.\nPrioritize active fat reduction."
+            return "Significantly above target. Prioritize active fat reduction."
         }
     }
     
@@ -127,7 +127,37 @@ struct FatTab: View {
                 visceralFat: 4.2,
                 subcutaneousFat: 15.8,
                 verdict: "Mostly Subcutaneous",
-                remark: "Distribution is relatively safer,\nthough total fat remains elevated."
+                remark: "Distribution is relatively safer, though total fat remains elevated."
+            )
+            
+            VisceralSubcRatioTrendCard(
+                currentRatio: 0.27,
+                statusText: "Safe",
+                statusColor: .goodGreen,
+                statusIcon: "checkmark.circle.fill",
+                remarkText: "Visceral to subcutaneous ratio is within a healthy and safe range."
+            )
+            
+            VisceralFatMassTrendCard(
+                currentMass: 4.2,
+                statusText: "Optimal",
+                statusColor: .goodGreen,
+                statusIcon: "checkmark.circle.fill",
+                remarkText: "Visceral fat mass is within a healthy, low-risk range."
+            )
+            
+            SubcFatMassTrendCard(
+                currentMass: 15.8,
+                statusText: "Elevated",
+                statusColor: .extremityRed,
+                statusIcon: "exclamationmark.triangle.fill",
+                remarkText: "Subcutaneous fat mass is elevated. Focus on caloric deficit and activity."
+            )
+            
+            FatMassTrendCard(
+                currentMass: 20.0,
+                statusText: "Elevated",
+                remarkText: "Total fat mass is above target."
             )
             
             FatHistoryCard()
@@ -358,7 +388,6 @@ struct FatRatioCard: View {
                             )
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
                 
                 // Vertical Separator
                 Color.appSeparator
@@ -427,6 +456,12 @@ struct FatDataPoint: Identifiable {
 }
 
 struct FatHistoryCard: View {
+    var value: Double = 24.8
+    
+    var metrics: FatRatioMetrics {
+        FatRatioMetrics(value: value)
+    }
+    
     let data: [FatDataPoint] = [
         FatDataPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, ratio: 25.6),
         FatDataPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, ratio: 25.2),
@@ -489,8 +524,60 @@ struct FatHistoryCard: View {
                     }
                 }
             }
-            .frame(height: 240)
+            .frame(height: 200)
             .padding(.top, 4)
+            
+            // Divider
+            Rectangle()
+                .fill(Color.appSeparator)
+                .frame(height: 1)
+                .padding(.horizontal, 4)
+            
+            // Bottom Verdict & Remark Row
+            HStack(alignment: .top, spacing: 16) {
+                // Verdict Column (Wraps to content width)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("VERDICT")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .tracking(1.0)
+                    
+                    HStack(spacing: 6) {
+                        Text(metrics.verdictText)
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(metrics.statusColor)
+                        
+                        Image(systemName: metrics.statusIcon)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(metrics.statusColor)
+                            .frame(width: 18, height: 18)
+                            .background(
+                                Circle()
+                                    .stroke(metrics.statusColor, lineWidth: 1)
+                            )
+                    }
+                }
+                
+                // Vertical Separator
+                Color.appSeparator
+                    .frame(width: 1)
+                    .frame(height: 38)
+                
+                // Remark Column (Fills remaining width)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("REMARK")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .tracking(1.0)
+                    
+                    Text(metrics.remarkText)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.primary)
+                        .lineSpacing(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 4)
         }
         .padding(20)
         .background(
@@ -658,7 +745,6 @@ struct VisceralSubcutaneousCard: View {
                         .foregroundStyle(Color.subcutaneousLightTeal)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
                 
                 // Vertical Separator
                 Color.appSeparator
@@ -677,11 +763,10 @@ struct VisceralSubcutaneousCard: View {
                         .font(.system(size: 11, weight: .regular))
                         .foregroundStyle(.primary)
                         .lineSpacing(2)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 2)
             .padding(.top, 4)
         }
         .padding(.vertical, 16)
@@ -697,6 +782,632 @@ struct VisceralSubcutaneousCard: View {
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Visceral fat \(String(format: "%.1f", visceralFat)) kilograms, \(visceralPercentageText). Subcutaneous fat \(String(format: "%.1f", subcutaneousFat)) kilograms, \(subcutaneousPercentageText). Verdict: \(verdict). Remark: \(remark.replacingOccurrences(of: "\n", with: " ")).")
+    }
+}
+
+// MARK: - Fat Mass Trend Card
+
+struct FatMassPoint: Identifiable {
+    let id = UUID()
+    let date: Date
+    let value: Double
+}
+
+struct FatMassTrendCard: View {
+    let currentMass: Double
+    let statusText: String
+    let remarkText: String
+    
+    let data: [FatMassPoint] = [
+        FatMassPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, value: 17.2),
+        FatMassPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, value: 19.0),
+        FatMassPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, value: 18.2),
+        FatMassPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, value: 20.0)
+    ]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Top Header Info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Fat Mass History")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    
+                    Spacer()
+                    
+                    Text(String(format: "%.1f kg", currentMass))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                }
+                
+                Text("Upward trend over the past 4 weeks.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            
+            // Swift Chart
+            Chart {
+                ForEach(data) { point in
+                    LineMark(
+                        x: .value("Date", point.date, unit: .day),
+                        y: .value("Mass", point.value)
+                    )
+                    .foregroundStyle(Color.extremityRed.gradient)
+                    .interpolationMethod(.catmullRom)
+                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
+                    
+                    PointMark(
+                        x: .value("Date", point.date, unit: .day),
+                        y: .value("Mass", point.value)
+                    )
+                    .foregroundStyle(Color.extremityRed)
+                    .annotation(position: .top, spacing: 4) {
+                        Text(String(format: "%.1f kg", point.value))
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .chartYScale(domain: 15.0...21.5)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .weekOfYear)) { value in
+                    AxisValueLabel(format: .dateTime.month().day())
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
+                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisValueLabel() {
+                        if let doubleValue = value.as(Double.self) {
+                            Text(String(format: "%.0f kg", doubleValue))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(height: 200)
+            .padding(.top, 4)
+            
+            // Divider
+            Rectangle()
+                .fill(Color.appSeparator)
+                .frame(height: 1)
+                .padding(.horizontal, 4)
+            
+            // Bottom Verdict & Remark Row
+            HStack(alignment: .top, spacing: 16) {
+                // Verdict Column (Wraps to content width)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("VERDICT")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .tracking(1.0)
+                    
+                    HStack(spacing: 6) {
+                        Text(statusText)
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.extremityRed)
+                        
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color.extremityRed)
+                            .frame(width: 18, height: 18)
+                            .background(
+                                Circle()
+                                    .stroke(Color.extremityRed, lineWidth: 1)
+                            )
+                    }
+                }
+                
+                // Vertical Separator
+                Color.appSeparator
+                    .frame(width: 1)
+                    .frame(height: 38)
+                
+                // Remark Column (Fills remaining width)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("REMARK")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .tracking(1.0)
+                    
+                    Text(remarkText)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.primary)
+                        .lineSpacing(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.appSecondaryBackground)
+                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.appSeparator, lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Fat mass history over past 4 weeks, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \(remarkText.replacingOccurrences(of: "\n", with: " ")).")
+    }
+}
+
+// MARK: - Visceral Subcutaneous Ratio Trend Card
+
+struct VisceralSubcRatioPoint: Identifiable {
+    let id = UUID()
+    let date: Date
+    let value: Double
+}
+
+struct VisceralSubcRatioTrendCard: View {
+    let currentRatio: Double
+    let statusText: String
+    let statusColor: Color
+    let statusIcon: String
+    let remarkText: String
+    
+    let data: [VisceralSubcRatioPoint] = [
+        VisceralSubcRatioPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, value: 0.25),
+        VisceralSubcRatioPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, value: 0.25),
+        VisceralSubcRatioPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, value: 0.25),
+        VisceralSubcRatioPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, value: 0.27)
+    ]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Top Header Info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Visceral / Subcutaneous Ratio")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    
+                    Spacer()
+                    
+                    Text(String(format: "%.2f", currentRatio))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                }
+                
+                Text("Healthy distribution maintained.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            
+            // Swift Chart
+            Chart {
+                ForEach(data) { point in
+                    LineMark(
+                        x: .value("Date", point.date, unit: .day),
+                        y: .value("Ratio", point.value)
+                    )
+                    .foregroundStyle(Color.visceralDarkTeal.gradient)
+                    .interpolationMethod(.catmullRom)
+                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
+                    
+                    PointMark(
+                        x: .value("Date", point.date, unit: .day),
+                        y: .value("Ratio", point.value)
+                    )
+                    .foregroundStyle(Color.visceralDarkTeal)
+                    .annotation(position: .top, spacing: 4) {
+                        Text(String(format: "%.2f", point.value))
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .chartYScale(domain: 0.20...0.35)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .weekOfYear)) { value in
+                    AxisValueLabel(format: .dateTime.month().day())
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
+                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisValueLabel() {
+                        if let doubleValue = value.as(Double.self) {
+                            Text(String(format: "%.2f", doubleValue))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(height: 200)
+            .padding(.top, 4)
+            
+            // Divider
+            Rectangle()
+                .fill(Color.appSeparator)
+                .frame(height: 1)
+                .padding(.horizontal, 4)
+            
+            // Bottom Verdict & Remark Row
+            HStack(alignment: .top, spacing: 16) {
+                // Verdict Column (Wraps to content width)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("VERDICT")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .tracking(1.0)
+                    
+                    HStack(spacing: 6) {
+                        Text(statusText)
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(statusColor)
+                        
+                        Image(systemName: statusIcon)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(statusColor)
+                            .frame(width: 18, height: 18)
+                            .background(
+                                Circle()
+                                    .stroke(statusColor, lineWidth: 1)
+                            )
+                    }
+                }
+                
+                // Vertical Separator
+                Color.appSeparator
+                    .frame(width: 1)
+                    .frame(height: 38)
+                
+                // Remark Column (Fills remaining width)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("REMARK")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .tracking(1.0)
+                    
+                    Text(remarkText)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.primary)
+                        .lineSpacing(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.appSecondaryBackground)
+                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.appSeparator, lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Visceral to subcutaneous ratio history, ending at \(String(format: "%.2f", currentRatio)). Current status is \(statusText). Remark: \(remarkText).")
+    }
+}
+
+// MARK: - Subcutaneous Fat Mass Trend Card
+
+struct SubcFatMassPoint: Identifiable {
+    let id = UUID()
+    let date: Date
+    let value: Double
+}
+
+struct SubcFatMassTrendCard: View {
+    let currentMass: Double
+    let statusText: String
+    let statusColor: Color
+    let statusIcon: String
+    let remarkText: String
+    
+    let data: [SubcFatMassPoint] = [
+        SubcFatMassPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, value: 13.8),
+        SubcFatMassPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, value: 15.2),
+        SubcFatMassPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, value: 14.6),
+        SubcFatMassPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, value: 15.8)
+    ]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Top Header Info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Subcutaneous Fat Mass")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    
+                    Spacer()
+                    
+                    Text(String(format: "%.1f kg", currentMass))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                }
+                
+                Text("Upward trend over the past 4 weeks.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            
+            // Swift Chart
+            Chart {
+                ForEach(data) { point in
+                    LineMark(
+                        x: .value("Date", point.date, unit: .day),
+                        y: .value("Mass", point.value)
+                    )
+                    .foregroundStyle(Color.subcutaneousLightTeal.gradient)
+                    .interpolationMethod(.catmullRom)
+                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
+                    
+                    PointMark(
+                        x: .value("Date", point.date, unit: .day),
+                        y: .value("Mass", point.value)
+                    )
+                    .foregroundStyle(Color.subcutaneousLightTeal)
+                    .annotation(position: .top, spacing: 4) {
+                        Text(String(format: "%.1f kg", point.value))
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .chartYScale(domain: 12.0...18.0)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .weekOfYear)) { value in
+                    AxisValueLabel(format: .dateTime.month().day())
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
+                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisValueLabel() {
+                        if let doubleValue = value.as(Double.self) {
+                            Text(String(format: "%.0f kg", doubleValue))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(height: 200)
+            .padding(.top, 4)
+            
+            // Divider
+            Rectangle()
+                .fill(Color.appSeparator)
+                .frame(height: 1)
+                .padding(.horizontal, 4)
+            
+            // Bottom Verdict & Remark Row
+            HStack(alignment: .top, spacing: 16) {
+                // Verdict Column (Wraps to content width)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("VERDICT")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .tracking(1.0)
+                    
+                    HStack(spacing: 6) {
+                        Text(statusText)
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(statusColor)
+                        
+                        Image(systemName: statusIcon)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(statusColor)
+                            .frame(width: 18, height: 18)
+                            .background(
+                                Circle()
+                                    .stroke(statusColor, lineWidth: 1)
+                            )
+                    }
+                }
+                
+                // Vertical Separator
+                Color.appSeparator
+                    .frame(width: 1)
+                    .frame(height: 38)
+                
+                // Remark Column (Fills remaining width)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("REMARK")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .tracking(1.0)
+                    
+                    Text(remarkText)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.primary)
+                        .lineSpacing(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.appSecondaryBackground)
+                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.appSeparator, lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Subcutaneous fat mass history, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \(remarkText).")
+    }
+}
+
+// MARK: - Visceral Fat Mass Trend Card
+
+struct VisceralFatMassPoint: Identifiable {
+    let id = UUID()
+    let date: Date
+    let value: Double
+}
+
+struct VisceralFatMassTrendCard: View {
+    let currentMass: Double
+    let statusText: String
+    let statusColor: Color
+    let statusIcon: String
+    let remarkText: String
+    
+    let data: [VisceralFatMassPoint] = [
+        VisceralFatMassPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, value: 3.4),
+        VisceralFatMassPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, value: 3.8),
+        VisceralFatMassPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, value: 3.6),
+        VisceralFatMassPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, value: 4.2)
+    ]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Top Header Info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Visceral Fat Mass")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    
+                    Spacer()
+                    
+                    Text(String(format: "%.1f kg", currentMass))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                }
+                
+                Text("Slightly upward trend over the past 4 weeks.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            
+            // Swift Chart
+            Chart {
+                ForEach(data) { point in
+                    LineMark(
+                        x: .value("Date", point.date, unit: .day),
+                        y: .value("Mass", point.value)
+                    )
+                    .foregroundStyle(Color.visceralDarkTeal.gradient)
+                    .interpolationMethod(.catmullRom)
+                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
+                    
+                    PointMark(
+                        x: .value("Date", point.date, unit: .day),
+                        y: .value("Mass", point.value)
+                    )
+                    .foregroundStyle(Color.visceralDarkTeal)
+                    .annotation(position: .top, spacing: 4) {
+                        Text(String(format: "%.1f kg", point.value))
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .chartYScale(domain: 2.0...6.0)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .weekOfYear)) { value in
+                    AxisValueLabel(format: .dateTime.month().day())
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
+                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisValueLabel() {
+                        if let doubleValue = value.as(Double.self) {
+                            Text(String(format: "%.0f kg", doubleValue))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .frame(height: 200)
+            .padding(.top, 4)
+            
+            // Divider
+            Rectangle()
+                .fill(Color.appSeparator)
+                .frame(height: 1)
+                .padding(.horizontal, 4)
+            
+            // Bottom Verdict & Remark Row
+            HStack(alignment: .top, spacing: 16) {
+                // Verdict Column (Wraps to content width)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("VERDICT")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .tracking(1.0)
+                    
+                    HStack(spacing: 6) {
+                        Text(statusText)
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(statusColor)
+                        
+                        Image(systemName: statusIcon)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(statusColor)
+                            .frame(width: 18, height: 18)
+                            .background(
+                                Circle()
+                                    .stroke(statusColor, lineWidth: 1)
+                            )
+                    }
+                }
+                
+                // Vertical Separator
+                Color.appSeparator
+                    .frame(width: 1)
+                    .frame(height: 38)
+                
+                // Remark Column (Fills remaining width)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("REMARK")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .tracking(1.0)
+                    
+                    Text(remarkText)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(.primary)
+                        .lineSpacing(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.appSecondaryBackground)
+                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.appSeparator, lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Visceral fat mass history, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \(remarkText).")
     }
 }
 
