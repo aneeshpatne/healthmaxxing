@@ -48,6 +48,11 @@ type BackfillResult = {
 };
 
 async function listMeasurements(profileId?: string) {
+  const profileFilter = profileId !== undefined
+    ? "AND measurements.profile_id = ?"
+    : "";
+  const params = profileId !== undefined ? [profileId] : [];
+
   return await db
     .prepare(
       `
@@ -70,11 +75,11 @@ async function listMeasurements(profileId?: string) {
     AND profile_metadata.height_cm IS NOT NULL
     AND profile_metadata.date_of_birth IS NOT NULL
     AND profile_metadata.gender IS NOT NULL
-    AND (? IS NULL OR measurements.profile_id = ?)
+    ${profileFilter}
   ORDER BY measurements.profile_id ASC, measurements.created_at ASC, measurements.id ASC
 `,
     )
-    .all(profileId ?? null, profileId ?? null) as MeasurementRow[];
+    .all(...params) as MeasurementRow[];
 }
 
 async function listExistingRows(table: string, profileId: string) {
