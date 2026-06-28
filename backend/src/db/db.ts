@@ -292,6 +292,90 @@ export async function getBodyCompositionMeasurementDelta(profileId: string) {
     .get(profileId, profileId, profileId, profileId, profileId);
 }
 
+const BODY_COMPOSITION_DELTA_METRICS = [
+  "bmi",
+  "body_fat_pct",
+  "fat_mass_kg",
+  "fat_free_mass_kg",
+  "desired_weight_kg",
+  "body_score",
+  "body_age_years",
+  "water_pct",
+  "muscle_mass_kg",
+  "muscle_rate_pct",
+  "bmr_kcal",
+  "visceral_fat",
+  "ideal_weight_kg",
+  "protein_mass_kg",
+  "protein_pct",
+  "skeletal_muscle_kg",
+  "subcutaneous_fat_pct",
+  "subcutaneous_fat_mass_kg",
+  "predicted_lean_mass_kg",
+] as const;
+
+const BODY_COMPOSITION_DELTA_PERIODS = [
+  "forever",
+  "last_year",
+  "last_30_days",
+  "last_7_days",
+] as const;
+
+type DeltaPeriod = (typeof BODY_COMPOSITION_DELTA_PERIODS)[number];
+type CompactDeltaRow = [string, ...(number | null)[]];
+
+export type CompactDeltaTable = {
+  columns: ["metric", ...DeltaPeriod[]];
+  rows: CompactDeltaRow[];
+};
+
+function compactDelta(value: unknown): number | null {
+  // PostgreSQL returns expressions involving AVG(integer) as NUMERIC, which
+  // Bun may decode as a string. BIGINT values can similarly arrive as bigint.
+  if (
+    typeof value !== "number" &&
+    typeof value !== "bigint" &&
+    typeof value !== "string"
+  ) {
+    return null;
+  }
+
+  if (typeof value === "string" && value.trim() === "") return null;
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return null;
+
+  return Math.round(numericValue * 100) / 100;
+}
+
+function toCompactDeltaTable(
+  delta: Record<string, unknown>,
+  metrics: readonly string[],
+): CompactDeltaTable {
+  return {
+    columns: ["metric", ...BODY_COMPOSITION_DELTA_PERIODS],
+    rows: metrics.map((metric) => [
+      metric,
+      ...BODY_COMPOSITION_DELTA_PERIODS.map((period) =>
+        compactDelta(delta[`${metric}_${period}_delta`]),
+      ),
+    ]),
+  };
+}
+
+/**
+ * Token-efficient form of getBodyCompositionMeasurementDelta.
+ *
+ * Each row is [metric, forever, last_year, last_30_days, last_7_days]. Values
+ * are the latest measurement minus the corresponding period average.
+ */
+export async function getBodyCompositionMeasurementDeltaV2(profileId: string) {
+  const delta = await getBodyCompositionMeasurementDelta(profileId);
+  if (!delta) return null;
+
+  return toCompactDeltaTable(delta, BODY_COMPOSITION_DELTA_METRICS);
+}
+
 export async function getBodyMeasurementDelta(profileId: string) {
   return await db
     .prepare(
@@ -407,4 +491,47 @@ export async function getBodyMeasurementDelta(profileId: string) {
     `,
     )
     .get(profileId, profileId, profileId, profileId, profileId);
+}
+
+const BODY_MEASUREMENT_DELTA_METRICS = [
+  "neck_cm",
+  "shoulder_cm",
+  "chest_cm",
+  "stomach_cm",
+  "waist_cm",
+  "calf_cm",
+  "thigh_cm",
+  "bicep_cm",
+  "forearm_cm",
+] as const;
+
+export async function getBodyMeasurementDeltaV2(profileId: string) {
+  const delta = await getBodyMeasurementDelta(profileId);
+  if (!delta) return null;
+
+  return toCompactDeltaTable(delta, BODY_MEASUREMENT_DELTA_METRICS);
+}
+
+function deltaTableToTsv(table: CompactDeltaTable | null): string {
+  if (!table) return "No measurements available.";
+
+  return [
+    table.columns.join("\t"),
+    ...table.rows.map((row) =>
+      row.map((value) => value ?? "NA").join("\t"),
+    ),
+  ].join("\n");
+}
+
+export function bodyMeasurementDeltasToLlmInput(
+  bodyComposition: CompactDeltaTable | null,
+  bodyMeasurements: CompactDeltaTable | null,
+): string {
+  return [
+    "Deltas are latest measurement minus period average.",
+    "[body_composition]",
+    deltaTableToTsv(bodyComposition),
+    "[body_measurements]",
+    deltaTableToTsv(bodyMeasurements),
+  ].join("\n");
 }
