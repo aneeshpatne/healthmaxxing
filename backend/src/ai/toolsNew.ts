@@ -5,6 +5,7 @@ import {
   getProfileFatReport,
   getProfileMuscleReport,
   getProfilePerformance,
+  upsertProfileAiReportJsonLd,
   type FatReport,
   type MuscleReport,
   type ProfilePerformance,
@@ -713,6 +714,11 @@ export function createTools(reportId: string, profileId: string) {
         fat,
         muscle,
       }, sources);
+      await upsertProfileAiReportJsonLd({
+        reportId,
+        profileId,
+        data: preprocessed,
+      });
       console.log(JSON.stringify({ preprocessed }, null, 2));
 
       return "Generated insights.";
