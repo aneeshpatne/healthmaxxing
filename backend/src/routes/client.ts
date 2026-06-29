@@ -9,6 +9,7 @@ import {
   initJob,
   jobExists,
   getProfileAiOverview,
+  getProfileAiReportById,
   getProfileEffortScore,
   getProfileFatReport,
   getProfileFormaScore,
@@ -18,6 +19,7 @@ import {
   isBodyCompositionTrendMetric,
   isBodyCompositionTrendPeriod,
   listBodyCompositionTrends,
+  listRecentProfileAiReports,
   listUserBodyMeasurements,
   listUsers,
   listUserWeight,
@@ -472,6 +474,105 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId,
         insights,
         effortScore,
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/insights/recent",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+        querystring: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+      const { limit: rawLimit } = request.query as {
+        limit?: number | string;
+      };
+      const parsedLimit = Number(rawLimit ?? 5);
+      const limit = Number.isFinite(parsedLimit)
+        ? Math.min(Math.max(Math.trunc(parsedLimit), 1), 20)
+        : 5;
+
+      if (!(await profileExists(profileId))) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const reports = await listRecentProfileAiReports({ profileId, limit });
+
+      return reply.send({
+        ok: true,
+        profileId,
+        reports,
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/insights/:reportId",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId", "reportId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+            reportId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId, reportId } = request.params as {
+        profileId: string;
+        reportId: string;
+      };
+
+      if (!(await profileExists(profileId))) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const report = await getProfileAiReportById({ profileId, reportId });
+
+      if (report === null) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Report does not exist",
+        });
+      }
+
+      return reply.send({
+        ok: true,
+        report,
       });
     },
   );
