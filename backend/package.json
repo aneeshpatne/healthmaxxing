@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "start": "bun run index.ts",
+    "worker": "bun run src/bull/worker.ts",
     "db:up": "docker-compose up -d postgres",
     "db:down": "docker-compose down",
     "db:migrate": "bun run scripts/migrate.ts",
@@ -20,6 +21,7 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
+    "@clerk/backend": "^3.8.4",
     "@fastify/websocket": "^11.2.0",
     "@grpc/grpc-js": "^1.14.4",
     "@grpc/proto-loader": "^0.8.1",
