@@ -1,5 +1,4 @@
 import type { FastifyPluginAsync } from "fastify";
-import { RedisClient } from "bun";
 import {
   addDerivedBodyComposition,
   addMeasurement,
@@ -19,7 +18,6 @@ import {
 } from "../calculations/proprietaryMetrics";
 import { backfillBodyCompositionFromGrpc } from "../lib/backfillBodyComposition";
 import { calculateAgeYears } from "../utils/calculateAgeYears";
-const pub = new RedisClient("redis://localhost:6379");
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
   app.post("/workouts", async (request, reply) => {
@@ -42,7 +40,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    if (!await profileExists(profileId)) {
+    if (!(await profileExists(profileId))) {
       return reply.code(404).send({
         ok: false,
         error: "Profile id does not exist",
@@ -71,8 +69,8 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       latestWorkoutsBySourceId.set(workout.id, workout);
     }
 
-    const ids = Array.from(latestWorkoutsBySourceId.values()).map( async(workout) =>
-      await addWorkout(workout, profileId),
+    const ids = Array.from(latestWorkoutsBySourceId.values()).map(
+      async (workout) => await addWorkout(workout, profileId),
     );
 
     return {
@@ -83,29 +81,26 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.post(
-    "/backfill_body_composition",
-    async (request, reply) => {
-      const body = (request.body ?? {}) as { profileId?: string };
-      const profileId = body.profileId?.trim();
+  app.post("/backfill_body_composition", async (request, reply) => {
+    const body = (request.body ?? {}) as { profileId?: string };
+    const profileId = body.profileId?.trim();
 
-      if (profileId && !await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
-      }
-
-      const result = await backfillBodyCompositionFromGrpc({
-        profileId: profileId || undefined,
+    if (profileId && !(await profileExists(profileId))) {
+      return reply.code(404).send({
+        ok: false,
+        error: "Profile id does not exist",
       });
+    }
 
-      return {
-        ok: true,
-        ...result,
-      };
-    },
-  );
+    const result = await backfillBodyCompositionFromGrpc({
+      profileId: profileId || undefined,
+    });
+
+    return {
+      ok: true,
+      ...result,
+    };
+  });
 
   app.post(
     "/add_measurement",
@@ -139,7 +134,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         impedance: number;
       };
 
-      if (!await profileExists(profileId)) {
+      if (!(await profileExists(profileId))) {
         return reply.code(404).send({
           ok: false,
           error: "Profile id does not exist",
@@ -212,14 +207,111 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  app.get("/ws/tool/:jobId", { websocket: true }, async (socket, request) => {
-    const { jobId } = request.params as { jobId: string };
+  app.post(
+    "/add_measurement/v2",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["profileId", "weight", "heartbeat", "impedance"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+            weight: {
+              type: "number",
+            },
+            heartbeat: {
+              type: "number",
+            },
+            impedance: {
+              type: "number",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId, weight, heartbeat, impedance } = request.body as {
+        profileId: string;
+        weight: number;
+        heartbeat: number;
+        impedance: number;
+      };
 
-    socket.on("message", async (raw: { toString(): string }) => {
-      const message = raw.toString();
-      await pub.publish(`job:${jobId}`, message);
-    });
-  });
+      if (!(await profileExists(profileId))) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Profile id does not exist",
+        });
+      }
+
+      const measurementId = await addMeasurement(
+        profileId,
+        weight,
+        heartbeat,
+        impedance,
+      );
+
+      const profile: profile = await getProfileById(profileId);
+
+      // console.log(
+      //   calculateHealthMetricsV2(
+      //     weight,
+      //     impedance,
+      //     profile.heightCm,
+      //     profile.heightCm,
+      //     "male",
+      //   ),
+      // );
+      const metricsBase = await calculateProprietaryMetrics({
+        weight_kg: weight,
+        impedance_ohms: impedance,
+        height_cm: profile.heightCm,
+        age_years: calculateAgeYears(profile.dateOfBirth),
+        sex: profile.gender,
+        people_type: profile.peopleType,
+      });
+      const metrics = {
+        ...metricsBase,
+        desired_weight_kg: calculateDesiredWeightKg({
+          fat_free_mass_kg: metricsBase.fat_free_mass_kg,
+          target_body_fat_pct: profile.preferredBodyFatPct,
+        }),
+      };
+      const metricsId = await addProprietaryBodyCompositionMetrics(
+        profileId,
+        metrics,
+      );
+      const derivedMetrics = {
+        fmi: calculateFmi(metricsBase.fat_mass_kg, profile.heightCm),
+        ffmi: calculateFfmi(metricsBase.fat_free_mass_kg, profile.heightCm),
+      };
+      await addDerivedBodyComposition(profileId, derivedMetrics);
+      await createSnapshotReports({
+        profileId,
+        bodyCompositionMetricsId: metricsId,
+        derivedMetrics,
+      });
+
+      console.log(metrics);
+
+      // app.log.info({
+      //   measurementId,
+      //   profileId,
+      //   weight,
+      //   heartbeat,
+      //   impedance,
+      //   metricsId,
+      //   metrics,
+      // });
+      return {
+        ok: true,
+        id: measurementId,
+      };
+    },
+  );
+
 };
 
 export default ingestRoutes;
