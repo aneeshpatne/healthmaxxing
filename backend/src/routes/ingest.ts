@@ -7,6 +7,7 @@ import {
   createSnapshotReports,
   getProfileById,
   profileExists,
+  updateProfileInsightReportGenerationStatus,
   type WorkoutInput,
   type profile,
 } from "../db/commands";
@@ -18,6 +19,7 @@ import {
 } from "../calculations/proprietaryMetrics";
 import { backfillBodyCompositionFromGrpc } from "../lib/backfillBodyComposition";
 import { calculateAgeYears } from "../utils/calculateAgeYears";
+import { addQueueItem } from "../bull/queue";
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
   app.post("/workouts", async (request, reply) => {
@@ -183,11 +185,27 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         ffmi: calculateFfmi(metricsBase.fat_free_mass_kg, profile.heightCm),
       };
       await addDerivedBodyComposition(profileId, derivedMetrics);
-      await createSnapshotReports({
+      const reports = await createSnapshotReports({
         profileId,
         bodyCompositionMetricsId: metricsId,
         derivedMetrics,
       });
+      await updateProfileInsightReportGenerationStatus({
+        reportId: reports.insightReportId,
+        profileId,
+        status: "queued",
+      });
+      try {
+        await addQueueItem(reports.insightReportId, profileId);
+      } catch (error) {
+        await updateProfileInsightReportGenerationStatus({
+          reportId: reports.insightReportId,
+          profileId,
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
 
       console.log(metrics);
 
@@ -203,6 +221,9 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       return {
         ok: true,
         id: measurementId,
+        reportId: reports.insightReportId,
+        reportStatus: "queued",
+        reports,
       };
     },
   );
@@ -288,11 +309,27 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         ffmi: calculateFfmi(metricsBase.fat_free_mass_kg, profile.heightCm),
       };
       await addDerivedBodyComposition(profileId, derivedMetrics);
-      await createSnapshotReports({
+      const reports = await createSnapshotReports({
         profileId,
         bodyCompositionMetricsId: metricsId,
         derivedMetrics,
       });
+      await updateProfileInsightReportGenerationStatus({
+        reportId: reports.insightReportId,
+        profileId,
+        status: "queued",
+      });
+      try {
+        await addQueueItem(reports.insightReportId, profileId);
+      } catch (error) {
+        await updateProfileInsightReportGenerationStatus({
+          reportId: reports.insightReportId,
+          profileId,
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
 
       console.log(metrics);
 
@@ -308,6 +345,9 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       return {
         ok: true,
         id: measurementId,
+        reportId: reports.insightReportId,
+        reportStatus: "queued",
+        reports,
       };
     },
   );
