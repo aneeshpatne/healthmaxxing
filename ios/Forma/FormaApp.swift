@@ -6,13 +6,19 @@
 //
 
 import SwiftUI
+import ClerkKit
 
 @main
 struct FormaApp: App {
+    init() {
+        Clerk.configure(publishableKey: ClerkConfig.publishableKey)
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .tint(.sleekAccent)
+                .environment(Clerk.shared)
         }
     }
 }

@@ -27,3 +27,6 @@ fastlane/test_output/
 
 # macOS
 .DS_Store
+
+# Local environment
+.env*

@@ -5,6 +5,7 @@
 //  Created by Aneesh Patne on 19/06/26.
 //
 import SwiftUI
+import ClerkKitUI
 
 let headerHeight: CGFloat = 128
 
@@ -43,10 +44,8 @@ struct FormaHeader: View {
 
                 Spacer()
 
-                Image(systemName: "person.crop.circle")
-                    .font(.system(size: 24, weight: .medium))
+                UserButton()
                     .frame(width: 42, height: 42)
-                    .foregroundStyle(.secondary)
                     .glassEffect(.regular, in: Circle())
             }
             .frame(height: headerContentHeight)
