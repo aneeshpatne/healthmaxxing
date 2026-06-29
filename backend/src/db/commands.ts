@@ -167,6 +167,33 @@ export type UpdateObservationFieldRemarkInput = {
   remark: string;
 };
 
+export type ProfileAiReportJsonLd = {
+  reportId: string;
+  profileId: ProfileId;
+  data: unknown;
+};
+
+export type ProfileInsightGenerationStatus =
+  | "pending"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed";
+
+export type ProfileAiReportById = {
+  reportId: string;
+  profileId: ProfileId;
+  generationStatus: ProfileInsightGenerationStatus;
+  generationError: string | null;
+  createdAt: string;
+  updatedAt: string;
+  data: unknown | null;
+};
+
+export type RecentProfileAiReport = Omit<ProfileAiReportById, "data"> & {
+  hasData: boolean;
+};
+
 export type LatestBodyCompositionSnapshot = {
   createdAt: string;
   metrics: BodyCompositionMetricsNewRow;
@@ -1651,10 +1678,11 @@ async function getOrCreateProfileInsightReport(
     id,
     profile_id,
     body_composition_metrics_id,
+    generation_status,
     created_at,
     updated_at
   )
-  SELECT ?, ?, ?, created_at, CURRENT_TIMESTAMP
+  SELECT ?, ?, ?, 'pending', created_at, CURRENT_TIMESTAMP
   FROM body_composition_metrics_new
   WHERE id = ?
 `,
@@ -1834,15 +1862,33 @@ export async  function createSnapshotReports({
   derivedMetrics?: DerivedBodyCompositionMetrics;
   modelName?: string | null;
 }) {
-  await getOrCreatePerformanceReport(
+  const performanceReportId = await getOrCreatePerformanceReport(
     profileId,
     bodyCompositionMetricsId,
     derivedMetrics,
     modelName,
   );
-  await getOrCreateProfileInsightReport(profileId, bodyCompositionMetricsId);
-  await getOrCreateFatReport(profileId, bodyCompositionMetricsId, modelName);
-  await getOrCreateMuscleReport(profileId, bodyCompositionMetricsId, modelName);
+  const insightReportId = await getOrCreateProfileInsightReport(
+    profileId,
+    bodyCompositionMetricsId,
+  );
+  const fatReportId = await getOrCreateFatReport(
+    profileId,
+    bodyCompositionMetricsId,
+    modelName,
+  );
+  const muscleReportId = await getOrCreateMuscleReport(
+    profileId,
+    bodyCompositionMetricsId,
+    modelName,
+  );
+
+  return {
+    performanceReportId,
+    insightReportId,
+    fatReportId,
+    muscleReportId,
+  };
 }
 
   async function getLatestReportIds(profileId: ProfileId) {
@@ -2203,6 +2249,124 @@ export async function upsertProfileEffortScore({
   WHERE id = ?
 `,
   ).run(score, remark, modelName, reportIds.insightReportId);
+}
+
+export async function upsertProfileAiReportJsonLd({
+  reportId,
+  profileId,
+  data,
+}: ProfileAiReportJsonLd) {
+  await db.prepare(
+    `
+  INSERT INTO profile_ai_report_jsonld (
+    report_id,
+    profile_id,
+    data
+  )
+  VALUES (?, ?, ?::jsonb)
+  ON CONFLICT (report_id) DO UPDATE SET
+    profile_id = EXCLUDED.profile_id,
+    data = EXCLUDED.data,
+    created_on = CURRENT_TIMESTAMP
+`,
+  ).run(reportId, profileId, JSON.stringify(data));
+}
+
+export async function updateProfileInsightReportGenerationStatus({
+  reportId,
+  profileId,
+  status,
+  error = null,
+}: {
+  reportId: string;
+  profileId: ProfileId;
+  status: ProfileInsightGenerationStatus;
+  error?: string | null;
+}) {
+  await db.prepare(
+    `
+  UPDATE profile_insight_reports
+  SET
+    generation_status = ?,
+    generation_error = ?,
+    updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
+    AND profile_id = ?
+`,
+  ).run(status, error, reportId, profileId);
+}
+
+function parseJsonData(raw: unknown): unknown {
+  return typeof raw === "string" ? JSON.parse(raw) : raw;
+}
+
+export async function getProfileAiReportById({
+  profileId,
+  reportId,
+}: {
+  profileId: ProfileId;
+  reportId: string;
+}): Promise<ProfileAiReportById | null> {
+  const row = await db
+    .prepare(
+      `
+  SELECT
+    profile_insight_reports.id AS reportId,
+    profile_insight_reports.profile_id AS profileId,
+    profile_insight_reports.generation_status AS generationStatus,
+    profile_insight_reports.generation_error AS generationError,
+    profile_insight_reports.created_at AS createdAt,
+    profile_insight_reports.updated_at AS updatedAt,
+    profile_ai_report_jsonld.data AS data
+  FROM profile_insight_reports
+  LEFT JOIN profile_ai_report_jsonld
+    ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
+  WHERE profile_insight_reports.id = ?
+    AND profile_insight_reports.profile_id = ?
+  LIMIT 1
+`,
+    )
+    .get(reportId, profileId) as
+    | (Omit<ProfileAiReportById, "data"> & { data: unknown | null })
+    | null;
+
+  if (row === null) {
+    return null;
+  }
+
+  return {
+    ...row,
+    data: row.data === null ? null : parseJsonData(row.data),
+  };
+}
+
+export async function listRecentProfileAiReports({
+  profileId,
+  limit = 5,
+}: {
+  profileId: ProfileId;
+  limit?: number;
+}): Promise<RecentProfileAiReport[]> {
+  return await db
+    .prepare(
+      `
+  SELECT
+    profile_insight_reports.id AS reportId,
+    profile_insight_reports.profile_id AS profileId,
+    profile_insight_reports.generation_status AS generationStatus,
+    profile_insight_reports.generation_error AS generationError,
+    profile_insight_reports.created_at AS createdAt,
+    profile_insight_reports.updated_at AS updatedAt,
+    profile_ai_report_jsonld.report_id IS NOT NULL AS hasData
+  FROM profile_insight_reports
+  LEFT JOIN profile_ai_report_jsonld
+    ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
+  WHERE profile_insight_reports.profile_id = ?
+  ORDER BY profile_insight_reports.created_at DESC
+  LIMIT ?
+`,
+    )
+    .all(profileId, limit) as RecentProfileAiReport[];
 }
 
 export async function upsertDerivedMetricsComments({
