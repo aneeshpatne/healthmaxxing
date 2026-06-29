@@ -51,9 +51,6 @@ Default to complement for strengths and trend_up/trend_down only when describing
 Never use risk-focused, fear-based, or clinical language. No diagnoses, no cliches. Keep every field concise — if a sentence needs a dash or semicolon, split it or cut it.`,
 );
 
-const dummyReportId = "dummy-report-id";
-const dummyProfileId = "019e8724-ccf0-73cb-9c7d-822478474e90";
-
 export type TokenUsage = {
   input: number;
   output: number;
@@ -135,6 +132,8 @@ export function getTokenUsage(result: unknown): TokenUsage {
 }
 
 export async function analyzeHealthDataNew(input: {
+  reportId: string;
+  profileId: string;
   profileMetadata: string;
   bodyCompositionDelta: string;
   bodyMeasurementDelta: string;
@@ -144,7 +143,7 @@ export async function analyzeHealthDataNew(input: {
 }) {
   const healthAgent = createAgent({
     model,
-    tools: createTools(dummyReportId, dummyProfileId),
+    tools: createTools(input.reportId, input.profileId),
   });
 
   const result = await healthAgent.invoke({

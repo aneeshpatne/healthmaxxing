@@ -20,6 +20,7 @@ export type AgentOrchestratorNewResult = {
 
 export async function runAgentOrchestratorNew(
   userId: string,
+  reportId: string,
 ): Promise<AgentOrchestratorNewResult> {
   const bodyCompositionDelta =
     await getBodyCompositionMeasurementDeltaV2(userId);
@@ -49,22 +50,18 @@ export async function runAgentOrchestratorNew(
         },
       )
     : "No health data available.";
-  const formattedLatestBodyMeasurement =
-    formatLatestBodyMeasurement(latestBodyMeasurement);
+  const formattedLatestBodyMeasurement = formatLatestBodyMeasurement(
+    latestBodyMeasurement,
+  );
   const formattedLatestBodyCompositionMeasurement =
     formatLatestBodyCompositionMeasurement(latestBodyCompositionMeasurement);
   const formattedProfileMetadata = formatRecordAsTsv(
     profileMetadata as Record<string, unknown> | null,
   );
 
-  console.log(formattedBodyCompositionDelta);
-  console.log(formattedBodyMeasurementDelta);
-  console.log(formattedFirstHealthDataEntryDate);
-  console.log(formattedLatestBodyMeasurement);
-  console.log(formattedLatestBodyCompositionMeasurement);
-  console.log(formattedProfileMetadata);
-
   const data = await analyzeHealthDataNew({
+    reportId,
+    profileId: userId,
     profileMetadata: formattedProfileMetadata,
     bodyCompositionDelta: formattedBodyCompositionDelta,
     bodyMeasurementDelta: formattedBodyMeasurementDelta,
@@ -82,5 +79,3 @@ export async function runAgentOrchestratorNew(
 
   return data;
 }
-
-await runAgentOrchestratorNew("019e8724-ccf0-73cb-9c7d-822478474e90");
