@@ -1,6 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
 import { v7 as uuidv7 } from "uuid";
-import { RedisClient } from "bun";
 import {
   addBodyMeasurement,
   accountExists,
@@ -33,24 +32,6 @@ import {
   type ProfileId,
 } from "../db/commands";
 
-const redis = new RedisClient("redis://localhost:6379");
-const sub = new RedisClient("redis://localhost:6379");
-const LONG_POLL_TIMEOUT_MS = 25_000;
-
-type JobStatusState = {
-  status?: string;
-  version?: number;
-  updatedAt?: number;
-};
-
-function parseJobStatus(raw: string): JobStatusState | null {
-  try {
-    return JSON.parse(raw) as JobStatusState;
-  } catch {
-    return null;
-  }
-}
-
 function calculateAgeYears(dateOfBirth: string): number {
   const birthDate = new Date(dateOfBirth);
   const now = new Date();
@@ -71,107 +52,6 @@ function calculateAgeYears(dateOfBirth: string): number {
 }
 
 const clientRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/state/:id/poll", async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const { version } = req.query as { version: string };
-    const clientVersion = Number(version ?? 0);
-    const stateKey = `status:${id}`;
-    const channel = `status:${id}`;
-
-    const currentRaw = await redis.get(stateKey);
-
-    if (currentRaw === null) {
-      return reply.code(404).send({
-        ok: false,
-        error: "Job status does not exist",
-      });
-    }
-
-    const currentState = parseJobStatus(currentRaw);
-
-    if (currentState === null) {
-      return reply.code(500).send({
-        ok: false,
-        error: "Job status is invalid",
-      });
-    }
-
-    if ((currentState.version ?? 0) > clientVersion) {
-      return reply.send({
-        ok: true,
-        changed: true,
-        state: currentState,
-      });
-    }
-
-    const nextState = await new Promise<JobStatusState | null>(
-      (resolve, reject) => {
-        let settled = false;
-        let timeout: ReturnType<typeof setTimeout>;
-
-        const settle = (state: JobStatusState | null) => {
-          if (settled) {
-            return;
-          }
-
-          settled = true;
-          clearTimeout(timeout);
-          sub.unsubscribe(channel, listener).catch((error) => {
-            app.log.warn({ error, channel }, "Failed to unsubscribe long poll");
-          });
-          resolve(state);
-        };
-
-        const listener = (message: string) => {
-          const state = parseJobStatus(message);
-
-          if (state !== null && (state.version ?? 0) > clientVersion) {
-            settle(state);
-          }
-        };
-
-        timeout = setTimeout(() => {
-          settle(null);
-        }, LONG_POLL_TIMEOUT_MS);
-
-        sub
-          .subscribe(channel, listener)
-          .then(async () => {
-            const latestRaw = await redis.get(stateKey);
-            const latestState =
-              latestRaw === null ? null : parseJobStatus(latestRaw);
-
-            if (
-              latestState !== null &&
-              (latestState.version ?? 0) > clientVersion
-            ) {
-              settle(latestState);
-            }
-          })
-          .catch((error) => {
-            if (!settled) {
-              settled = true;
-              clearTimeout(timeout);
-              reject(error);
-            }
-          });
-      },
-    );
-
-    if (nextState === null) {
-      return reply.send({
-        ok: true,
-        changed: false,
-        state: currentState,
-      });
-    }
-
-    return reply.send({
-      ok: true,
-      changed: true,
-      state: nextState,
-    });
-  });
   app.post(
     "/register",
     {
@@ -871,15 +751,6 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      await redis.set(
-        `status:${id}`,
-        JSON.stringify({
-          status: "starting",
-          version: 1,
-          updatedAt: Date.now(),
-        }),
-      );
-
       const response = await fetch(
         `http://192.168.0.50/scale?id=${encodeURIComponent(id)}`,
       );
@@ -938,19 +809,6 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  app.get("/ws/sub/:jobId", { websocket: true }, async (socket, request) => {
-    const { jobId } = request.params as { jobId: string };
-    const channel = `job:${jobId}`;
-    const listener = (message: string) => {
-      socket.send(message);
-    };
-
-    socket.on("close", async () => {
-      await sub.unsubscribe(channel, listener);
-    });
-
-    await sub.subscribe(channel, listener);
-  });
 };
 
 export default clientRoutes;
