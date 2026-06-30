@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { clerkPlugin } from "@clerk/fastify";
 import websocket from "@fastify/websocket";
 import clientRoutes from "./routes/client.ts";
 import ingestRoutes from "./routes/ingest.ts";
@@ -10,6 +11,7 @@ export function buildApp() {
     bodyLimit: 10 * 1024 * 1024,
   });
 
+  app.register(clerkPlugin);
   app.get("/health", async (_request, reply) => {
     try {
       await checkDatabase();

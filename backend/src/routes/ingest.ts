@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { authMiddleware } from "../middleware/auth";
 import {
   addDerivedBodyComposition,
   addMeasurement,
@@ -22,6 +23,8 @@ import { calculateAgeYears } from "../utils/calculateAgeYears";
 import { addQueueItem } from "../bull/queue";
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
+  app.addHook("preHandler", authMiddleware);
+
   app.post("/workouts", async (request, reply) => {
     const body = request.body as {
       data?: {

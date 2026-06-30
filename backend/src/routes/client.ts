@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
+import { authMiddleware } from "../middleware/auth";
 import { v7 as uuidv7 } from "uuid";
 import {
   addBodyMeasurement,
-  accountExists,
   getLatestBodyCompositionSnapshot,
   getLatestUserBodyMeasurement,
   getProfileById,
@@ -26,10 +26,8 @@ import {
   profileExists,
   registerProfileMetadata,
   registerProfile,
-  registerUser,
   PERIODS,
   TREND_COLUMNS,
-  type AccountId,
   type JobId,
   type ProfileId,
 } from "../db/commands";
@@ -54,35 +52,25 @@ function calculateAgeYears(dateOfBirth: string): number {
 }
 
 const clientRoutes: FastifyPluginAsync = async (app) => {
+  app.addHook("preHandler", authMiddleware);
+
   app.post(
     "/register",
-    {
-      schema: {
-        body: {
-          type: "object",
-          required: ["mailAddress"],
-          properties: {
-            mailAddress: {
-              type: "string",
-            },
-          },
-        },
-      },
-    },
     async (request, reply) => {
-      const { mailAddress } = request.body as {
-        mailAddress: string;
-      };
-      const id: AccountId = await registerUser({
-        mailAddress,
-      });
+      const {
+        account,
+        clerkUserId,
+      } = request.auth;
 
-      app.log.info({ id, mailAddress }, "Registered account");
+      app.log.info(
+        { id: account.id, clerkUserId },
+        "Resolved account from auth middleware",
+      );
 
       return reply.code(201).send({
         ok: true,
-        id,
-        mailAddress,
+        id: account.id,
+        account,
       });
     },
   );
@@ -93,11 +81,8 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         body: {
           type: "object",
-          required: ["accountId", "name"],
+          required: ["name"],
           properties: {
-            accountId: {
-              type: "string",
-            },
             name: {
               type: "string",
             },
@@ -109,18 +94,11 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
-      const { accountId, name, isPrimary = false } = request.body as {
-        accountId: string;
+      const { name, isPrimary = false } = request.body as {
         name: string;
         isPrimary?: boolean;
       };
-
-      if (!await accountExists(accountId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Account id does not exist",
-        });
-      }
+      const accountId = request.auth.account.id;
 
       const id: ProfileId = await registerProfile({
         accountId,
