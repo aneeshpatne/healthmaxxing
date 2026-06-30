@@ -1,4 +1,4 @@
-CREATE TABLE accounts (id text PRIMARY KEY, mail_address text UNIQUE, created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE accounts (id text PRIMARY KEY, mail_address text UNIQUE, clerk_user_id text UNIQUE, created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE profiles (id text PRIMARY KEY, account_id text NOT NULL REFERENCES accounts(id), name text, is_primary boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE profile_metadata (profile_id text PRIMARY KEY REFERENCES profiles(id), height_cm double precision, date_of_birth text, people_type text, gender text, profile_image text, preferred_body_fat_pct double precision NOT NULL DEFAULT 18, updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE jobs (id text PRIMARY KEY, profile_id text NOT NULL REFERENCES profiles(id), status text NOT NULL, created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP, completed_at timestamptz, result text, error text);
