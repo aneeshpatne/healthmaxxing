@@ -15,7 +15,7 @@ protocol APIRequest {
 
     var headers: [String: String] { get }
     var queryItems: [URLQueryItem] { get }
-    var body: Data? { get }
+    var body: (any Encodable)? { get }
 
     var requiresAuth: Bool { get }
 }
