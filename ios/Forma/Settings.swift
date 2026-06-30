@@ -23,7 +23,7 @@ struct Settings: View {
                 settingsRow(
                     title: "Notifications",
                     systemImage: "bell.badge",
-                    tint: .red
+                    tint: .red 
                 ) {
                     SettingsDetailView(title: "Notifications")
                 }
