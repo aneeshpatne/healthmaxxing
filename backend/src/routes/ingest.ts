@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { authMiddleware } from "../middleware/auth";
 import {
   addDerivedBodyComposition,
@@ -7,8 +7,9 @@ import {
   addWorkout,
   createSnapshotReports,
   getProfileById,
-  profileExists,
+  profileBelongsToAccount,
   updateProfileInsightReportGenerationStatus,
+  type ProfileId,
   type WorkoutInput,
   type profile,
 } from "../db/commands";
@@ -21,6 +22,22 @@ import {
 import { backfillBodyCompositionFromGrpc } from "../lib/backfillBodyComposition";
 import { calculateAgeYears } from "../utils/calculateAgeYears";
 import { addQueueItem } from "../bull/queue";
+
+async function sendProfileNotFoundIfUnauthorized(
+  profileId: ProfileId,
+  accountId: string,
+  reply: FastifyReply,
+) {
+  if (await profileBelongsToAccount(profileId, accountId)) {
+    return false;
+  }
+
+  reply.code(404).send({
+    ok: false,
+    error: "Profile id does not exist",
+  });
+  return true;
+}
 
 const ingestRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authMiddleware);
@@ -45,11 +62,14 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    if (!(await profileExists(profileId))) {
-      return reply.code(404).send({
-        ok: false,
-        error: "Profile id does not exist",
-      });
+    if (
+      await sendProfileNotFoundIfUnauthorized(
+        profileId,
+        request.auth.account.id,
+        reply,
+      )
+    ) {
+      return;
     }
 
     if (!Array.isArray(workouts)) {
@@ -90,14 +110,19 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
     const body = (request.body ?? {}) as { profileId?: string };
     const profileId = body.profileId?.trim();
 
-    if (profileId && !(await profileExists(profileId))) {
-      return reply.code(404).send({
-        ok: false,
-        error: "Profile id does not exist",
-      });
+    if (
+      profileId &&
+      await sendProfileNotFoundIfUnauthorized(
+        profileId,
+        request.auth.account.id,
+        reply,
+      )
+    ) {
+      return;
     }
 
     const result = await backfillBodyCompositionFromGrpc({
+      accountId: request.auth.account.id,
       profileId: profileId || undefined,
     });
 
@@ -139,11 +164,14 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         impedance: number;
       };
 
-      if (!(await profileExists(profileId))) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const measurementId = await addMeasurement(
@@ -263,11 +291,14 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         impedance: number;
       };
 
-      if (!(await profileExists(profileId))) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const measurementId = await addMeasurement(
