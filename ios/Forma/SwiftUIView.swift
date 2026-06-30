@@ -19,31 +19,33 @@ struct SwiftUIView: View {
     @State private var selectedMetricsTab: MetricsTab = .insights
 
     var body: some View {
-        TabView(selection: $activeTab) {
-            Tab("Metrics", systemImage: "chart.xyaxis.line", value: .metrics) {
-                MetricsView(selectedTab: $selectedMetricsTab)
-                    .safeAreaPadding(.top, headerHeight + glassTabBarHeight)
-                    .ignoresSafeArea(.container, edges: .top)
-            }
+        NavigationStack {
+            TabView(selection: $activeTab) {
+                Tab("Metrics", systemImage: "chart.xyaxis.line", value: .metrics) {
+                    MetricsView(selectedTab: $selectedMetricsTab)
+                        .safeAreaPadding(.top, headerHeight + glassTabBarHeight)
+                        .ignoresSafeArea(.container, edges: .top)
+                }
 
-            Tab("Workouts", systemImage: "figure.strengthtraining.traditional", value: .workouts) {
-                WorkoutsView()
-                    .ignoresSafeArea(.container, edges: .top)
-            }
+                Tab("Workouts", systemImage: "figure.strengthtraining.traditional", value: .workouts) {
+                    WorkoutsView()
+                        .ignoresSafeArea(.container, edges: .top)
+                }
 
-            Tab("Record", systemImage: "record.circle", value: .record) {
-                RecordView()
-                    .ignoresSafeArea(.container, edges: .top)
-            }
+                Tab("Record", systemImage: "record.circle", value: .record) {
+                    RecordView()
+                        .ignoresSafeArea(.container, edges: .top)
+                }
 
-            Tab("Vitals", systemImage: "heart.text.square", value: .vitals) {
-                VitalsView()
-                    .ignoresSafeArea(.container, edges: .top)
+                Tab("Vitals", systemImage: "heart.text.square", value: .vitals) {
+                    VitalsView()
+                        .ignoresSafeArea(.container, edges: .top)
+                }
             }
-        }
-        .tabBarMinimizeBehavior(.onScrollDown)
-        .overlay(alignment: .top) {
-            FormaHeader(activeTab: $activeTab, selectedMetricsTab: $selectedMetricsTab)
+            .tabBarMinimizeBehavior(.onScrollDown)
+            .overlay(alignment: .top) {
+                FormaHeader(activeTab: $activeTab, selectedMetricsTab: $selectedMetricsTab)
+            }
         }
     }
 }
