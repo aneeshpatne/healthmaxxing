@@ -14,7 +14,7 @@ private let headerContentHeight: CGFloat = 68
 struct FormaHeader: View {
     @Binding var activeTab: AppTab
     @Binding var selectedMetricsTab: MetricsTab
-
+    
     // Dynamic greeting based on the current time of day
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -36,21 +36,28 @@ struct FormaHeader: View {
                         .font(Font.cormorantGaramond(size: 34).weight(.bold))
                         .foregroundStyle(.primary)
                         .kerning(0.5)
-
+                    
                     Text(greeting)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
-
+                
                 Spacer()
-
-                UserButton()
-                    .frame(width: 42, height: 42)
-                    .glassEffect(.regular, in: Circle())
+                NavigationLink {
+                    Settings()
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color.primary)
+                }
+                //
+                //                UserButton()
+                //                    .frame(width: 42, height: 42)
+                //                    .glassEffect(.regular, in: Circle())
             }
             .frame(height: headerContentHeight)
             .padding(.horizontal, 20)
-
+            
             if activeTab == .metrics {
                 GlassTabBar(selectedTab: $selectedMetricsTab)
             }
@@ -81,7 +88,7 @@ struct FormaHeader: View {
                             .frame(height: 0.5)
                     }
                     .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
-                    // Extend the background into the safe area above
+                // Extend the background into the safe area above
                     .padding(.top, -geo.safeAreaInsets.top)
             }
         }
