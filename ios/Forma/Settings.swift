@@ -11,22 +11,15 @@ import ClerkKitUI
 struct Settings: View {
     var body: some View {
         Form {
-            Section("Account") {
+            Section("Profiles") {
                 settingsRow(
-                    title: "Edit Profile",
+                    title: "Manage Profiles",
                     systemImage: "person.crop.circle",
                     tint: .blue
                 ) {
-                    SettingsDetailView(title: "Edit Profile")
+                    Profiles()
                 }
 
-                settingsRow(
-                    title: "Notifications",
-                    systemImage: "bell.badge",
-                    tint: .red 
-                ) {
-                    SettingsDetailView(title: "Notifications")
-                }
             }
 
             Section("User Management") {
