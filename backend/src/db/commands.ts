@@ -948,6 +948,24 @@ export async function profileExists(profileId: ProfileId) {
   return profile !== null;
 }
 
+export async function profileBelongsToAccount(
+  profileId: ProfileId,
+  accountId: AccountId,
+) {
+  const profile = await db    .prepare(
+      `
+  SELECT 1
+  FROM profiles
+  WHERE id = ?
+    AND account_id = ?
+  LIMIT 1
+`,
+    )
+    .get(profileId, accountId);
+
+  return profile !== null;
+}
+
 export async function accountExists(accountId: AccountId) {
   const account = await db    .prepare(
       `
@@ -1932,15 +1950,23 @@ export async function listBodyCompositionTrends({
   metric,
   period,
   profileId,
+  accountId,
 }: {
   metric: BodyCompositionTrendMetric;
   period: BodyCompositionTrendPeriod;
   profileId?: ProfileId;
+  accountId?: AccountId;
 }) {
   const range = PERIODS[period];
-  const profileFilter = profileId === undefined ? "" : "AND profile_id = ?";
-  const rangeFilter = range === null ? "" : "AND created_at >= datetime('now', ?)";
+  const profileFilter = profileId === undefined
+    ? ""
+    : "AND body_composition_metrics_new.profile_id = ?";
+  const accountFilter = accountId === undefined ? "" : "AND profiles.account_id = ?";
+  const rangeFilter = range === null
+    ? ""
+    : "AND body_composition_metrics_new.created_at >= datetime('now', ?)";
   const params = [
+    ...(accountId === undefined ? [] : [accountId]),
     ...(profileId === undefined ? [] : [profileId]),
     ...(range === null ? [] : [range]),
   ];
@@ -1950,13 +1976,16 @@ export async function listBodyCompositionTrends({
       `
   SELECT
     profile_id AS profileId,
-    created_at AS createdAt,
+    body_composition_metrics_new.created_at AS createdAt,
     ${metric} AS value
   FROM body_composition_metrics_new
+  INNER JOIN profiles
+    ON profiles.id = body_composition_metrics_new.profile_id
   WHERE 1 = 1
+    ${accountFilter}
     ${profileFilter}
     ${rangeFilter}
-  ORDER BY created_at ASC
+  ORDER BY body_composition_metrics_new.created_at ASC
 `,
     )
     .all(...params) as BodyCompositionTrendPoint[];
@@ -3393,6 +3422,39 @@ export async function listUsers() {
 `,
     )
     .all() as UserRow[];
+
+  return rows.map((row) => ({
+    ...row,
+    isPrimary: row.isPrimary === 1,
+  }));
+}
+
+export async function listUsersByAccountId(accountId: AccountId) {
+  const rows = await db    .prepare(
+      `
+  SELECT
+    profiles.id,
+    profiles.account_id AS accountId,
+    profiles.name,
+    accounts.mail_address AS mailAddress,
+    profiles.is_primary AS isPrimary,
+    profile_metadata.height_cm AS heightCm,
+    profile_metadata.date_of_birth AS dateOfBirth,
+    profile_metadata.people_type AS peopleType,
+    profile_metadata.gender,
+    profile_metadata.profile_image AS profileImage,
+    profile_metadata.preferred_body_fat_pct AS preferredBodyFatPct,
+    profiles.created_at AS createdAt
+  FROM profiles
+  INNER JOIN accounts
+    ON accounts.id = profiles.account_id
+  LEFT JOIN profile_metadata
+    ON profile_metadata.profile_id = profiles.id
+  WHERE profiles.account_id = ?
+  ORDER BY profiles.created_at DESC
+`,
+    )
+    .all(accountId) as UserRow[];
 
   return rows.map((row) => ({
     ...row,
