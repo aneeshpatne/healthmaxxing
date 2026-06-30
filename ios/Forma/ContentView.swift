@@ -13,7 +13,7 @@ struct ContentView: View {
 
     var body: some View {
         if clerk.user != nil {
-            SwiftUIView()
+            PrimaryProfileGate()
         } else {
             ClerkSignInView()
         }
