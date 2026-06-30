@@ -730,6 +730,19 @@ export type RegisterProfileMetadataInput = {
   preferredBodyFatPct?: number;
 };
 
+export type UpdateProfileInput = {
+  profileId: ProfileId;
+  accountId: AccountId;
+  name?: string;
+  isPrimary?: boolean;
+  heightCm?: number;
+  dateOfBirth?: string;
+  peopleType?: "standard" | "athlete";
+  gender?: "male" | "female";
+  profileImage?: string | null;
+  preferredBodyFatPct?: number;
+};
+
 export type BodyMeasurementInput = {
   neckCm?: number | null;
   shoulderCm?: number | null;
@@ -1264,20 +1277,40 @@ export async function registerProfile({
 }: RegisterProfileInput) {
   const profileId: ProfileId = uuidv7();
 
-  await db.prepare(
-    `
-  INSERT INTO profiles (
-    id,
-    account_id,
-    name,
-    is_primary,
-    created_at
-  )
-  VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-`,
-  ).run(profileId, accountId, name, isPrimary);
+  let shouldBePrimary = isPrimary;
 
-  return profileId;
+  await db.transaction(async (tx) => {
+    const countRow = await tx.prepare(
+      `
+    SELECT COUNT(*) AS count FROM profiles WHERE account_id = ?
+    `,
+    ).get(accountId) as { count: number } | null;
+
+    shouldBePrimary = isPrimary || Number(countRow?.count ?? 0) === 0;
+
+    if (shouldBePrimary) {
+      await tx.prepare(
+        `
+      UPDATE profiles SET is_primary = false WHERE account_id = ? AND id != ?
+      `,
+      ).run(accountId, profileId);
+    }
+
+    await tx.prepare(
+      `
+    INSERT INTO profiles (
+      id,
+      account_id,
+      name,
+      is_primary,
+      created_at
+    )
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `,
+    ).run(profileId, accountId, name, shouldBePrimary);
+  });
+
+  return { id: profileId, isPrimary: shouldBePrimary };
 }
 
 export async function registerProfileMetadata({
@@ -1320,6 +1353,82 @@ export async function registerProfileMetadata({
     profileImage,
     preferredBodyFatPct,
   );
+}
+
+export async function updateProfile({
+  profileId,
+  accountId,
+  name,
+  isPrimary,
+  heightCm,
+  dateOfBirth,
+  peopleType,
+  gender,
+  profileImage,
+  preferredBodyFatPct,
+}: UpdateProfileInput) {
+  await db.transaction(async (tx) => {
+    if (isPrimary === true) {
+      await tx.prepare(
+        `
+      UPDATE profiles SET is_primary = false WHERE account_id = ? AND id != ?
+      `,
+      ).run(accountId, profileId);
+    }
+
+    const profileUpdates: string[] = [];
+    const profileValues: (string | boolean)[] = [];
+
+    if (name !== undefined) {
+      profileUpdates.push("name = ?");
+      profileValues.push(name);
+    }
+    if (isPrimary !== undefined) {
+      profileUpdates.push("is_primary = ?");
+      profileValues.push(isPrimary);
+    }
+
+    if (profileUpdates.length > 0) {
+      await tx.prepare(
+        `UPDATE profiles SET ${profileUpdates.join(", ")} WHERE id = ?`,
+      ).run(...profileValues, profileId);
+    }
+
+    const metadataUpdates: string[] = [];
+    const metadataValues: (string | number | null)[] = [];
+
+    if (heightCm !== undefined) {
+      metadataUpdates.push("height_cm = ?");
+      metadataValues.push(heightCm);
+    }
+    if (dateOfBirth !== undefined) {
+      metadataUpdates.push("date_of_birth = ?");
+      metadataValues.push(dateOfBirth);
+    }
+    if (peopleType !== undefined) {
+      metadataUpdates.push("people_type = ?");
+      metadataValues.push(peopleType);
+    }
+    if (gender !== undefined) {
+      metadataUpdates.push("gender = ?");
+      metadataValues.push(gender);
+    }
+    if (profileImage !== undefined) {
+      metadataUpdates.push("profile_image = ?");
+      metadataValues.push(profileImage);
+    }
+    if (preferredBodyFatPct !== undefined) {
+      metadataUpdates.push("preferred_body_fat_pct = ?");
+      metadataValues.push(preferredBodyFatPct);
+    }
+
+    if (metadataUpdates.length > 0) {
+      metadataUpdates.push("updated_at = CURRENT_TIMESTAMP");
+      await tx.prepare(
+        `UPDATE profile_metadata SET ${metadataUpdates.join(", ")} WHERE profile_id = ?`,
+      ).run(...metadataValues, profileId);
+    }
+  });
 }
 
 export async function listUserWeight(profileId: ProfileId) {
@@ -3436,7 +3545,6 @@ export async function listUsersByAccountId(accountId: AccountId) {
     profiles.id,
     profiles.account_id AS accountId,
     profiles.name,
-    accounts.mail_address AS mailAddress,
     profiles.is_primary AS isPrimary,
     profile_metadata.height_cm AS heightCm,
     profile_metadata.date_of_birth AS dateOfBirth,
@@ -3446,8 +3554,6 @@ export async function listUsersByAccountId(accountId: AccountId) {
     profile_metadata.preferred_body_fat_pct AS preferredBodyFatPct,
     profiles.created_at AS createdAt
   FROM profiles
-  INNER JOIN accounts
-    ON accounts.id = profiles.account_id
   LEFT JOIN profile_metadata
     ON profile_metadata.profile_id = profiles.id
   WHERE profiles.account_id = ?

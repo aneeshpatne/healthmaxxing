@@ -27,6 +27,7 @@ import {
   profileBelongsToAccount,
   registerProfileMetadata,
   registerProfile,
+  updateProfile,
   PERIODS,
   TREND_COLUMNS,
   type JobId,
@@ -95,6 +96,9 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/register/profiles",
     {
+      config: {
+        deprecated: true,
+      },
       schema: {
         body: {
           type: "object",
@@ -111,26 +115,33 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
+      reply.header("Deprecation", "true");
+      reply.header("Sunset", "Tue, 30 Jun 2026 23:59:59 GMT");
+      reply.header("Link", '</client/register/profiles/v2>; rel="successor-version"');
+
       const { name, isPrimary = false } = request.body as {
         name: string;
         isPrimary?: boolean;
       };
       const accountId = request.auth.account.id;
 
-      const id: ProfileId = await registerProfile({
+      const { id, isPrimary: registeredIsPrimary } = await registerProfile({
         accountId,
         name,
         isPrimary,
       });
 
-      app.log.info({ id, accountId, name, isPrimary }, "Registered profile");
+      app.log.info(
+        { id, accountId, name, isPrimary: registeredIsPrimary },
+        "Registered profile",
+      );
 
       return reply.code(201).send({
         ok: true,
         id,
         accountId,
         name,
-        isPrimary,
+        isPrimary: registeredIsPrimary,
       });
     },
   );
@@ -138,6 +149,9 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/register/metadata",
     {
+      config: {
+        deprecated: true,
+      },
       schema: {
         body: {
           type: "object",
@@ -179,6 +193,10 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
+      reply.header("Deprecation", "true");
+      reply.header("Sunset", "Tue, 30 Jun 2026 23:59:59 GMT");
+      reply.header("Link", '</client/register/profiles/v2>; rel="successor-version"');
+
       const {
         profileId,
         heightCm,
@@ -233,6 +251,245 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(201).send({
         ok: true,
         profileId,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage,
+        preferredBodyFatPct,
+      });
+    },
+  );
+
+  app.post(
+    "/register/profiles/v2",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["name", "heightCm", "dateOfBirth", "peopleType", "gender"],
+          properties: {
+            name: {
+              type: "string",
+            },
+            isPrimary: {
+              type: "boolean",
+              default: false,
+            },
+            heightCm: {
+              type: "number",
+            },
+            dateOfBirth: {
+              type: "string",
+            },
+            peopleType: {
+              type: "string",
+              enum: ["standard", "athlete"],
+            },
+            gender: {
+              type: "string",
+              enum: ["male", "female"],
+            },
+            profileImage: {
+              type: "string",
+              nullable: true,
+            },
+            preferredBodyFatPct: {
+              type: "number",
+              default: 18,
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const {
+        name,
+        isPrimary = false,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage = null,
+        preferredBodyFatPct = 18,
+      } = request.body as {
+        name: string;
+        isPrimary?: boolean;
+        heightCm: number;
+        dateOfBirth: string;
+        peopleType: "standard" | "athlete";
+        gender: "male" | "female";
+        profileImage?: string | null;
+        preferredBodyFatPct?: number;
+      };
+      const accountId = request.auth.account.id;
+
+      const {
+        id: profileId,
+        isPrimary: registeredIsPrimary,
+      } = await registerProfile({
+        accountId,
+        name,
+        isPrimary,
+      });
+
+      await registerProfileMetadata({
+        profileId,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage,
+        preferredBodyFatPct,
+      });
+
+      app.log.info(
+        {
+          profileId,
+          accountId,
+          name,
+          isPrimary: registeredIsPrimary,
+          heightCm,
+          dateOfBirth,
+          peopleType,
+          gender,
+          profileImage,
+          preferredBodyFatPct,
+        },
+        "Registered profile with metadata",
+      );
+
+      return reply.code(201).send({
+        ok: true,
+        profileId,
+        accountId,
+        name,
+        isPrimary: registeredIsPrimary,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage,
+        preferredBodyFatPct,
+      });
+    },
+  );
+
+  app.patch(
+    "/profiles/:profileId",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+        body: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+            },
+            isPrimary: {
+              type: "boolean",
+            },
+            heightCm: {
+              type: "number",
+            },
+            dateOfBirth: {
+              type: "string",
+            },
+            peopleType: {
+              type: "string",
+              enum: ["standard", "athlete"],
+            },
+            gender: {
+              type: "string",
+              enum: ["male", "female"],
+            },
+            profileImage: {
+              type: "string",
+              nullable: true,
+            },
+            preferredBodyFatPct: {
+              type: "number",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+      const accountId = request.auth.account.id;
+      const {
+        name,
+        isPrimary,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage,
+        preferredBodyFatPct,
+      } = request.body as {
+        name?: string;
+        isPrimary?: boolean;
+        heightCm?: number;
+        dateOfBirth?: string;
+        peopleType?: "standard" | "athlete";
+        gender?: "male" | "female";
+        profileImage?: string | null;
+        preferredBodyFatPct?: number;
+      };
+
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          accountId,
+          reply,
+        )
+      ) {
+        return;
+      }
+
+      await updateProfile({
+        profileId,
+        accountId,
+        name,
+        isPrimary,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage,
+        preferredBodyFatPct,
+      });
+
+      app.log.info(
+        {
+          profileId,
+          name,
+          isPrimary,
+          heightCm,
+          dateOfBirth,
+          peopleType,
+          gender,
+          profileImage,
+          preferredBodyFatPct,
+        },
+        "Updated profile",
+      );
+
+      return reply.send({
+        ok: true,
+        profileId,
+        name,
+        isPrimary,
         heightCm,
         dateOfBirth,
         peopleType,
