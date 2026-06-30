@@ -10,6 +10,7 @@ import type { DatabaseClient } from "../db/client";
 import { calculateAgeYears } from "../utils/calculateAgeYears";
 
 type BackfillOptions = {
+  accountId?: string;
   profileId?: string;
 };
 
@@ -47,11 +48,20 @@ type BackfillResult = {
   };
 };
 
-async function listMeasurements(profileId?: string) {
+async function listMeasurements({
+  accountId,
+  profileId,
+}: BackfillOptions = {}) {
+  const accountFilter = accountId !== undefined
+    ? "AND profiles.account_id = ?"
+    : "";
   const profileFilter = profileId !== undefined
     ? "AND measurements.profile_id = ?"
     : "";
-  const params = profileId !== undefined ? [profileId] : [];
+  const params = [
+    ...(accountId !== undefined ? [accountId] : []),
+    ...(profileId !== undefined ? [profileId] : []),
+  ];
 
   return await db
     .prepare(
@@ -68,6 +78,8 @@ async function listMeasurements(profileId?: string) {
     profile_metadata.people_type AS peopleType,
     profile_metadata.preferred_body_fat_pct AS preferredBodyFatPct
   FROM measurements
+  INNER JOIN profiles
+    ON profiles.id = measurements.profile_id
   INNER JOIN profile_metadata
     ON profile_metadata.profile_id = measurements.profile_id
   WHERE measurements.weight IS NOT NULL
@@ -75,6 +87,7 @@ async function listMeasurements(profileId?: string) {
     AND profile_metadata.height_cm IS NOT NULL
     AND profile_metadata.date_of_birth IS NOT NULL
     AND profile_metadata.gender IS NOT NULL
+    ${accountFilter}
     ${profileFilter}
   ORDER BY measurements.profile_id ASC, measurements.created_at ASC, measurements.id ASC
 `,
@@ -105,9 +118,10 @@ async function deleteRows(table: string, ids: string[], client: DatabaseClient =
 }
 
 export async function backfillBodyCompositionFromGrpc({
+  accountId,
   profileId,
 }: BackfillOptions = {}) {
-  const measurements = await listMeasurements(profileId);
+  const measurements = await listMeasurements({ accountId, profileId });
   const measurementsByProfile = Map.groupBy(
     measurements,
     (measurement) => measurement.profileId,
