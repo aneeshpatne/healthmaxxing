@@ -72,6 +72,19 @@ async function sendProfileNotFoundIfUnauthorized(
 const clientRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authMiddleware);
 
+  app.addHook("preHandler", async (request) => {
+    if (
+      typeof request.params === "object" &&
+      request.params !== null &&
+      "profileId" in request.params
+    ) {
+      const params = request.params as Record<string, unknown>;
+      if (typeof params.profileId === "string") {
+        params.profileId = params.profileId.toLowerCase();
+      }
+    }
+  });
+
   app.post(
     "/register",
     async (request, reply) => {

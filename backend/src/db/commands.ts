@@ -707,7 +707,7 @@ export type Users = {
 };
 
 type UserRow = Omit<Users, "isPrimary"> & {
-  isPrimary: number;
+  isPrimary: boolean | number;
 };
 
 export type RegisterUserInput = {
@@ -930,7 +930,7 @@ export type profile = {
 };
 
 type ProfileRow = Omit<profile, "isPrimary"> & {
-  isPrimary: number;
+  isPrimary: boolean | number;
 };
 
 export async function jobExists(jobId: JobId) {
@@ -3534,7 +3534,7 @@ export async function listUsers() {
 
   return rows.map((row) => ({
     ...row,
-    isPrimary: row.isPrimary === 1,
+    isPrimary: row.isPrimary === true || row.isPrimary === 1,
   }));
 }
 
@@ -3564,7 +3564,7 @@ export async function listUsersByAccountId(accountId: AccountId) {
 
   return rows.map((row) => ({
     ...row,
-    isPrimary: row.isPrimary === 1,
+    isPrimary: row.isPrimary === true || row.isPrimary === 1,
   }));
 }
 
@@ -3594,6 +3594,6 @@ export async function getProfileById(id: ProfileId) {
 
   return {
     ...row,
-    isPrimary: row.isPrimary === 1,
+    isPrimary: row.isPrimary === true || row.isPrimary === 1,
   };
 }
