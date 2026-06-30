@@ -27,7 +27,6 @@ struct ClientProfile: Decodable, Identifiable {
     let id: UUID
     let accountId: UUID
     let name: String
-    let mailAddress: String
     let isPrimary: Bool
     let heightCm: Double?
     let dateOfBirth: String?
