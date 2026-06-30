@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { authMiddleware } from "../middleware/auth";
 import { v7 as uuidv7 } from "uuid";
 import {
@@ -22,8 +22,9 @@ import {
   listRecentProfileAiReports,
   listUserBodyMeasurements,
   listUsers,
+  listUsersByAccountId,
   listUserWeight,
-  profileExists,
+  profileBelongsToAccount,
   registerProfileMetadata,
   registerProfile,
   PERIODS,
@@ -49,6 +50,22 @@ function calculateAgeYears(dateOfBirth: string): number {
   }
 
   return age;
+}
+
+async function sendProfileNotFoundIfUnauthorized(
+  profileId: ProfileId,
+  accountId: string,
+  reply: FastifyReply,
+) {
+  if (await profileBelongsToAccount(profileId, accountId)) {
+    return false;
+  }
+
+  reply.code(404).send({
+    ok: false,
+    error: "Profile id does not exist",
+  });
+  return true;
 }
 
 const clientRoutes: FastifyPluginAsync = async (app) => {
@@ -180,11 +197,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         preferredBodyFatPct?: number;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       await registerProfileMetadata({
@@ -223,8 +243,29 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  app.get("/users", async (_request, reply) => {
-    const users = await listUsers();
+  app.get(
+    "/users",
+    {
+      config: {
+        deprecated: true,
+      },
+    },
+    async (_request, reply) => {
+      reply.header("Deprecation", "true");
+      reply.header("Sunset", "Tue, 30 Jun 2026 23:59:59 GMT");
+      reply.header("Link", '</client/profiles>; rel="successor-version"');
+
+      const users = await listUsers();
+
+      return reply.send({
+        ok: true,
+        users,
+      });
+    },
+  );
+
+  app.get("/profiles", async (request, reply) => {
+    const users = await listUsersByAccountId(request.auth.account.id);
 
     return reply.send({
       ok: true,
@@ -252,11 +293,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const profile = await getProfileById(profileId);
@@ -307,11 +351,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       return reply.send({
@@ -342,11 +389,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const fat = await getProfileFatReport(profileId);
@@ -386,11 +436,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const muscle = await getProfileMuscleReport(profileId);
@@ -430,11 +483,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const insights = await getProfileAiOverview(profileId);
@@ -491,11 +547,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         ? Math.min(Math.max(Math.trunc(parsedLimit), 1), 20)
         : 5;
 
-      if (!(await profileExists(profileId))) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const reports = await listRecentProfileAiReports({ profileId, limit });
@@ -532,11 +591,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         reportId: string;
       };
 
-      if (!(await profileExists(profileId))) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const report = await getProfileAiReportById({ profileId, reportId });
@@ -633,11 +695,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         forearmCm?: number | null;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const { id, createdAt } = await addBodyMeasurement(profileId, {
@@ -708,11 +773,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const bodyMeasurements = await listUserBodyMeasurements(profileId);
@@ -771,17 +839,22 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      if (profileId !== undefined && !await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        profileId !== undefined &&
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const points = await listBodyCompositionTrends({
         metric,
         period,
         profileId,
+        accountId: request.auth.account.id,
       });
 
       return reply.send({
@@ -796,57 +869,10 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     "/start",
-    {
-      schema: {
-        body: {
-          type: "object",
-          required: ["profileId"],
-          properties: {
-            profileId: {
-              type: "string",
-            },
-          },
-        },
-      },
-    },
-    async (request, reply) => {
-      const { profileId } = request.body as {
-        profileId: string;
-      };
-
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
-      }
-
-      const id: JobId = uuidv7();
-
-      if (await jobExists(id)) {
-        return reply.code(409).send({
-          ok: false,
-          error: "Job id already exists",
-        });
-      }
-
-      const response = await fetch(
-        `http://192.168.0.50/scale?id=${encodeURIComponent(id)}`,
-      );
-
-      if (response.ok) {
-        await initJob(id, profileId);
-        app.log.info({ id, profileId }, "Started ingest");
-
-        return reply.code(response.status).send({
-          ok: true,
-          id,
-          profileId,
-        });
-      }
-
-      return reply.code(response.status).send({
+    async (_request, reply) => {
+      return reply.code(410).send({
         ok: false,
+        error: "/start is deprecated. Use the ingest endpoints instead.",
       });
     },
   );
@@ -871,11 +897,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const weights = await listUserWeight(profileId);
