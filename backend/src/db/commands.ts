@@ -2460,6 +2460,19 @@ export async function updateProfileInsightReportGenerationStatus({
   }
 }
 
+export async function failActiveProfileInsightReportJobsOnStartup() {
+  await db.prepare(
+    `
+  UPDATE profile_insight_reports
+  SET
+    generation_status = 'failed',
+    generation_error = 'Job queue was reset on server startup',
+    updated_at = CURRENT_TIMESTAMP
+  WHERE generation_status IN ('pending', 'queued', 'running')
+`,
+  ).run();
+}
+
 function parseJsonData(raw: unknown): unknown {
   return typeof raw === "string" ? JSON.parse(raw) : raw;
 }
