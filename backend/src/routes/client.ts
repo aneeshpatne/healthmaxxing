@@ -19,6 +19,8 @@ import {
   isBodyCompositionTrendMetric,
   isBodyCompositionTrendPeriod,
   listBodyCompositionTrends,
+  listActiveProfileAiReportJobs,
+  listLatestCompletedProfileAiReportIds,
   listRecentProfileAiReports,
   listUserBodyMeasurements,
   listUsers,
@@ -33,6 +35,28 @@ import {
   type JobId,
   type ProfileId,
 } from "../db/commands";
+
+const LONG_POLL_DEFAULT_TIMEOUT_MS = 25_000;
+const LONG_POLL_MAX_TIMEOUT_MS = 30_000;
+const LONG_POLL_INTERVAL_MS = 1_000;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseReportLimit(rawLimit: number | string | undefined) {
+  const parsedLimit = Number(rawLimit ?? 5);
+  return Number.isFinite(parsedLimit)
+    ? Math.min(Math.max(Math.trunc(parsedLimit), 1), 20)
+    : 5;
+}
+
+function parseLongPollTimeoutMs(rawTimeoutMs: number | string | undefined) {
+  const parsedTimeoutMs = Number(rawTimeoutMs ?? LONG_POLL_DEFAULT_TIMEOUT_MS);
+  return Number.isFinite(parsedTimeoutMs)
+    ? Math.min(Math.max(Math.trunc(parsedTimeoutMs), 0), LONG_POLL_MAX_TIMEOUT_MS)
+    : LONG_POLL_DEFAULT_TIMEOUT_MS;
+}
 
 function calculateAgeYears(dateOfBirth: string): number {
   const birthDate = new Date(dateOfBirth);
@@ -812,10 +836,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       const { limit: rawLimit } = request.query as {
         limit?: number | string;
       };
-      const parsedLimit = Number(rawLimit ?? 5);
-      const limit = Number.isFinite(parsedLimit)
-        ? Math.min(Math.max(Math.trunc(parsedLimit), 1), 20)
-        : 5;
+      const limit = parseReportLimit(rawLimit);
 
       if (
         await sendProfileNotFoundIfUnauthorized(
@@ -828,6 +849,185 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const reports = await listRecentProfileAiReports({ profileId, limit });
+
+      return reply.send({
+        ok: true,
+        profileId,
+        reports,
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/insights/jobs/active",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
+      }
+
+      const jobs = await listActiveProfileAiReportJobs({ profileId });
+
+      return reply.send({
+        ok: true,
+        profileId,
+        jobs,
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/insights/jobs/:jobId/wait",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId", "jobId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+            jobId: {
+              type: "string",
+            },
+          },
+        },
+        querystring: {
+          type: "object",
+          properties: {
+            timeoutMs: {
+              type: "number",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId, jobId } = request.params as {
+        profileId: string;
+        jobId: string;
+      };
+      const { timeoutMs: rawTimeoutMs } = request.query as {
+        timeoutMs?: number | string;
+      };
+      const timeoutMs = parseLongPollTimeoutMs(rawTimeoutMs);
+      const deadline = Date.now() + timeoutMs;
+
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
+      }
+
+      let report = await getProfileAiReportById({ profileId, reportId: jobId });
+
+      if (report === null) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Report job does not exist",
+        });
+      }
+
+      while (
+        report.generationStatus !== "completed" &&
+        report.generationStatus !== "failed" &&
+        Date.now() < deadline
+      ) {
+        await sleep(Math.min(LONG_POLL_INTERVAL_MS, deadline - Date.now()));
+        report = await getProfileAiReportById({ profileId, reportId: jobId });
+
+        if (report === null) {
+          return reply.code(404).send({
+            ok: false,
+            error: "Report job does not exist",
+          });
+        }
+      }
+
+      return reply.send({
+        ok: true,
+        profileId,
+        jobId,
+        reportId: report.reportId,
+        generationStatus: report.generationStatus,
+        generationError: report.generationError,
+        report,
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/insights/report-ids/latest",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+        querystring: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+      const { limit: rawLimit } = request.query as {
+        limit?: number | string;
+      };
+      const limit = parseReportLimit(rawLimit);
+
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
+      }
+
+      const reports = await listLatestCompletedProfileAiReportIds({
+        profileId,
+        limit,
+      });
 
       return reply.send({
         ok: true,
