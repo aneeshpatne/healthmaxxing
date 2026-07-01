@@ -72,15 +72,15 @@ extension Color {
 
     // MARK: - Accent
 
-    /// Sleek Accent Color — warm sage / champagne tones that feel premium across both modes.
+    /// Sleek Accent Color — premium indigo/violet tones that feel modern and vibrant across both modes.
     static let sleekAccent = Color(uiColor: UIColor { traitCollection in
         switch traitCollection.userInterfaceStyle {
         case .dark:
-            // Soft champagne-gold (#D9BF8C) — warm, premium, reads well on dark surfaces
-            return UIColor(red: 0.85, green: 0.75, blue: 0.55, alpha: 1.0)
+            // Sleek Indigo / Violet (#9E86FF) — vibrant, premium, reads well on dark surfaces
+            return UIColor(red: 0.62, green: 0.525, blue: 1.0, alpha: 1.0)
         default:
-            // Deep graphite-slate (#263040) — bold, sophisticated, anchors the light theme
-            return UIColor(red: 0.15, green: 0.19, blue: 0.25, alpha: 1.0)
+            // Deep Royal Indigo (#4338CA) — bold, sophisticated, anchors the light theme
+            return UIColor(red: 0.263, green: 0.22, blue: 0.792, alpha: 1.0)
         }
     })
 
