@@ -10,12 +10,17 @@ import SwiftUI
 struct RecordView: View {
     @StateObject private var scaleManager = ScaleBLEManager()
 
+    @State private var isSubmittingMeasurement = false
+    @State private var submissionStatus: String?
+    @State private var submissionError: String?
+    @State private var latestReportJobId: UUID?
+    @State private var submittedMeasurement: ScaleMeasurement?
+
+    private let apiClient = APIClient()
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Record")
-                    .font(.largeTitle.weight(.bold))
-
                 ScaleStatusCard(
                     state: scaleManager.state,
                     measurement: scaleManager.latestMeasurement,
@@ -25,13 +30,151 @@ struct RecordView: View {
                 )
 
                 LatestMeasurementGrid(measurement: scaleManager.latestMeasurement)
+
+                MeasurementSubmissionPanel(
+                    measurement: scaleManager.latestMeasurement,
+                    isSubmitting: isSubmittingMeasurement,
+                    status: submissionStatus,
+                    errorMessage: submissionError,
+                    jobId: latestReportJobId,
+                    submitAction: {
+                        Task {
+                            await submitLatestMeasurement()
+                        }
+                    },
+                    submitDemoAction: {
+                        Task {
+                            await submitDemoMeasurement()
+                        }
+                    }
+                )
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
         .safeAreaPadding(.top, headerHeight)
-        .background(Color.appBackground)
+        .background(Color.appBackground.ignoresSafeArea())
+        .onChange(of: scaleManager.state) { _, state in
+            guard state == .finished else { return }
+
+            Task {
+                await submitLatestMeasurement()
+            }
+        }
     }
+
+    @MainActor
+    private func submitLatestMeasurement() async {
+        let measurement = scaleManager.latestMeasurement
+
+        guard submittedMeasurement != measurement else {
+            return
+        }
+
+        guard !isSubmittingMeasurement else {
+            return
+        }
+
+        guard let profileId = PrimaryProfileStore.primaryProfileId else {
+            submissionStatus = nil
+            submissionError = "Create or select a primary profile before saving measurements."
+            return
+        }
+
+        guard let weight = measurement.weightKg,
+              let heartbeat = measurement.heartRate,
+              let impedance = measurement.impedanceOhms else {
+            submissionStatus = nil
+            submissionError = "A complete scale reading is required before saving."
+            return
+        }
+
+        await submitMeasurement(
+            weight: Double(weight),
+            heartbeat: heartbeat,
+            impedance: Double(impedance),
+            successStatusPrefix: "Report"
+        ) {
+            submittedMeasurement = measurement
+        }
+    }
+
+    @MainActor
+    private func submitDemoMeasurement() async {
+        await submitMeasurement(
+            weight: 76.30,
+            heartbeat: 77,
+            impedance: 579,
+            successStatusPrefix: "Demo report"
+        )
+    }
+
+    @MainActor
+    private func submitMeasurement(
+        weight: Double,
+        heartbeat: Int,
+        impedance: Double,
+        successStatusPrefix: String,
+        afterSuccess: (() -> Void)? = nil
+    ) async {
+        guard !isSubmittingMeasurement else {
+            return
+        }
+
+        guard let profileId = PrimaryProfileStore.primaryProfileId else {
+            submissionStatus = nil
+            submissionError = "Create or select a primary profile before saving measurements."
+            return
+        }
+
+        isSubmittingMeasurement = true
+        submissionStatus = "Saving measurement"
+        submissionError = nil
+        latestReportJobId = nil
+
+        defer {
+            isSubmittingMeasurement = false
+        }
+
+        do {
+            let body = AddMeasurementBody(
+                profileId: profileId,
+                weight: weight,
+                heartbeat: heartbeat,
+                impedance: impedance
+            )
+
+            let response = try await apiClient.send(AddMeasurementRequest(body: body))
+            afterSuccess?()
+            latestReportJobId = response.jobId
+            InsightReportJobStore.add(response.jobId, for: profileId)
+            submissionStatus = "\(successStatusPrefix) \(response.reportStatus)"
+        } catch APIError.missingAuthToken {
+            submissionError = "Missing auth token."
+            submissionStatus = nil
+        } catch APIError.serverError(let statusCode, let responseBody) {
+            submissionError = Self.serverErrorMessage(statusCode: statusCode, responseBody: responseBody)
+            submissionStatus = nil
+        } catch {
+            if (error as? URLError)?.code == .cancelled || error is CancellationError {
+                return
+            }
+
+            submissionError = "Failed to save measurement."
+            submissionStatus = nil
+        }
+    }
+
+    private static func serverErrorMessage(statusCode: Int, responseBody: String?) -> String {
+        let trimmedBody = responseBody?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let trimmedBody, !trimmedBody.isEmpty else {
+            return "Server returned \(statusCode)."
+        }
+
+        return "Server returned \(statusCode): \(trimmedBody)"
+    }
+
 }
 
 private struct ScaleStatusCard: View {
@@ -172,6 +315,79 @@ private struct MeasurementTile: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 118, alignment: .leading)
+        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.appSeparator, lineWidth: 1)
+        }
+    }
+}
+
+private struct MeasurementSubmissionPanel: View {
+    let measurement: ScaleMeasurement
+    let isSubmitting: Bool
+    let status: String?
+    let errorMessage: String?
+    let jobId: UUID?
+    let submitAction: () -> Void
+    let submitDemoAction: () -> Void
+
+    private var canSubmit: Bool {
+        measurement.weightKg != nil && measurement.heartRate != nil && measurement.impedanceOhms != nil
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button(action: submitAction) {
+                Label("Submit Measurement", systemImage: "square.and.arrow.up")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color.sleekAccent)
+            .controlSize(.large)
+            .disabled(!canSubmit || isSubmitting)
+
+            Button(action: submitDemoAction) {
+                Label("Submit Demo", systemImage: "testtube.2")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.sleekAccent)
+            .controlSize(.large)
+            .disabled(isSubmitting)
+
+            if isSubmitting {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text(status ?? "Saving measurement")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            } else if let status {
+                Label(status, systemImage: "checkmark.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let jobId {
+                Text("Job \(jobId)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
