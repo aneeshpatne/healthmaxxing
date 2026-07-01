@@ -1,6 +1,6 @@
 CREATE TABLE profile_ai_report_jsonld (
-  report_id text PRIMARY KEY REFERENCES profile_insight_reports(id) ON DELETE CASCADE,
-  profile_id text NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  report_id uuid PRIMARY KEY REFERENCES profile_insight_reports(id) ON DELETE CASCADE,
+  profile_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   created_on timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
   data jsonb NOT NULL
 );
