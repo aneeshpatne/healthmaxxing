@@ -21,5 +21,5 @@ type GenerateReportJob = {
 const queue = new Queue<GenerateReportJob>("jobs", { connection });
 
 export async function addQueueItem(reportId: string, profileId: string) {
-  return await queue.add("generate_report", { reportId, profileId });
+  return await queue.add("generate_report", { reportId, profileId }, { jobId: reportId });
 }
