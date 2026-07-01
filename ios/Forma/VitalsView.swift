@@ -10,9 +10,9 @@ import SwiftUI
 struct VitalsView: View {
     var body: some View {
         ScrollView {
-            Text("Vitals")
+            EmptyView()
         }
         .safeAreaPadding(.top, headerHeight)
-        .background(Color.appBackground)
+        .background(Color.appBackground.ignoresSafeArea())
     }
 }

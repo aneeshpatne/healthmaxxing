@@ -10,9 +10,9 @@ import SwiftUI
 struct WorkoutsView: View {
     var body: some View {
         ScrollView {
-            Text("Workouts")
+            EmptyView()
         }
         .safeAreaPadding(.top, headerHeight)
-        .background(Color.appBackground)
+        .background(Color.appBackground.ignoresSafeArea())
     }
 }
