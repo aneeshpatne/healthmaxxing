@@ -119,15 +119,17 @@ struct FatRatioMetrics {
 }
 
 struct FatTab: View {
+    let payload: InsightReportPayload?
+
     var body: some View {
         VStack(spacing: 20) {
-            FatRatioCard(value: 24.8)
+            FatRatioCard(value: payload?.fat["fat_ratio"]?.numberValue ?? 24.8)
             
             VisceralSubcutaneousCard(
-                visceralFat: 4.2,
-                subcutaneousFat: 15.8,
-                verdict: "Mostly Subcutaneous",
-                remark: "Distribution is relatively safer, though total fat remains elevated."
+                visceralFat: payload?.fat["visceral_vs_subcutaneous"]?.nestedNumber("visceralFatDeltaKg") ?? 4.2,
+                subcutaneousFat: payload?.fat["visceral_vs_subcutaneous"]?.nestedNumber("subcutaneousFatDeltaKg") ?? 15.8,
+                verdict: payload?.fat["visceral_vs_subcutaneous"]?.title ?? "Mostly Subcutaneous",
+                remark: payload?.fat["visceral_vs_subcutaneous"]?.displayComment ?? "Distribution is relatively safer, though total fat remains elevated."
             )
             
             VisceralSubcRatioTrendCard(
@@ -135,32 +137,36 @@ struct FatTab: View {
                 statusText: "Safe",
                 statusColor: .goodGreen,
                 statusIcon: "checkmark.circle.fill",
-                remarkText: "Visceral to subcutaneous ratio is within a healthy and safe range."
+                remarkText: payload?.fat["fat_ratio_trend"]?.displayComment ?? "Visceral to subcutaneous ratio is within a healthy and safe range."
             )
             
             VisceralFatMassTrendCard(
-                currentMass: 4.2,
+                currentMass: payload?.fat["visceral_trend"]?.numberValue ?? 4.2,
                 statusText: "Optimal",
                 statusColor: .goodGreen,
                 statusIcon: "checkmark.circle.fill",
-                remarkText: "Visceral fat mass is within a healthy, low-risk range."
+                remarkText: payload?.fat["visceral_trend"]?.displayComment ?? "Visceral fat mass is within a healthy, low-risk range."
             )
             
             SubcFatMassTrendCard(
-                currentMass: 15.8,
+                currentMass: payload?.fat["subcutaneous_fat_mass_trend"]?.numberValue ?? 15.8,
                 statusText: "Elevated",
                 statusColor: .extremityRed,
                 statusIcon: "exclamationmark.triangle.fill",
-                remarkText: "Subcutaneous fat mass is elevated. Focus on caloric deficit and activity."
+                remarkText: payload?.fat["subcutaneous_fat_mass_trend"]?.displayComment ?? "Subcutaneous fat mass is elevated. Focus on caloric deficit and activity."
             )
             
             FatMassTrendCard(
-                currentMass: 20.0,
+                currentMass: payload?.fat["fat_mass_trend"]?.numberValue ?? 20.0,
                 statusText: "Elevated",
-                remarkText: "Total fat mass is above target."
+                remarkText: payload?.fat["fat_mass_trend"]?.displayComment ?? "Total fat mass is above target.",
+                data: payload?.fat["fat_mass_trend"]?.trends["fatMassKg"]?.map { FatMassPoint(date: $0.date, value: $0.value) }
             )
             
-            FatHistoryCard()
+            FatHistoryCard(
+                value: payload?.fat["fat_ratio"]?.numberValue ?? 24.8,
+                data: payload?.fat["fat_ratio"]?.trends["body_fat_pct"]?.map { FatDataPoint(date: $0.date, ratio: $0.value) }
+            )
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -457,17 +463,29 @@ struct FatDataPoint: Identifiable {
 
 struct FatHistoryCard: View {
     var value: Double = 24.8
+    var reportData: [FatDataPoint]?
     
     var metrics: FatRatioMetrics {
         FatRatioMetrics(value: value)
     }
     
-    let data: [FatDataPoint] = [
-        FatDataPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, ratio: 25.6),
-        FatDataPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, ratio: 25.2),
-        FatDataPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, ratio: 24.9),
-        FatDataPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, ratio: 24.8)
-    ]
+    init(value: Double = 24.8, data: [FatDataPoint]? = nil) {
+        self.value = value
+        self.reportData = data
+    }
+
+    var data: [FatDataPoint] {
+        if let reportData, !reportData.isEmpty {
+            return reportData
+        }
+
+        return [
+            FatDataPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, ratio: 25.6),
+            FatDataPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, ratio: 25.2),
+            FatDataPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, ratio: 24.9),
+            FatDataPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, ratio: 24.8)
+        ]
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -797,13 +815,27 @@ struct FatMassTrendCard: View {
     let currentMass: Double
     let statusText: String
     let remarkText: String
+    var reportData: [FatMassPoint]?
     
-    let data: [FatMassPoint] = [
-        FatMassPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, value: 17.2),
-        FatMassPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, value: 19.0),
-        FatMassPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, value: 18.2),
-        FatMassPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, value: 20.0)
-    ]
+    init(currentMass: Double, statusText: String, remarkText: String, data: [FatMassPoint]? = nil) {
+        self.currentMass = currentMass
+        self.statusText = statusText
+        self.remarkText = remarkText
+        self.reportData = data
+    }
+
+    var data: [FatMassPoint] {
+        if let reportData, !reportData.isEmpty {
+            return reportData
+        }
+
+        return [
+            FatMassPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, value: 17.2),
+            FatMassPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, value: 19.0),
+            FatMassPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, value: 18.2),
+            FatMassPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, value: 20.0)
+        ]
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -1415,7 +1447,7 @@ struct VisceralFatMassTrendCard: View {
 
 #Preview {
     ScrollView {
-        FatTab()
+        FatTab(payload: nil)
     }
     .background(Color.appBackground)
 }
