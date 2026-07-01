@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "bun run index.ts",
+    "start": "bun run src/main.ts",
+    "server": "bun run index.ts",
     "worker": "bun run src/bull/worker.ts",
     "db:up": "docker-compose up -d postgres",
     "db:down": "docker-compose down",
