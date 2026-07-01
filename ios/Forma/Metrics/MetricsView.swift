@@ -11,6 +11,7 @@ let glassTabBarHeight: CGFloat = 52
 
 struct MetricsView: View {
     @Binding var selectedTab: MetricsTab
+    @StateObject private var reportStore = MetricsReportStore()
 
     var body: some View {
         ScrollView {
@@ -18,15 +19,18 @@ struct MetricsView: View {
             case .insights:
                 InsightsTab()
             case .performance:
-                PerformanceTab()
+                PerformanceTab(payload: reportStore.payload)
             case .fat:
-                FatTab()
+                FatTab(payload: reportStore.payload)
             case .muscle:
-                MuscleTab()
+                MuscleTab(payload: reportStore.payload)
             }
         }
+        .task {
+            await reportStore.loadLatestReport()
+        }
         .scrollEdgeEffectStyle(.hard, for: .top)
-        .background(Color.appBackground)
+        .background(Color.appBackground.ignoresSafeArea())
     }
 }
 
