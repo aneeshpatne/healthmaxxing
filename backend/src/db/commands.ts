@@ -22,9 +22,10 @@ type BodyCompositionMetricsNewWithCreatedAtRow = BodyCompositionMetricsNewRow & 
   createdAt: string;
 };
 
-export type JobId = string;
-export type AccountId = string;
-export type ProfileId = string;
+export type UUID = string;
+export type JobId = UUID;
+export type AccountId = UUID;
+export type ProfileId = UUID;
 
 export type UserWeight = {
   id: string;
@@ -192,6 +193,10 @@ export type ProfileAiReportById = {
 
 export type RecentProfileAiReport = Omit<ProfileAiReportById, "data"> & {
   hasData: boolean;
+};
+
+export type ProfileAiReportJob = RecentProfileAiReport & {
+  jobId: string;
 };
 
 export type LatestBodyCompositionSnapshot = {
@@ -2394,8 +2399,9 @@ export async function upsertProfileAiReportJsonLd({
   profileId,
   data,
 }: ProfileAiReportJsonLd) {
-  await db.prepare(
-    `
+  await db.transaction(async (tx) => {
+    await tx.prepare(
+      `
   INSERT INTO profile_ai_report_jsonld (
     report_id,
     profile_id,
@@ -2407,7 +2413,20 @@ export async function upsertProfileAiReportJsonLd({
     data = EXCLUDED.data,
     created_on = CURRENT_TIMESTAMP
 `,
-  ).run(reportId, profileId, JSON.stringify(data));
+    ).run(reportId, profileId, JSON.stringify(data));
+
+    await tx.prepare(
+      `
+  UPDATE profile_insight_reports
+  SET
+    generation_status = 'completed',
+    generation_error = NULL,
+    updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
+    AND profile_id = ?
+`,
+    ).run(reportId, profileId);
+  });
 }
 
 export async function updateProfileInsightReportGenerationStatus({
@@ -2421,7 +2440,7 @@ export async function updateProfileInsightReportGenerationStatus({
   status: ProfileInsightGenerationStatus;
   error?: string | null;
 }) {
-  await db.prepare(
+  const updated = await db.prepare(
     `
   UPDATE profile_insight_reports
   SET
@@ -2430,8 +2449,15 @@ export async function updateProfileInsightReportGenerationStatus({
     updated_at = CURRENT_TIMESTAMP
   WHERE id = ?
     AND profile_id = ?
+  RETURNING id
 `,
-  ).run(status, error, reportId, profileId);
+  ).get(status, error, reportId, profileId) as { id: string } | null;
+
+  if (updated === null) {
+    throw new Error(
+      `Profile insight report ${reportId} does not exist for profile ${profileId}`,
+    );
+  }
 }
 
 function parseJsonData(raw: unknown): unknown {
@@ -2451,7 +2477,10 @@ export async function getProfileAiReportById({
   SELECT
     profile_insight_reports.id AS reportId,
     profile_insight_reports.profile_id AS profileId,
-    profile_insight_reports.generation_status AS generationStatus,
+    CASE
+      WHEN profile_ai_report_jsonld.report_id IS NOT NULL THEN 'completed'
+      ELSE profile_insight_reports.generation_status
+    END AS generationStatus,
     profile_insight_reports.generation_error AS generationError,
     profile_insight_reports.created_at AS createdAt,
     profile_insight_reports.updated_at AS updatedAt,
@@ -2491,7 +2520,10 @@ export async function listRecentProfileAiReports({
   SELECT
     profile_insight_reports.id AS reportId,
     profile_insight_reports.profile_id AS profileId,
-    profile_insight_reports.generation_status AS generationStatus,
+    CASE
+      WHEN profile_ai_report_jsonld.report_id IS NOT NULL THEN 'completed'
+      ELSE profile_insight_reports.generation_status
+    END AS generationStatus,
     profile_insight_reports.generation_error AS generationError,
     profile_insight_reports.created_at AS createdAt,
     profile_insight_reports.updated_at AS updatedAt,
@@ -2505,6 +2537,65 @@ export async function listRecentProfileAiReports({
 `,
     )
     .all(profileId, limit) as RecentProfileAiReport[];
+}
+
+export async function listActiveProfileAiReportJobs({
+  profileId,
+}: {
+  profileId: ProfileId;
+}): Promise<ProfileAiReportJob[]> {
+  return await db
+    .prepare(
+      `
+  SELECT
+    profile_insight_reports.id AS jobId,
+    profile_insight_reports.id AS reportId,
+    profile_insight_reports.profile_id AS profileId,
+    profile_insight_reports.generation_status AS generationStatus,
+    profile_insight_reports.generation_error AS generationError,
+    profile_insight_reports.created_at AS createdAt,
+    profile_insight_reports.updated_at AS updatedAt,
+    profile_ai_report_jsonld.report_id IS NOT NULL AS hasData
+  FROM profile_insight_reports
+  LEFT JOIN profile_ai_report_jsonld
+    ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
+  WHERE profile_insight_reports.profile_id = ?
+    AND profile_insight_reports.generation_status IN ('pending', 'queued', 'running')
+    AND profile_ai_report_jsonld.report_id IS NULL
+  ORDER BY profile_insight_reports.created_at DESC
+`,
+    )
+    .all(profileId) as ProfileAiReportJob[];
+}
+
+export async function listLatestCompletedProfileAiReportIds({
+  profileId,
+  limit = 5,
+}: {
+  profileId: ProfileId;
+  limit?: number;
+}): Promise<ProfileAiReportJob[]> {
+  return await db
+    .prepare(
+      `
+  SELECT
+    profile_insight_reports.id AS jobId,
+    profile_insight_reports.id AS reportId,
+    profile_insight_reports.profile_id AS profileId,
+    'completed' AS generationStatus,
+    profile_insight_reports.generation_error AS generationError,
+    profile_insight_reports.created_at AS createdAt,
+    profile_insight_reports.updated_at AS updatedAt,
+    true AS hasData
+  FROM profile_ai_report_jsonld
+  INNER JOIN profile_insight_reports
+    ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
+  WHERE profile_insight_reports.profile_id = ?
+  ORDER BY profile_ai_report_jsonld.created_on DESC
+  LIMIT ?
+`,
+    )
+    .all(profileId, limit) as ProfileAiReportJob[];
 }
 
 export async function upsertDerivedMetricsComments({
