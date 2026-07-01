@@ -9,6 +9,6 @@ enum APIError: Error {
     case invalidURL
     case invalidResponse
     case missingAuthToken
-    case serverError(Int)
+    case serverError(Int, String?)
     case decodingError
 }

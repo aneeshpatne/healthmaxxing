@@ -87,7 +87,8 @@ final class APIClient {
         }
 
         if !(200..<300).contains(httpResponse.statusCode) {
-            throw APIError.serverError(httpResponse.statusCode)
+            let responseBody = data.isEmpty ? nil : String(data: data, encoding: .utf8)
+            throw APIError.serverError(httpResponse.statusCode, responseBody)
         }
 
         if data.isEmpty || httpResponse.statusCode == 204 {
