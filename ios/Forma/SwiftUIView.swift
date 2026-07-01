@@ -43,6 +43,7 @@ struct SwiftUIView: View {
                 }
             }
             .tabBarMinimizeBehavior(.onScrollDown)
+            .background(Color.appBackground.ignoresSafeArea())
             .overlay(alignment: .top) {
                 FormaHeader(activeTab: $activeTab, selectedMetricsTab: $selectedMetricsTab)
             }
