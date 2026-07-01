@@ -157,12 +157,13 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
-      const { profileId, weight, heartbeat, impedance } = request.body as {
+      const { profileId: rawProfileId, weight, heartbeat, impedance } = request.body as {
         profileId: string;
         weight: number;
         heartbeat: number;
         impedance: number;
       };
+      const profileId = rawProfileId.toLowerCase();
 
       if (
         await sendProfileNotFoundIfUnauthorized(
@@ -252,6 +253,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       return {
         ok: true,
         id: measurementId,
+        jobId: reports.insightReportId,
         reportId: reports.insightReportId,
         reportStatus: "queued",
         reports,
@@ -284,12 +286,24 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
-      const { profileId, weight, heartbeat, impedance } = request.body as {
+      const { profileId: rawProfileId, weight, heartbeat, impedance } = request.body as {
         profileId: string;
         weight: number;
         heartbeat: number;
         impedance: number;
       };
+      const profileId = rawProfileId.toLowerCase();
+
+      request.log.info(
+        {
+          route: "/ingest/add_measurement/v2",
+          profileId,
+          weight,
+          heartbeat,
+          impedance,
+        },
+        "received add_measurement/v2 request",
+      );
 
       if (
         await sendProfileNotFoundIfUnauthorized(
@@ -379,6 +393,7 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       return {
         ok: true,
         id: measurementId,
+        jobId: reports.insightReportId,
         reportId: reports.insightReportId,
         reportStatus: "queued",
         reports,
