@@ -190,7 +190,7 @@ struct Profiles: View {
                 profiles = []
             }
             errorMessage = "Missing auth token."
-        } catch APIError.serverError(let statusCode) {
+        } catch APIError.serverError(let statusCode, _) {
             if profiles.isEmpty {
                 profiles = []
             }
@@ -308,7 +308,7 @@ struct PrimaryProfileGate: View {
             }
         } catch APIError.missingAuthToken {
             loadState = .failed("Missing auth token.")
-        } catch APIError.serverError(let statusCode) {
+        } catch APIError.serverError(let statusCode, _) {
             loadState = .failed("Server returned \(statusCode).")
         } catch {
             if (error as? URLError)?.code == .cancelled || error is CancellationError {
@@ -490,8 +490,8 @@ private struct ProfileFormView: View {
                 )
 
                 let response = try await apiClient.send(UpdateClientProfileRequest(profileId: profile.id, body: requestBody))
-                if response.isPrimary, let profileId = UUID(uuidString: response.profileId) {
-                    PrimaryProfileStore.primaryProfileId = profileId
+                if response.isPrimary {
+                    PrimaryProfileStore.primaryProfileId = response.profileId
                 }
             } else {
                 let requestBody = CreateClientProfileBody(
@@ -506,8 +506,8 @@ private struct ProfileFormView: View {
                 )
 
                 let response = try await apiClient.send(CreateClientProfileRequest(body: requestBody))
-                if response.isPrimary, let profileId = UUID(uuidString: response.profileId) {
-                    PrimaryProfileStore.primaryProfileId = profileId
+                if response.isPrimary {
+                    PrimaryProfileStore.primaryProfileId = response.profileId
                 }
             }
 
@@ -515,7 +515,7 @@ private struct ProfileFormView: View {
             dismiss()
         } catch APIError.missingAuthToken {
             errorMessage = "Missing auth token."
-        } catch APIError.serverError(let statusCode) {
+        } catch APIError.serverError(let statusCode, _) {
             if statusCode == 404 {
                 errorMessage = "Profile not found for this account."
             } else {

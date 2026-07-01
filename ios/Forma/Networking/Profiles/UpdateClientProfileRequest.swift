@@ -64,7 +64,7 @@ struct UpdateClientProfileBody: Encodable {
 
 struct UpdateClientProfileResponse: Decodable {
     let ok: Bool
-    let profileId: String
+    let profileId: UUID
     let name: String
     let isPrimary: Bool
     let heightCm: Double

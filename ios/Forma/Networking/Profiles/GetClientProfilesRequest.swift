@@ -34,5 +34,5 @@ struct ClientProfile: Decodable, Identifiable {
     let gender: String?
     let profileImage: String?
     let preferredBodyFatPct: Double?
-    let createdAt: String
+    let createdAt: String?
 }

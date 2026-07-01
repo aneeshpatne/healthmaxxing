@@ -35,8 +35,8 @@ struct CreateClientProfileBody: Encodable {
 
 struct CreateClientProfileResponse: Decodable {
     let ok: Bool
-    let profileId: String
-    let accountId: String
+    let profileId: UUID
+    let accountId: UUID
     let name: String
     let isPrimary: Bool
     let heightCm: Double
