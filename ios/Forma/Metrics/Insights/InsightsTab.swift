@@ -2,9 +2,39 @@ import SwiftUI
 import Charts
 
 struct InsightsTab: View {
+    @State private var activeJob: InsightReportJob?
+    @State private var latestReport: InsightReportJob?
+    @State private var completedReport: InsightReport?
+    @State private var reportStatus: String?
+    @State private var reportError: String?
+    @State private var isLoadingReports = false
+
+    private let apiClient = APIClient()
+    private var reportPayload: InsightReportPayload? {
+        InsightReportPayload(data: completedReport?.data)
+    }
+    private var effortScore: Double {
+        min(100, max(0, reportPayload?.effortScore?.score ?? 82))
+    }
+
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 20) {
+                InsightReportStatusCard(
+                    isLoading: isLoadingReports,
+                    status: reportStatus,
+                    errorMessage: reportError,
+                    activeJob: activeJob,
+                    latestReport: latestReport,
+                    completedReport: completedReport,
+                    refreshAction: {
+                        Task {
+                            await loadAndPollReports()
+                        }
+                    }
+                )
+                .insightsCard()
+
                 // MARK: - Weekly Summary Card
                 VStack(alignment: .leading, spacing: 18) {
                     // Header
@@ -15,7 +45,7 @@ struct InsightsTab: View {
                             .frame(width: 26, height: 26)
                             .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                        Text("Weekly Summary")
+                        Text(reportPayload?.overview?.title ?? "Weekly Summary")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -32,7 +62,7 @@ struct InsightsTab: View {
                     }
 
                     // Insight text
-                    Text("Foundation is strong — body fat trending down while lean mass holds steady.")
+                    Text(reportPayload?.overview?.headline ?? "Foundation is strong — body fat trending down while lean mass holds steady.")
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -56,11 +86,11 @@ struct InsightsTab: View {
                             )
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Body Fat")
+                            Text(reportPayload?.overview?.remark?.marker?.displayRemarkMarker ?? "Body Fat")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.primary)
 
-                            Text("Down 0.4% this week")
+                            Text(reportPayload?.overview?.remark?.text ?? "Down 0.4% this week")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -93,7 +123,7 @@ struct InsightsTab: View {
                             .frame(width: 26, height: 26)
                             .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                        Text("Strong Base")
+                        Text(reportPayload?.foundation?.title ?? "Strong Base")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -103,7 +133,7 @@ struct InsightsTab: View {
                     }
 
                     // Headline
-                    Text("54.6 kg of lean mass gives you a strong foundation")
+                    Text(reportPayload?.foundation?.headline ?? "54.6 kg of lean mass gives you a strong foundation")
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -111,7 +141,7 @@ struct InsightsTab: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Body
-                    Text("At 172 cm, your current muscle base supports a strong, athletic look as you continue leaning out.")
+                    Text(reportPayload?.foundation?.comment ?? "At 172 cm, your current muscle base supports a strong, athletic look as you continue leaning out.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
@@ -133,7 +163,7 @@ struct InsightsTab: View {
                                     .fill(.green.opacity(0.1))
                             )
 
-                        Text("Keep protein intake steady and stay consistent with strength training to maintain this muscle.")
+                        Text(reportPayload?.foundation?.remark?.text ?? "Keep protein intake steady and stay consistent with strength training to maintain this muscle.")
                             .font(.subheadline)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -153,7 +183,7 @@ struct InsightsTab: View {
                             .frame(width: 26, height: 26)
                             .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                        Text("Progress Trend")
+                        Text(reportPayload?.progress?.title ?? "Progress Trend")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -163,7 +193,7 @@ struct InsightsTab: View {
                     }
 
                     // Headline
-                    Text("Body fat is moving down across every view")
+                    Text(reportPayload?.progress?.headline ?? "Body fat is moving down across every view")
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -171,14 +201,14 @@ struct InsightsTab: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Body
-                    Text("Subcutaneous fat is down 0.89 kg over the last 30 days, while overall fat markers continue trending lower.")
+                    Text(reportPayload?.progress?.comment ?? "Subcutaneous fat is down 0.89 kg over the last 30 days, while overall fat markers continue trending lower.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Chart card
-                    ProgressTrendChart()
+                    ProgressTrendChart(trendData: reportPayload?.progress?.trendData)
 
                     // Subtle separator
                     Rectangle()
@@ -196,7 +226,7 @@ struct InsightsTab: View {
                                     .fill(.green.opacity(0.85))
                             )
 
-                        Text("Steady progress like this is a strong sign your current rhythm is working. Keep the pace consistent.")
+                        Text(reportPayload?.progress?.remark?.text ?? "Steady progress like this is a strong sign your current rhythm is working. Keep the pace consistent.")
                             .font(.subheadline)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -216,7 +246,7 @@ struct InsightsTab: View {
                             .frame(width: 26, height: 26)
                             .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                        Text("Waist Focus")
+                        Text(reportPayload?.lever?.title ?? "Waist Focus")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -226,7 +256,7 @@ struct InsightsTab: View {
                     }
 
                     // Headline
-                    Text("A smaller waist will make your upper body stand out")
+                    Text(reportPayload?.lever?.headline ?? "A smaller waist will make your upper body stand out")
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -234,7 +264,7 @@ struct InsightsTab: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Body
-                    Text("With a 90 cm waist, 103 cm shoulders, and 106 cm chest, you already have the structure for a strong V-taper. Reducing your waist will make that shape more pronounced.")
+                    Text(reportPayload?.lever?.comment ?? "With a 90 cm waist, 103 cm shoulders, and 106 cm chest, you already have the structure for a strong V-taper. Reducing your waist will make that shape more pronounced.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
@@ -256,7 +286,7 @@ struct InsightsTab: View {
                                     .fill(.green.opacity(0.1))
                             )
 
-                        Text("Even a modest reduction in waist size can significantly improve your shoulder-to-waist ratio.")
+                        Text(reportPayload?.lever?.remark?.text ?? "Even a modest reduction in waist size can significantly improve your shoulder-to-waist ratio.")
                             .font(.subheadline)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -276,7 +306,7 @@ struct InsightsTab: View {
                             .frame(width: 26, height: 26)
                             .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                        Text("Broad Frame")
+                        Text(reportPayload?.physiqueArchetype?.title ?? "Broad Frame")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -286,7 +316,7 @@ struct InsightsTab: View {
                     }
 
                     // Headline
-                    Text("Strong Foundation Frame")
+                    Text(reportPayload?.physiqueArchetype?.headline ?? "Strong Foundation Frame")
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -294,7 +324,7 @@ struct InsightsTab: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Body
-                    Text("Your frame is broad and solid, giving you a strong base to build on. As your waist leans out, your natural shape will become even more defined.")
+                    Text(reportPayload?.physiqueArchetype?.comment ?? "Your frame is broad and solid, giving you a strong base to build on. As your waist leans out, your natural shape will become even more defined.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
@@ -330,7 +360,7 @@ struct InsightsTab: View {
                                     .fill(.blue.opacity(0.1))
                             )
 
-                        Text("Keep developing your shoulders, back, and upper chest. These are your strongest visual assets and will make the biggest impact as you lean out.")
+                        Text(reportPayload?.physiqueArchetype?.bodyType.map { "Body type: \($0.capitalized)" } ?? "Keep developing your shoulders, back, and upper chest. These are your strongest visual assets and will make the biggest impact as you lean out.")
                             .font(.subheadline)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -350,7 +380,7 @@ struct InsightsTab: View {
                             .frame(width: 26, height: 26)
                             .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                        Text("Effort Score")
+                        Text(reportPayload?.effortScore?.title ?? "Effort Score")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -358,7 +388,7 @@ struct InsightsTab: View {
 
                         Spacer()
 
-                        Text("82")
+                        Text(String(format: "%.0f", effortScore))
                             .font(.subheadline.weight(.bold))
                             .monospacedDigit()
                             .foregroundStyle(.green)
@@ -372,7 +402,7 @@ struct InsightsTab: View {
                         let markerRadius: CGFloat = 8
                         let markerX = min(
                             geometry.size.width - markerRadius,
-                            max(markerRadius, geometry.size.width * 0.82)
+                            max(markerRadius, geometry.size.width * CGFloat(effortScore / 100))
                         )
 
                         ZStack(alignment: .leading) {
@@ -400,7 +430,7 @@ struct InsightsTab: View {
                     .frame(height: 16)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Effort score")
-                    .accessibilityValue("82 out of 100")
+                    .accessibilityValue("\(String(format: "%.0f", effortScore)) out of 100")
 
                     // Subtle separator
                     Rectangle()
@@ -418,7 +448,7 @@ struct InsightsTab: View {
                                     .fill(.green.opacity(0.1))
                             )
 
-                        Text("Your body fat is trending down while muscle remains stable, which is driving a strong effort score.")
+                        Text(reportPayload?.effortScore?.comment ?? reportPayload?.effortScore?.remark?.text ?? "Your body fat is trending down while muscle remains stable, which is driving a strong effort score.")
                             .font(.subheadline)
                             .foregroundStyle(.primary)
                             .lineSpacing(3)
@@ -432,6 +462,237 @@ struct InsightsTab: View {
             .padding(.top, 4)
             .padding(.bottom, 24)
         }
+        .task {
+            await loadAndPollReports()
+        }
+    }
+
+    @MainActor
+    private func loadAndPollReports() async {
+        guard !isLoadingReports else { return }
+
+        guard let profileId = PrimaryProfileStore.primaryProfileId else {
+            reportError = "Create or select a primary profile to load insight reports."
+            return
+        }
+
+        isLoadingReports = true
+        reportError = nil
+        reportStatus = "Checking reports"
+
+        defer {
+            isLoadingReports = false
+        }
+
+        do {
+            let activeResponse = try await apiClient.send(GetActiveInsightJobsRequest(profileId: profileId))
+            let serverJobs = activeResponse.jobs ?? []
+            let storedJobIds = InsightReportJobStore.jobIds(for: profileId)
+            let jobIdToPoll = serverJobs.sorted { $0.createdAt > $1.createdAt }.first?.jobId ?? storedJobIds.first
+
+            activeJob = serverJobs.first(where: { $0.jobId == jobIdToPoll }) ?? serverJobs.first
+
+            if let jobIdToPoll {
+                await pollReport(profileId: profileId, jobId: jobIdToPoll)
+                return
+            }
+
+            let latestResponse = try await apiClient.send(GetLatestInsightReportIdsRequest(profileId: profileId))
+            latestReport = latestResponse.reports?.first
+            if let latestReport {
+                let reportResponse = try await apiClient.send(GetInsightReportRequest(profileId: profileId, insightId: latestReport.reportId))
+                completedReport = reportResponse.report
+            }
+            reportStatus = latestReport == nil ? "No completed reports yet" : "Latest report ready"
+        } catch APIError.missingAuthToken {
+            reportStatus = nil
+            reportError = "Missing auth token."
+        } catch APIError.serverError(let statusCode, _) {
+            reportStatus = nil
+            reportError = "Server returned \(statusCode)."
+        } catch {
+            if (error as? URLError)?.code == .cancelled || error is CancellationError {
+                return
+            }
+
+            reportStatus = nil
+            reportError = "Failed to load insight reports."
+        }
+    }
+
+    @MainActor
+    private func pollReport(profileId: UUID, jobId: UUID) async {
+        while !Task.isCancelled {
+            let response: WaitForInsightJobResponse
+
+            do {
+                response = try await apiClient.send(WaitForInsightJobRequest(profileId: profileId, jobId: jobId))
+            } catch {
+                if (error as? URLError)?.code == .cancelled || error is CancellationError {
+                    return
+                }
+
+                reportStatus = nil
+                reportError = "Failed to update report status."
+                return
+            }
+
+            if response.ok == false {
+                InsightReportJobStore.remove(jobId, for: profileId)
+                activeJob = nil
+                reportStatus = nil
+                reportError = response.error ?? "Report job does not exist."
+                return
+            }
+
+            guard let generationStatus = response.generationStatus else {
+                reportStatus = nil
+                reportError = "Report status is unavailable."
+                return
+            }
+
+            switch generationStatus {
+            case "completed":
+                InsightReportJobStore.remove(jobId, for: profileId)
+                activeJob = nil
+                completedReport = response.report
+                reportStatus = "Report completed"
+                reportError = nil
+                return
+            case "failed":
+                InsightReportJobStore.remove(jobId, for: profileId)
+                activeJob = nil
+                reportStatus = nil
+                reportError = response.generationError ?? "Report generation failed."
+                return
+            case "pending", "queued", "running":
+                reportStatus = "Report \(generationStatus)"
+                activeJob = response.report.map {
+                    InsightReportJob(
+                        jobId: jobId,
+                        reportId: $0.reportId,
+                        profileId: $0.profileId,
+                        generationStatus: generationStatus,
+                        generationError: $0.generationError,
+                        createdAt: $0.createdAt,
+                        updatedAt: $0.updatedAt,
+                        hasData: $0.data != nil
+                    )
+                } ?? activeJob
+            default:
+                reportStatus = "Report \(generationStatus)"
+                return
+            }
+        }
+    }
+}
+
+private struct InsightReportStatusCard: View {
+    let isLoading: Bool
+    let status: String?
+    let errorMessage: String?
+    let activeJob: InsightReportJob?
+    let latestReport: InsightReportJob?
+    let completedReport: InsightReport?
+    let refreshAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Image(systemName: iconName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 26, height: 26)
+                    .background(iconColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                Text("AI Report")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(1.0)
+
+                Spacer()
+
+                Button(action: refreshAction) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.caption.weight(.bold))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .disabled(isLoading)
+            }
+
+            HStack(spacing: 10) {
+                if isLoading {
+                    ProgressView()
+                }
+
+                Text(primaryText)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(errorMessage == nil ? Color.primary : Color.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let secondaryText {
+                Text(secondaryText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+    }
+
+    private var primaryText: String {
+        if let errorMessage {
+            return errorMessage
+        }
+
+        if let status {
+            return status
+        }
+
+        return "Checking reports"
+    }
+
+    private var secondaryText: String? {
+        if let activeJob {
+            return "Job \(activeJob.jobId)"
+        }
+
+        if let completedReport {
+            return "Report \(completedReport.reportId)"
+        }
+
+        if let latestReport {
+            return "Report \(latestReport.reportId)"
+        }
+
+        return nil
+    }
+
+    private var iconName: String {
+        if errorMessage != nil {
+            return "exclamationmark.triangle.fill"
+        }
+
+        if isLoading || activeJob != nil {
+            return "hourglass"
+        }
+
+        return "sparkles"
+    }
+
+    private var iconColor: Color {
+        if errorMessage != nil {
+            return .red
+        }
+
+        if isLoading || activeJob != nil {
+            return .orange
+        }
+
+        return Color.accentColor
     }
 }
 
@@ -463,7 +724,18 @@ private extension View {
 // MARK: - Progress Trend Chart
 
 private struct ProgressTrendChart: View {
-    private let data: [FatMetric] = [
+    let trendData: [String: [InsightReportTrendPoint]]?
+
+    private var data: [FatMetric] {
+        let reportData = (trendData ?? [:]).flatMap { key, points in
+            points.map { FatMetric(date: $0.shortDate, value: $0.value, metric: key.displayTrendLabel) }
+        }
+
+        if !reportData.isEmpty {
+            return reportData
+        }
+
+        return [
         // Body Fat
         FatMetric(date: "May 24", value: 18.5, metric: "Body Fat"),
         FatMetric(date: "May 31", value: 18.2, metric: "Body Fat"),
@@ -483,8 +755,9 @@ private struct ProgressTrendChart: View {
         FatMetric(date: "May 31", value: 8.3, metric: "Visceral Fat"),
         FatMetric(date: "Jun 7", value: 8.1, metric: "Visceral Fat"),
         FatMetric(date: "Jun 14", value: 7.9, metric: "Visceral Fat"),
-        FatMetric(date: "Jun 22", value: 7.8, metric: "Visceral Fat")
-    ]
+            FatMetric(date: "Jun 22", value: 7.8, metric: "Visceral Fat")
+        ]
+    }
 
     private let metrics: [(String, Color)] = [
         ("Body Fat", .green),
@@ -517,7 +790,7 @@ private struct ProgressTrendChart: View {
                     x: .value("Date", item.date),
                     y: .value("Value", item.value)
                 )
-                .foregroundStyle(by: .value("Metric", item.metric))
+                .foregroundStyle(colorForMetric(item.metric))
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 .interpolationMethod(.catmullRom)
                 .symbol {
@@ -527,11 +800,6 @@ private struct ProgressTrendChart: View {
                         .shadow(color: colorForMetric(item.metric).opacity(0.3), radius: 2, x: 0, y: 1)
                 }
             }
-            .chartForegroundStyleScale([
-                "Body Fat": Color.green,
-                "Subcutaneous Fat": Color(red: 0.35, green: 0.55, blue: 0.95),
-                "Visceral Fat": Color(red: 0.95, green: 0.65, blue: 0.25)
-            ])
             .chartLegend(.hidden)
             .chartYAxis {
                 AxisMarks(position: .leading) { _ in
