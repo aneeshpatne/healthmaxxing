@@ -11,15 +11,21 @@ private extension Color {
 }
 
 struct PerformanceTab: View {
+    let payload: InsightReportPayload?
+
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 20) {
-                FFMIGaugeCard()
+                FFMIGaugeCard(section: payload?.performance["ffmi_gauge"])
+                PerformanceReportSummaryCard(section: payload?.performance["fmi_vs_ffmi"])
                 CompositionMapCard()
+                PerformanceReportSummaryCard(section: payload?.performance["body_composition_flow"])
                 BodyCompositionFlowCard()
-                CompositionTrendsCard()
+                PerformanceReportSummaryCard(section: payload?.performance["composition_trends"])
+                CompositionTrendsCard(section: payload?.performance["composition_trends"])
+                PerformanceReportSummaryCard(section: payload?.performance["target_vs_current_weight"])
                 RecompVectorPlotCard()
-                ExcessFatGaugeCard()
+                ExcessFatGaugeCard(section: payload?.performance["excess_fat_gauge"])
                 BodyMeasurementsCard()
             }
             .padding(.top, 4)
@@ -31,27 +37,30 @@ struct PerformanceTab: View {
 // MARK: - FFMI Gauge Card
 
 struct FFMIGaugeCard: View {
+    let section: InsightReportMetricSection?
+    private var value: Double { min(25, max(15, section?.numberValue ?? 19.5)) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             // Header
             VStack(alignment: .leading, spacing: 6) {
-                Text("FFMI Gauge")
+                Text(section?.displayTitle ?? "FFMI Gauge")
                     .font(.headline)
                     .foregroundStyle(.primary)
                 
-                Text("Fat-Free Mass Index measures your muscle mass relative to height.")
+                Text(section?.title ?? "Fat-Free Mass Index measures your muscle mass relative to height.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             
             // Gauge Visualization & Score
-            FFMISemicircularGauge(value: 19.5)
+            FFMISemicircularGauge(value: value)
                 .padding(.top, 10)
                 .padding(.horizontal, 10)
             
             // Category legend
-            FFMICategoryLegend(selectedValue: 19.5)
+            FFMICategoryLegend(selectedValue: value)
                 .padding(.top, 4)
             
             // Subtle separator
@@ -70,7 +79,7 @@ struct FFMIGaugeCard: View {
                             .fill(Color.performancePrimary.opacity(0.12))
                     )
                 
-                Text("FFMI around 20 reflects a well-trained frame with room to reveal more definition as fat comes down.")
+                Text(section?.displayComment ?? "FFMI around 20 reflects a well-trained frame with room to reveal more definition as fat comes down.")
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineSpacing(3)
@@ -222,7 +231,7 @@ struct FFMICategoryLegend: View {
 }
 
 #Preview {
-    PerformanceTab()
+    PerformanceTab(payload: nil)
         .padding(.vertical, 20)
         .background(Color.appBackground)
 }
@@ -648,7 +657,18 @@ struct CompositionTrend: Identifiable {
 }
 
 struct CompositionTrendsCard: View {
-    private let trendData: [CompositionTrend] = [
+    let section: InsightReportMetricSection?
+
+    private var trendData: [CompositionTrend] {
+        let reportData = (section?.trends ?? [:]).flatMap { key, points in
+            points.map { CompositionTrend(date: $0.shortDate, value: $0.value, metric: key.displayTrendLabel) }
+        }
+
+        if !reportData.isEmpty {
+            return reportData
+        }
+
+        return [
         // Lean Mass
         CompositionTrend(date: "May 24", value: 0.0, metric: "Lean Mass"),
         CompositionTrend(date: "May 31", value: 0.12, metric: "Lean Mass"),
@@ -661,18 +681,19 @@ struct CompositionTrendsCard: View {
         CompositionTrend(date: "May 31", value: -0.15, metric: "Fat Mass"),
         CompositionTrend(date: "Jun 7", value: -0.28, metric: "Fat Mass"),
         CompositionTrend(date: "Jun 14", value: -0.38, metric: "Fat Mass"),
-        CompositionTrend(date: "Jun 22", value: -0.48, metric: "Fat Mass")
-    ]
+            CompositionTrend(date: "Jun 22", value: -0.48, metric: "Fat Mass")
+        ]
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             // Header
             VStack(alignment: .leading, spacing: 6) {
-                Text("Composition Trends")
+                Text(section?.displayTitle ?? "Composition Trends")
                     .font(.headline)
                     .foregroundStyle(.primary)
                 
-                Text("Track changes in your lean mass and fat mass from your baseline.")
+                Text(section?.title ?? "Track changes in your lean mass and fat mass from your baseline.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -709,7 +730,7 @@ struct CompositionTrendsCard: View {
                         x: .value("Date", item.date),
                         y: .value("Change", item.value)
                     )
-                    .foregroundStyle(by: .value("Metric", item.metric))
+                    .foregroundStyle(colorForMetric(item.metric))
                     .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                     .interpolationMethod(.catmullRom)
                     
@@ -719,20 +740,16 @@ struct CompositionTrendsCard: View {
                             x: .value("Date", item.date),
                             y: .value("Change", item.value)
                         )
-                        .foregroundStyle(by: .value("Metric", item.metric))
+                        .foregroundStyle(colorForMetric(item.metric))
                         .symbol {
                             Circle()
-                                .fill(item.metric == "Lean Mass" ? Color.performancePositive : Color.performanceNegative)
+                                .fill(colorForMetric(item.metric))
                                 .frame(width: 8, height: 8)
                                 .overlay(Circle().stroke(Color.white, lineWidth: 2))
                                 .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
                         }
                     }
                 }
-                .chartForegroundStyleScale([
-                    "Lean Mass": Color.performancePositive,
-                    "Fat Mass": Color.performanceNegative
-                ])
                 .chartLegend(.hidden)
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
@@ -785,7 +802,7 @@ struct CompositionTrendsCard: View {
                             .fill(Color.performanceNegative.opacity(0.12))
                     )
                 
-                Text("Fat mass is down 0.48 kg over the last 30 days, while lean mass is essentially unchanged.")
+                Text(section?.displayComment ?? "Fat mass is down 0.48 kg over the last 30 days, while lean mass is essentially unchanged.")
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineSpacing(3)
@@ -805,6 +822,17 @@ struct CompositionTrendsCard: View {
                 .stroke(Color.appSeparator, lineWidth: 0.5)
         )
         .padding(.horizontal, 16)
+    }
+
+    private func colorForMetric(_ metric: String) -> Color {
+        switch metric {
+        case "Lean Mass", "Muscle Mass", "Skeletal Muscle":
+            return Color.performancePositive
+        case "Fat Mass", "Body Fat":
+            return Color.performanceNegative
+        default:
+            return Color.performancePrimary
+        }
     }
 }
 
@@ -1065,8 +1093,9 @@ private struct RecompVectorInsight: View {
 // MARK: - Excess Fat Gauge Card
 
 struct ExcessFatGaugeCard: View {
-    let currentFat: Double = 19.0
-    let targetFat: Double = 12.7
+    let section: InsightReportMetricSection?
+    var currentFat: Double { max(0.1, section?.nestedNumber("totalFatKg") ?? 19.0) }
+    var targetFat: Double { min(currentFat, max(0, section?.nestedNumber("targetFatKg") ?? 12.7)) }
     
     var excessFat: Double { currentFat - targetFat }
     
@@ -1074,11 +1103,11 @@ struct ExcessFatGaugeCard: View {
         VStack(alignment: .leading, spacing: 24) {
             // Header
             VStack(alignment: .leading, spacing: 6) {
-                Text("Excess Fat Gauge")
+                Text(section?.displayTitle ?? "Excess Fat Gauge")
                     .font(.headline)
                     .foregroundStyle(.primary)
                 
-                Text("Compare your current fat mass against your target fat mass.")
+                Text(section?.title ?? "Compare your current fat mass against your target fat mass.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1128,7 +1157,7 @@ struct ExcessFatGaugeCard: View {
                             .fill(Color.performanceCaution.opacity(0.12))
                     )
                 
-                Text("The gap between current and target fat is clear and closeable. Every 0.5 kg drop moves you visibly closer.")
+                Text(section?.displayComment ?? "The gap between current and target fat is clear and closeable. Every 0.5 kg drop moves you visibly closer.")
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineSpacing(3)
@@ -1151,6 +1180,42 @@ struct ExcessFatGaugeCard: View {
     }
 }
 
+struct PerformanceReportSummaryCard: View {
+    let section: InsightReportMetricSection?
+
+    var body: some View {
+        if let section {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(section.displayTitle)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                if let title = section.title, title != section.displayTitle {
+                    Text(title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if !section.displayComment.isEmpty {
+                    Text(section.displayComment)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.appSeparator, lineWidth: 1)
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+}
+
 struct ExcessFatSemicircularGauge: View {
     let current: Double
     let target: Double
@@ -1161,7 +1226,9 @@ struct ExcessFatSemicircularGauge: View {
             let height = geometry.size.height
             let strokeWidth: CGFloat = 24
             
-            let targetFraction = target / current
+            let safeCurrent = max(0.1, current)
+            let safeTarget = min(safeCurrent, max(0, target))
+            let targetFraction = safeTarget / safeCurrent
             let targetEndTrim = CGFloat(targetFraction) * 0.5
             let endTrim: CGFloat = 0.5
             
