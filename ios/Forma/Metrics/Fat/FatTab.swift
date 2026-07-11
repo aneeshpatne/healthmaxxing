@@ -123,53 +123,105 @@ struct FatTab: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            FatRatioCard(value: payload?.fat["fat_ratio"]?.numberValue ?? 24.8)
+            if payload?.fat.isEmpty != false {
+                MetricsUnavailableContent(message: "Fat report data is unavailable.")
+            }
+
+            if let section = payload?.fat["fat_ratio"], let value = section.numberValue {
+            FatRatioCard(
+                value: value,
+                comment: section.comment,
+                remark: section.remark
+            )
+            }
             
+            if let section = payload?.fat["visceral_vs_subcutaneous"],
+               let visceralFat = section.nestedNumber("visceralFatDeltaKg"),
+               let subcutaneousFat = section.nestedNumber("subcutaneousFatDeltaKg") {
             VisceralSubcutaneousCard(
-                visceralFat: payload?.fat["visceral_vs_subcutaneous"]?.nestedNumber("visceralFatDeltaKg") ?? 4.2,
-                subcutaneousFat: payload?.fat["visceral_vs_subcutaneous"]?.nestedNumber("subcutaneousFatDeltaKg") ?? 15.8,
-                verdict: payload?.fat["visceral_vs_subcutaneous"]?.title ?? "Mostly Subcutaneous",
-                remark: payload?.fat["visceral_vs_subcutaneous"]?.displayComment ?? "Distribution is relatively safer, though total fat remains elevated."
+                visceralFat: visceralFat,
+                subcutaneousFat: subcutaneousFat,
+                verdict: section.title ?? section.displayTitle,
+                remark: section.remark,
+                comment: section.comment
             )
+            }
             
+            if let section = payload?.fat["fat_ratio_trend"],
+               let currentRatio = section.nestedNumber("visceral_vs_subcutaneous") {
             VisceralSubcRatioTrendCard(
-                currentRatio: 0.27,
-                statusText: "Safe",
+                currentRatio: currentRatio,
+                statusText: section.title ?? section.displayTitle,
                 statusColor: .goodGreen,
                 statusIcon: "checkmark.circle.fill",
-                remarkText: payload?.fat["fat_ratio_trend"]?.displayComment ?? "Visceral to subcutaneous ratio is within a healthy and safe range."
+                remark: section.remark,
+                comment: section.comment,
+                data: section.trendPoints(preferredKeys: ["visceral_vs_subcutaneous", "visceralSubcutaneousRatio", "ratio"])
+                    .map { VisceralSubcRatioPoint(date: $0.date, value: $0.value) }
             )
+            }
             
+            if let section = payload?.fat["visceral_trend"], let currentMass = section.numberValue {
             VisceralFatMassTrendCard(
-                currentMass: payload?.fat["visceral_trend"]?.numberValue ?? 4.2,
-                statusText: "Optimal",
+                currentMass: currentMass,
+                statusText: section.title ?? section.displayTitle,
                 statusColor: .goodGreen,
                 statusIcon: "checkmark.circle.fill",
-                remarkText: payload?.fat["visceral_trend"]?.displayComment ?? "Visceral fat mass is within a healthy, low-risk range."
+                remark: section.remark,
+                comment: section.comment,
+                data: section.trendPoints(preferredKeys: ["visceralFatKg", "visceral_fat_kg", "visceralFatMassKg"])
+                    .map { VisceralFatMassPoint(date: $0.date, value: $0.value) }
             )
+            }
             
+            if let section = payload?.fat["subcutaneous_fat_mass_trend"], let currentMass = section.numberValue {
             SubcFatMassTrendCard(
-                currentMass: payload?.fat["subcutaneous_fat_mass_trend"]?.numberValue ?? 15.8,
-                statusText: "Elevated",
+                currentMass: currentMass,
+                statusText: section.title ?? section.displayTitle,
                 statusColor: .extremityRed,
                 statusIcon: "exclamationmark.triangle.fill",
-                remarkText: payload?.fat["subcutaneous_fat_mass_trend"]?.displayComment ?? "Subcutaneous fat mass is elevated. Focus on caloric deficit and activity."
+                remark: section.remark,
+                comment: section.comment,
+                data: section.trendPoints(preferredKeys: ["subcutaneousFatKg", "subcutaneous_fat_kg", "subcutaneousFatMassKg"])
+                    .map { SubcFatMassPoint(date: $0.date, value: $0.value) }
             )
+            }
             
+            if let section = payload?.fat["fat_mass_trend"], let currentMass = section.numberValue {
             FatMassTrendCard(
-                currentMass: payload?.fat["fat_mass_trend"]?.numberValue ?? 20.0,
-                statusText: "Elevated",
-                remarkText: payload?.fat["fat_mass_trend"]?.displayComment ?? "Total fat mass is above target.",
-                data: payload?.fat["fat_mass_trend"]?.trends["fatMassKg"]?.map { FatMassPoint(date: $0.date, value: $0.value) }
+                currentMass: currentMass,
+                statusText: section.title ?? section.displayTitle,
+                remark: section.remark,
+                comment: section.comment,
+                data: section.trendPoints(preferredKeys: ["fatMassKg", "fat_mass_kg", "totalFatKg"])
+                    .map { FatMassPoint(date: $0.date, value: $0.value) }
             )
+            }
             
+            if let section = payload?.fat["fat_ratio"], let value = section.numberValue {
             FatHistoryCard(
-                value: payload?.fat["fat_ratio"]?.numberValue ?? 24.8,
-                data: payload?.fat["fat_ratio"]?.trends["body_fat_pct"]?.map { FatDataPoint(date: $0.date, ratio: $0.value) }
+                value: value,
+                comment: section.comment,
+                remark: section.remark,
+                data: section.trendPoints(preferredKeys: ["body_fat_pct", "bodyFatPct", "fatRatio", "fat_ratio"])
+                    .map { FatDataPoint(date: $0.date, ratio: $0.value) }
             )
+            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
+    }
+}
+
+private extension InsightReportMetricSection {
+    func trendPoints(preferredKeys: [String]) -> [InsightReportTrendPoint] {
+        for key in preferredKeys {
+            if let points = trends[key], !points.isEmpty {
+                return points
+            }
+        }
+
+        return trends.values.first(where: { !$0.isEmpty }) ?? []
     }
 }
 
@@ -185,415 +237,65 @@ struct FatRatioZone {
 
 struct FatRatioCard: View {
     var value: Double = 24.8
+    var comment: String? = nil
+    var remark: InsightReportRemark? = nil
     
     var metrics: FatRatioMetrics {
         FatRatioMetrics(value: value)
     }
     
-    private let zones: [FatRatioZone] = [
-        FatRatioZone(name: "Low", min: 2.0, max: 6.0, rangeText: "<6%", color: Color.extremityRed),
-        FatRatioZone(name: "Optimal", min: 6.0, max: 18.0, rangeText: "6-18%", color: Color.goodGreen),
-        FatRatioZone(name: "Average", min: 18.0, max: 25.0, rangeText: "18-25%", color: Color.avgYellow),
-        FatRatioZone(name: "High", min: 25.0, max: 30.0, rangeText: "25%+", color: Color.extremityRed)
-    ]
-    
     var body: some View {
-        VStack(spacing: 16) {
-            // Top Section (Large Circular Gauge)
-            ZStack {
-                GeometryReader { geometry in
-                    let size = geometry.size
-                    let strokeWidth: CGFloat = 16
-                    let currentPos = valuePosition(for: value, in: size)
-                    
-                    ZStack {
-                        // Thin backdrop precision ring
-                        Circle()
-                            .trim(from: 0.0, to: 0.75)
-                            .stroke(
-                                Color.appSeparator.opacity(0.25),
-                                style: StrokeStyle(lineWidth: 1, lineCap: .round)
-                            )
-                            .rotationEffect(.degrees(135))
-                            .frame(width: size.width - strokeWidth, height: size.height - strokeWidth)
-                            .position(x: size.width / 2, y: size.height / 2)
-                        
-                        // Track segments (background + active progress)
-                        ForEach(0..<zones.count, id: \.self) { index in
-                            let zone = zones[index]
-                            
-                            let startFraction = (zone.min - 2.0) / 28.0
-                            let endFraction = (zone.max - 2.0) / 28.0
-                            
-                            let startTrim = 0.75 * startFraction
-                            let endTrim = 0.75 * endFraction
-                            
-                            // Apply a gap between segments for precision look
-                            let gapOffset: CGFloat = 0.005
-                            let segmentStart = startTrim + (index > 0 ? gapOffset : 0)
-                            let segmentEnd = endTrim - (index < zones.count - 1 ? gapOffset : 0)
-                            
-                            // 1. Background Track Segment (low opacity)
-                            Circle()
-                                .trim(from: segmentStart, to: segmentEnd)
-                                .stroke(
-                                    zone.color.opacity(0.12),
-                                    style: StrokeStyle(lineWidth: strokeWidth, lineCap: .butt)
-                                )
-                                .rotationEffect(.degrees(135))
-                                .frame(width: size.width - strokeWidth, height: size.height - strokeWidth)
-                                .position(x: size.width / 2, y: size.height / 2)
-                            
-                            // 2. Active Progress Fill Segment
-                            if value > zone.min {
-                                let activeFraction = (min(zone.max, value) - 2.0) / 28.0
-                                let activeEndTrim = 0.75 * activeFraction
-                                let activeEnd = max(segmentStart, activeEndTrim - (index < zones.count - 1 && value >= zone.max ? gapOffset : 0))
-                                
-                                Circle()
-                                    .trim(from: segmentStart, to: activeEnd)
-                                    .stroke(
-                                        zone.color.gradient,
-                                        style: StrokeStyle(lineWidth: strokeWidth, lineCap: .butt)
-                                    )
-                                    .rotationEffect(.degrees(135))
-                                    .frame(width: size.width - strokeWidth, height: size.height - strokeWidth)
-                                    .position(x: size.width / 2, y: size.height / 2)
-                                    .shadow(color: zone.color.opacity(0.15), radius: 3, x: 0, y: 1)
-                            }
-                        }
-                        
-                        // Numeric Labels at Interval Boundaries (2%, 6%, 18%, 25%, 30%)
-                        Text("2%")
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                            .position(valuePosition(for: 2.0, in: size, radiusOffset: -18))
-                        
-                        Text("6%")
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                            .position(valuePosition(for: 6.0, in: size, radiusOffset: -18))
-                        
-                        Text("18% Target")
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.goodGreen)
-                            .position(valuePosition(for: 18.0, in: size, radiusOffset: -22))
-                        
-                        Text("25%")
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                            .position(valuePosition(for: 25.0, in: size, radiusOffset: -18))
-                        
-                        Text("30%")
-                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                            .position(valuePosition(for: 30.0, in: size, radiusOffset: -18))
-                        
-                        // Current Target Pointer (Green triangle pointing outwards at 18%)
-                        Image(systemName: "triangle.fill")
-                            .font(.system(size: 8))
-                            .foregroundStyle(Color.goodGreen)
-                            .rotationEffect(Angle(degrees: valueAngle(for: 18.0).degrees + 90))
-                            .position(valuePosition(for: 18.0, in: size, radiusOffset: -12))
-                            .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 0.5)
-                        
-                        // Current Value indicator knob with statusColor glow & border
-                        Circle()
-                            .fill(Color.white)
-                            .frame(width: 12, height: 12)
-                            .overlay(
-                                Circle().stroke(metrics.statusColor, lineWidth: 3)
-                            )
-                            .background(
-                                Circle()
-                                    .fill(metrics.statusColor)
-                                    .frame(width: 24, height: 24)
-                                    .blur(radius: 6)
-                                    .opacity(0.6)
-                            )
-                            .position(currentPos)
-                            .shadow(color: .black.opacity(0.15), radius: 2, x: 0, y: 1.5)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 24) {
+            // Header
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Body Fat Ratio")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
                 
-                // Inside Text HUD
-                VStack(spacing: 6) {
-                    Text("Fat Ratio")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-                        .tracking(0.8)
-                    
-                    Text(metrics.valueText)
-                        .font(.system(size: 38, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.valueDarkTeal)
-                    
-                    Text(metrics.statusText)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(metrics.statusColor)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(metrics.statusColor.opacity(0.12))
-                        )
-                }
+                Text(comment ?? "")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(width: 200, height: 200)
-            .padding(.top, 8)
             
-            // Legend
-            HStack(spacing: 8) {
-                ForEach(zones, id: \.name) { zone in
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(zone.color)
-                            .frame(width: 6, height: 6)
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(zone.name)
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundStyle(.primary)
-                            Text(zone.rangeText)
-                                .font(.system(size: 8, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-            }
-            .frame(width: 280)
+            // Gauge Semicircle Visualization
+            FatSemicircularGauge(
+                value: value,
+                statusColor: metrics.statusColor,
+                statusText: metrics.statusText,
+                valueText: metrics.valueText
+            )
+            .padding(.top, 10)
+            .padding(.horizontal, 10)
+            
+            // Category legend
+            FatRatioCategoryLegend(selectedValue: value)
+                .padding(.top, 4)
             
             // Horizontal Divider
             Rectangle()
                 .fill(Color.appSeparator)
                 .frame(height: 1)
-                .padding(.horizontal, 4)
             
-            // Bottom Section: Verdict & Remark
-            HStack(alignment: .top, spacing: 16) {
-                // Verdict Column
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("VERDICT")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    HStack(spacing: 6) {
-                        Text(metrics.verdictText)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(metrics.statusColor)
-                        
-                        Image(systemName: metrics.statusIcon)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(metrics.statusColor)
-                            .frame(width: 18, height: 18)
-                            .background(
-                                Circle()
-                                    .stroke(metrics.statusColor, lineWidth: 1)
-                            )
-                    }
-                }
+            // Bottom Remark Row
+            HStack(alignment: .top, spacing: 14) {
+                let marker = remark?.marker
+                Image(systemName: marker?.iconName ?? metrics.statusIcon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(marker?.color ?? metrics.statusColor)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill((marker?.color ?? metrics.statusColor).opacity(0.12))
+                    )
                 
-                // Vertical Separator
-                Color.appSeparator
-                    .frame(width: 1)
-                    .frame(height: 38)
-                
-                // Remark Column
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("REMARK")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    Text(metrics.remarkText)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.primary)
-                        .lineSpacing(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 4)
-        }
-        .padding(.vertical, 18)
-        .padding(.horizontal, 18)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 10, x: 0, y: 3)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Fat Ratio, \(String(format: "%.1f", value)) percent, \(metrics.statusText.lowercased()), \(metrics.verdictText.lowercased()).")
-    }
-    
-    // --- Helper Methods to Prevent Result Builder Bloat ---
-    
-    private func valuePosition(for value: Double, in size: CGSize, radiusOffset: CGFloat = 0) -> CGPoint {
-        let centerX = size.width / 2
-        let centerY = size.height / 2
-        let strokeWidth: CGFloat = 16
-        let arcRadius = (size.width - strokeWidth) / 2 + radiusOffset
-        let valAngle = valueAngle(for: value).radians
-        return CGPoint(
-            x: centerX + arcRadius * CGFloat(cos(valAngle)),
-            y: centerY + arcRadius * CGFloat(sin(valAngle))
-        )
-    }
-    
-    private func valueAngle(for value: Double) -> Angle {
-        let clampedVal = max(2.0, min(30.0, value))
-        let activeFraction = (clampedVal - 2.0) / 28.0
-        return Angle(degrees: 135.0 + 270.0 * activeFraction)
-    }
-}
-
-// MARK: - Fat Ratio History
-
-struct FatDataPoint: Identifiable {
-    let id = UUID()
-    let date: Date
-    let ratio: Double
-}
-
-struct FatHistoryCard: View {
-    var value: Double = 24.8
-    var reportData: [FatDataPoint]?
-    
-    var metrics: FatRatioMetrics {
-        FatRatioMetrics(value: value)
-    }
-    
-    init(value: Double = 24.8, data: [FatDataPoint]? = nil) {
-        self.value = value
-        self.reportData = data
-    }
-
-    var data: [FatDataPoint] {
-        if let reportData, !reportData.isEmpty {
-            return reportData
-        }
-
-        return [
-            FatDataPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, ratio: 25.6),
-            FatDataPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, ratio: 25.2),
-            FatDataPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, ratio: 24.9),
-            FatDataPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, ratio: 24.8)
-        ]
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Fat Ratio History")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                
-                Text("Steady downward trend over the past 4 weeks.")
+                Text(remark?.text ?? "")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            
-            Chart {
-                ForEach(data) { point in
-                    LineMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("Ratio", point.ratio)
-                    )
-                    .foregroundStyle(Color.goodGreen.gradient)
-                    .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
-                    
-                    PointMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("Ratio", point.ratio)
-                    )
-                    .foregroundStyle(Color.goodGreen)
-                    .annotation(position: .top, spacing: 4) {
-                        Text(String(format: "%.1f%%", point.ratio))
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .chartYScale(domain: 24.0...26.5)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .weekOfYear)) { value in
-                    AxisValueLabel(format: .dateTime.month().day())
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
-                        .foregroundStyle(.secondary.opacity(0.15))
-                    AxisValueLabel() {
-                        if let doubleValue = value.as(Double.self) {
-                            Text(String(format: "%.1f%%", doubleValue))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            .frame(height: 200)
-            .padding(.top, 4)
-            
-            // Divider
-            Rectangle()
-                .fill(Color.appSeparator)
-                .frame(height: 1)
-                .padding(.horizontal, 4)
-            
-            // Bottom Verdict & Remark Row
-            HStack(alignment: .top, spacing: 16) {
-                // Verdict Column (Wraps to content width)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("VERDICT")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    HStack(spacing: 6) {
-                        Text(metrics.verdictText)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(metrics.statusColor)
-                        
-                        Image(systemName: metrics.statusIcon)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(metrics.statusColor)
-                            .frame(width: 18, height: 18)
-                            .background(
-                                Circle()
-                                    .stroke(metrics.statusColor, lineWidth: 1)
-                            )
-                    }
-                }
+                    .foregroundStyle(.primary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
                 
-                // Vertical Separator
-                Color.appSeparator
-                    .frame(width: 1)
-                    .frame(height: 38)
-                
-                // Remark Column (Fills remaining width)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("REMARK")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    Text(metrics.remarkText)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.primary)
-                        .lineSpacing(2)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer()
             }
             .padding(.horizontal, 4)
         }
@@ -607,6 +309,296 @@ struct FatHistoryCard: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(Color.appSeparator, lineWidth: 0.5)
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Fat Ratio, \(String(format: "%.1f", value)) percent, \(metrics.statusText.lowercased()), \(metrics.verdictText.lowercased()).")
+    }
+}
+
+// MARK: - Fat Semicircular Gauge
+
+struct FatSemicircularGauge: View {
+    let value: Double
+    let statusColor: Color
+    let statusText: String
+    let valueText: String
+    
+    let segments: [(color: Color, min: Double, max: Double)] = [
+        (Color.extremityRed, 2.0, 6.0),
+        (Color.goodGreen, 6.0, 18.0),
+        (Color.avgYellow, 18.0, 25.0),
+        (Color.extremityRed, 25.0, 30.0)
+    ]
+    
+    let labels: [Double] = [2, 6, 18, 25, 30]
+    
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let height = geometry.size.height
+            let radius = width / 2
+            let strokeWidth: CGFloat = 20
+            
+            ZStack {
+                // Colored Segments
+                ZStack {
+                    ForEach(0..<segments.count, id: \.self) { index in
+                        let segment = segments[index]
+                        let startTrim = CGFloat((segment.min - 2.0) / 28.0) * 0.5
+                        let endTrim = CGFloat((segment.max - 2.0) / 28.0) * 0.5
+                        
+                        Circle()
+                            .trim(from: startTrim, to: endTrim)
+                            .stroke(segment.color.gradient, style: StrokeStyle(lineWidth: strokeWidth, lineCap: .butt))
+                            .rotationEffect(.degrees(180))
+                    }
+                }
+                .frame(width: width, height: width)
+                .position(x: width / 2, y: height)
+                
+                // Range labels
+                ForEach(labels, id: \.self) { labelValue in
+                    let t = (labelValue - 2.0) / 28.0
+                    let angle = Angle(degrees: 180 - t * 180)
+                    let labelRadius = radius - 30
+                    
+                    Text(String(format: "%.0f%%", labelValue))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .position(
+                            x: width / 2 + labelRadius * CGFloat(cos(angle.radians)),
+                            y: height - labelRadius * CGFloat(sin(angle.radians))
+                        )
+                }
+                
+                // Marker
+                let valueT = max(0, min(1, (value - 2.0) / 28.0))
+                let markerAngle = Angle(degrees: 180 - valueT * 180)
+                
+                Circle()
+                    .fill(Color.appSecondaryBackground)
+                    .frame(width: 18, height: 18)
+                    .overlay(
+                        Circle().stroke(statusColor, lineWidth: 3.5)
+                    )
+                    .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 3)
+                    .position(
+                        x: width / 2 + radius * CGFloat(cos(markerAngle.radians)),
+                        y: height - radius * CGFloat(sin(markerAngle.radians))
+                    )
+                
+                // Score
+                VStack(spacing: 2) {
+                    Text(valueText)
+                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                    
+                    Text(statusText)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(statusColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(statusColor.opacity(0.12))
+                        )
+                }
+                .position(x: width / 2, y: height - 25)
+            }
+        }
+        .aspectRatio(2.0, contentMode: .fit)
+    }
+}
+
+// MARK: - Fat Ratio Category Legend
+
+struct FatRatioCategoryLegend: View {
+    let selectedValue: Double
+    
+    let categories: [(name: String, range: String, color: Color, min: Double, max: Double)] = [
+        ("Low", "< 6%", Color.extremityRed, 0, 6),
+        ("Optimal", "6-18%", Color.goodGreen, 6, 18),
+        ("Average", "18-25%", Color.avgYellow, 18, 25),
+        ("High", "> 25%", Color.extremityRed, 25, 100)
+    ]
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<categories.count, id: \.self) { index in
+                let cat = categories[index]
+                let isSelected = selectedValue >= cat.min && selectedValue < cat.max
+                
+                VStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(isSelected ? AnyShapeStyle(cat.color.gradient) : AnyShapeStyle(cat.color.opacity(0.15)))
+                        .frame(height: 4)
+                    
+                    Text(cat.name)
+                        .font(.caption2.weight(isSelected ? .bold : .medium))
+                        .foregroundStyle(isSelected ? .primary : .secondary)
+                        .minimumScaleFactor(0.8)
+                        .lineLimit(1)
+                    
+                    Text(cat.range)
+                        .font(.system(size: 9, weight: .regular))
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+}
+
+// MARK: - Fat Ratio History
+
+struct FatDataPoint: Identifiable {
+    let id = UUID()
+    let date: Date
+    let ratio: Double
+}
+
+struct FatHistoryCard: View {
+    var value: Double = 24.8
+    var comment: String? = nil
+    var remark: InsightReportRemark? = nil
+    var reportData: [FatDataPoint]?
+    
+    var metrics: FatRatioMetrics {
+        FatRatioMetrics(value: value)
+    }
+    
+    init(value: Double = 24.8, comment: String? = nil, remark: InsightReportRemark? = nil, data: [FatDataPoint]? = nil) {
+        self.value = value
+        self.comment = comment
+        self.remark = remark
+        self.reportData = data
+    }
+
+    var data: [FatDataPoint] {
+        reportData ?? []
+    }
+
+    private var yDomain: ClosedRange<Double> {
+        let values = data.map { $0.ratio }
+        guard let minVal = values.min(), let maxVal = values.max() else {
+            return 24.0...26.5
+        }
+        if minVal == maxVal {
+            return (minVal - 1)...(maxVal + 1)
+        }
+        let padding = (maxVal - minVal) * 0.15
+        return (minVal - padding)...(maxVal + padding)
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Fat Ratio History")
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    
+                    Spacer()
+                    
+                    Text(String(format: "%.1f%%", value))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                }
+                
+                Text(comment ?? "")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            // Swift Chart
+            Chart {
+                ForEach(data) { point in
+                    LineMark(
+                        x: .value("Date", point.date, unit: .day),
+                        y: .value("Ratio", point.ratio)
+                    )
+                    .foregroundStyle(Color.goodGreen.gradient)
+                    .interpolationMethod(.catmullRom)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                    
+                    if point.id == data.last?.id {
+                        PointMark(
+                            x: .value("Date", point.date, unit: .day),
+                            y: .value("Ratio", point.ratio)
+                        )
+                        .foregroundStyle(Color.goodGreen)
+                        .symbol {
+                            Circle()
+                                .fill(Color.goodGreen)
+                                .frame(width: 8, height: 8)
+                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
+                        }
+                    }
+                }
+            }
+            .chartYScale(domain: yDomain)
+            .chartXAxis(.hidden)
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisValueLabel()
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(height: 180)
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.appTertiaryBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            )
+            
+            // Divider
+            Rectangle()
+                .fill(Color.appSeparator)
+                .frame(height: 1)
+                .padding(.horizontal, 4)
+            
+            // Bottom Remark Row
+            HStack(alignment: .top, spacing: 14) {
+                let marker = remark?.marker
+                Image(systemName: marker?.iconName ?? metrics.statusIcon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(marker?.color ?? metrics.statusColor)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill((marker?.color ?? metrics.statusColor).opacity(0.12))
+                    )
+                
+                Text(remark?.text ?? "")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.appSecondaryBackground)
+                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.appSeparator, lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Fat Ratio, \(String(format: "%.1f", value)) percent, \(metrics.statusText.lowercased()), \(metrics.verdictText.lowercased()).")
     }
 }
 
@@ -651,7 +643,8 @@ struct VisceralSubcutaneousCard: View {
     let visceralFat: Double
     let subcutaneousFat: Double
     let verdict: String
-    let remark: String
+    let remark: InsightReportRemark?
+    let comment: String?
     
     var totalFat: Double {
         visceralFat + subcutaneousFat
@@ -678,21 +671,30 @@ struct VisceralSubcutaneousCard: View {
     var body: some View {
         VStack(spacing: 12) {
             // Header Row
-            HStack {
-                Text("Visceral vs Subcutaneous")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.primary)
-                
-                Spacer()
-                
-                Button(action: {
-                    // Action or info trigger
-                }) {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Visceral vs Subcutaneous")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.primary)
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        // Action or info trigger
+                    }) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel("More information about visceral and subcutaneous fat.")
                 }
-                .accessibilityLabel("More information about visceral and subcutaneous fat.")
+                
+                if let comment {
+                    Text(comment)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             
             // Top Comparison Panel (Inner Panel)
@@ -749,41 +751,28 @@ struct VisceralSubcutaneousCard: View {
                     .fill(Color.innerPanelBackground)
             )
             
-            // Bottom Interpretation Panel
-            HStack(alignment: .top, spacing: 12) {
-                // Verdict Column
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("VERDICT")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    Text(verdict)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color.subcutaneousLightTeal)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            // Bottom Remark Row
+            HStack(alignment: .top, spacing: 14) {
+                let marker = remark?.marker
+                Image(systemName: marker?.iconName ?? "info.circle")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(marker?.color ?? Color.subcutaneousLightTeal)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill((marker?.color ?? Color.subcutaneousLightTeal).opacity(0.12))
+                    )
                 
-                // Vertical Separator
-                Color.appSeparator
-                    .frame(width: 1)
-                    .frame(height: 34)
-                    .padding(.top, 2)
+                Text(remark?.text ?? comment ?? "")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
                 
-                // Remark Column
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("REMARK")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    Text(remark)
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(.primary)
-                        .lineSpacing(2)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer()
             }
+            .padding(.horizontal, 2)
+            .padding(.top, 4)
             .padding(.horizontal, 2)
             .padding(.top, 4)
         }
@@ -799,7 +788,7 @@ struct VisceralSubcutaneousCard: View {
                 .stroke(Color.appSeparator, lineWidth: 0.5)
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Visceral fat \(String(format: "%.1f", visceralFat)) kilograms, \(visceralPercentageText). Subcutaneous fat \(String(format: "%.1f", subcutaneousFat)) kilograms, \(subcutaneousPercentageText). Verdict: \(verdict). Remark: \(remark.replacingOccurrences(of: "\n", with: " ")).")
+        .accessibilityLabel("Visceral fat \(String(format: "%.1f", visceralFat)) kilograms, \(visceralPercentageText). Subcutaneous fat \(String(format: "%.1f", subcutaneousFat)) kilograms, \(subcutaneousPercentageText). Verdict: \(verdict). Remark: \((remark?.text ?? "").replacingOccurrences(of: "\n", with: " ")).")
     }
 }
 
@@ -814,27 +803,32 @@ struct FatMassPoint: Identifiable {
 struct FatMassTrendCard: View {
     let currentMass: Double
     let statusText: String
-    let remarkText: String
+    let remark: InsightReportRemark?
+    let comment: String?
     var reportData: [FatMassPoint]?
     
-    init(currentMass: Double, statusText: String, remarkText: String, data: [FatMassPoint]? = nil) {
+    init(currentMass: Double, statusText: String, remark: InsightReportRemark? = nil, comment: String? = nil, data: [FatMassPoint]? = nil) {
         self.currentMass = currentMass
         self.statusText = statusText
-        self.remarkText = remarkText
+        self.remark = remark
+        self.comment = comment
         self.reportData = data
     }
 
     var data: [FatMassPoint] {
-        if let reportData, !reportData.isEmpty {
-            return reportData
-        }
+        reportData ?? []
+    }
 
-        return [
-            FatMassPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, value: 17.2),
-            FatMassPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, value: 19.0),
-            FatMassPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, value: 18.2),
-            FatMassPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, value: 20.0)
-        ]
+    private var yDomain: ClosedRange<Double> {
+        let values = data.map { $0.value }
+        guard let minVal = values.min(), let maxVal = values.max() else {
+            return 15.0...21.5
+        }
+        if minVal == maxVal {
+            return (minVal - 1)...(maxVal + 1)
+        }
+        let padding = (maxVal - minVal) * 0.15
+        return (minVal - padding)...(maxVal + padding)
     }
     
     var body: some View {
@@ -853,9 +847,10 @@ struct FatMassTrendCard: View {
                         .foregroundStyle(.primary)
                 }
                 
-                Text("Upward trend over the past 4 weeks.")
+                Text(comment ?? "")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             
             // Swift Chart
@@ -867,43 +862,45 @@ struct FatMassTrendCard: View {
                     )
                     .foregroundStyle(Color.extremityRed.gradient)
                     .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
                     
-                    PointMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("Mass", point.value)
-                    )
-                    .foregroundStyle(Color.extremityRed)
-                    .annotation(position: .top, spacing: 4) {
-                        Text(String(format: "%.1f kg", point.value))
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .chartYScale(domain: 15.0...21.5)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .weekOfYear)) { value in
-                    AxisValueLabel(format: .dateTime.month().day())
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
-                        .foregroundStyle(.secondary.opacity(0.15))
-                    AxisValueLabel() {
-                        if let doubleValue = value.as(Double.self) {
-                            Text(String(format: "%.0f kg", doubleValue))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                    if point.id == data.last?.id {
+                        PointMark(
+                            x: .value("Date", point.date, unit: .day),
+                            y: .value("Mass", point.value)
+                        )
+                        .foregroundStyle(Color.extremityRed)
+                        .symbol {
+                            Circle()
+                                .fill(Color.extremityRed)
+                                .frame(width: 8, height: 8)
+                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                         }
                     }
                 }
             }
-            .frame(height: 200)
-            .padding(.top, 4)
+            .chartYScale(domain: yDomain)
+            .chartXAxis(.hidden)
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisValueLabel()
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(height: 180)
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.appTertiaryBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            )
             
             // Divider
             Rectangle()
@@ -911,50 +908,27 @@ struct FatMassTrendCard: View {
                 .frame(height: 1)
                 .padding(.horizontal, 4)
             
-            // Bottom Verdict & Remark Row
-            HStack(alignment: .top, spacing: 16) {
-                // Verdict Column (Wraps to content width)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("VERDICT")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    HStack(spacing: 6) {
-                        Text(statusText)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.extremityRed)
-                        
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.extremityRed)
-                            .frame(width: 18, height: 18)
-                            .background(
-                                Circle()
-                                    .stroke(Color.extremityRed, lineWidth: 1)
-                            )
-                    }
-                }
+            // Bottom Remark Row
+            HStack(alignment: .top, spacing: 14) {
+                let marker = remark?.marker
+                Image(systemName: marker?.iconName ?? "exclamationmark.triangle.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(marker?.color ?? Color.extremityRed)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill((marker?.color ?? Color.extremityRed).opacity(0.12))
+                    )
                 
-                // Vertical Separator
-                Color.appSeparator
-                    .frame(width: 1)
-                    .frame(height: 38)
+                Text(remark?.text ?? "")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
                 
-                // Remark Column (Fills remaining width)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("REMARK")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    Text(remarkText)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.primary)
-                        .lineSpacing(2)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer()
             }
+            .padding(.horizontal, 4)
             .padding(.horizontal, 4)
         }
         .padding(20)
@@ -968,7 +942,7 @@ struct FatMassTrendCard: View {
                 .stroke(Color.appSeparator, lineWidth: 0.5)
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Fat mass history over past 4 weeks, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \(remarkText.replacingOccurrences(of: "\n", with: " ")).")
+        .accessibilityLabel("Fat mass history over past 4 weeks, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \((remark?.text ?? "").replacingOccurrences(of: "\n", with: " ")).")
     }
 }
 
@@ -985,14 +959,21 @@ struct VisceralSubcRatioTrendCard: View {
     let statusText: String
     let statusColor: Color
     let statusIcon: String
-    let remarkText: String
-    
-    let data: [VisceralSubcRatioPoint] = [
-        VisceralSubcRatioPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, value: 0.25),
-        VisceralSubcRatioPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, value: 0.25),
-        VisceralSubcRatioPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, value: 0.25),
-        VisceralSubcRatioPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, value: 0.27)
-    ]
+    let remark: InsightReportRemark?
+    let comment: String?
+    let data: [VisceralSubcRatioPoint]
+
+    private var yDomain: ClosedRange<Double> {
+        let values = data.map { $0.value }
+        guard let minVal = values.min(), let maxVal = values.max() else {
+            return 0.20...0.35
+        }
+        if minVal == maxVal {
+            return (minVal - 0.05)...(maxVal + 0.05)
+        }
+        let padding = (maxVal - minVal) * 0.15
+        return (minVal - padding)...(maxVal + padding)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -1010,9 +991,10 @@ struct VisceralSubcRatioTrendCard: View {
                         .foregroundStyle(.primary)
                 }
                 
-                Text("Healthy distribution maintained.")
+                Text(comment ?? "")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             
             // Swift Chart
@@ -1024,43 +1006,45 @@ struct VisceralSubcRatioTrendCard: View {
                     )
                     .foregroundStyle(Color.visceralDarkTeal.gradient)
                     .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
                     
-                    PointMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("Ratio", point.value)
-                    )
-                    .foregroundStyle(Color.visceralDarkTeal)
-                    .annotation(position: .top, spacing: 4) {
-                        Text(String(format: "%.2f", point.value))
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .chartYScale(domain: 0.20...0.35)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .weekOfYear)) { value in
-                    AxisValueLabel(format: .dateTime.month().day())
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
-                        .foregroundStyle(.secondary.opacity(0.15))
-                    AxisValueLabel() {
-                        if let doubleValue = value.as(Double.self) {
-                            Text(String(format: "%.2f", doubleValue))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                    if point.id == data.last?.id {
+                        PointMark(
+                            x: .value("Date", point.date, unit: .day),
+                            y: .value("Ratio", point.value)
+                        )
+                        .foregroundStyle(Color.visceralDarkTeal)
+                        .symbol {
+                            Circle()
+                                .fill(Color.visceralDarkTeal)
+                                .frame(width: 8, height: 8)
+                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                         }
                     }
                 }
             }
-            .frame(height: 200)
-            .padding(.top, 4)
+            .chartYScale(domain: yDomain)
+            .chartXAxis(.hidden)
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisValueLabel()
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(height: 180)
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.appTertiaryBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            )
             
             // Divider
             Rectangle()
@@ -1068,49 +1052,25 @@ struct VisceralSubcRatioTrendCard: View {
                 .frame(height: 1)
                 .padding(.horizontal, 4)
             
-            // Bottom Verdict & Remark Row
-            HStack(alignment: .top, spacing: 16) {
-                // Verdict Column (Wraps to content width)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("VERDICT")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    HStack(spacing: 6) {
-                        Text(statusText)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(statusColor)
-                        
-                        Image(systemName: statusIcon)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(statusColor)
-                            .frame(width: 18, height: 18)
-                            .background(
-                                Circle()
-                                    .stroke(statusColor, lineWidth: 1)
-                            )
-                    }
-                }
+            // Bottom Remark Row
+            HStack(alignment: .top, spacing: 14) {
+                let marker = remark?.marker
+                Image(systemName: marker?.iconName ?? statusIcon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(marker?.color ?? statusColor)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill((marker?.color ?? statusColor).opacity(0.12))
+                    )
                 
-                // Vertical Separator
-                Color.appSeparator
-                    .frame(width: 1)
-                    .frame(height: 38)
+                Text(remark?.text ?? "")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
                 
-                // Remark Column (Fills remaining width)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("REMARK")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    Text(remarkText)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.primary)
-                        .lineSpacing(2)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer()
             }
             .padding(.horizontal, 4)
         }
@@ -1125,7 +1085,7 @@ struct VisceralSubcRatioTrendCard: View {
                 .stroke(Color.appSeparator, lineWidth: 0.5)
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Visceral to subcutaneous ratio history, ending at \(String(format: "%.2f", currentRatio)). Current status is \(statusText). Remark: \(remarkText).")
+        .accessibilityLabel("Visceral to subcutaneous ratio history, ending at \(String(format: "%.2f", currentRatio)). Current status is \(statusText). Remark: \(remark?.text ?? "").")
     }
 }
 
@@ -1142,14 +1102,21 @@ struct SubcFatMassTrendCard: View {
     let statusText: String
     let statusColor: Color
     let statusIcon: String
-    let remarkText: String
-    
-    let data: [SubcFatMassPoint] = [
-        SubcFatMassPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, value: 13.8),
-        SubcFatMassPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, value: 15.2),
-        SubcFatMassPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, value: 14.6),
-        SubcFatMassPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, value: 15.8)
-    ]
+    let remark: InsightReportRemark?
+    let comment: String?
+    let data: [SubcFatMassPoint]
+
+    private var yDomain: ClosedRange<Double> {
+        let values = data.map { $0.value }
+        guard let minVal = values.min(), let maxVal = values.max() else {
+            return 12.0...18.0
+        }
+        if minVal == maxVal {
+            return (minVal - 1)...(maxVal + 1)
+        }
+        let padding = (maxVal - minVal) * 0.15
+        return (minVal - padding)...(maxVal + padding)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -1167,9 +1134,10 @@ struct SubcFatMassTrendCard: View {
                         .foregroundStyle(.primary)
                 }
                 
-                Text("Upward trend over the past 4 weeks.")
+                Text(comment ?? "")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             
             // Swift Chart
@@ -1181,43 +1149,45 @@ struct SubcFatMassTrendCard: View {
                     )
                     .foregroundStyle(Color.subcutaneousLightTeal.gradient)
                     .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
                     
-                    PointMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("Mass", point.value)
-                    )
-                    .foregroundStyle(Color.subcutaneousLightTeal)
-                    .annotation(position: .top, spacing: 4) {
-                        Text(String(format: "%.1f kg", point.value))
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .chartYScale(domain: 12.0...18.0)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .weekOfYear)) { value in
-                    AxisValueLabel(format: .dateTime.month().day())
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
-                        .foregroundStyle(.secondary.opacity(0.15))
-                    AxisValueLabel() {
-                        if let doubleValue = value.as(Double.self) {
-                            Text(String(format: "%.0f kg", doubleValue))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                    if point.id == data.last?.id {
+                        PointMark(
+                            x: .value("Date", point.date, unit: .day),
+                            y: .value("Mass", point.value)
+                        )
+                        .foregroundStyle(Color.subcutaneousLightTeal)
+                        .symbol {
+                            Circle()
+                                .fill(Color.subcutaneousLightTeal)
+                                .frame(width: 8, height: 8)
+                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                         }
                     }
                 }
             }
-            .frame(height: 200)
-            .padding(.top, 4)
+            .chartYScale(domain: yDomain)
+            .chartXAxis(.hidden)
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisValueLabel()
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(height: 180)
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.appTertiaryBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            )
             
             // Divider
             Rectangle()
@@ -1225,49 +1195,25 @@ struct SubcFatMassTrendCard: View {
                 .frame(height: 1)
                 .padding(.horizontal, 4)
             
-            // Bottom Verdict & Remark Row
-            HStack(alignment: .top, spacing: 16) {
-                // Verdict Column (Wraps to content width)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("VERDICT")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    HStack(spacing: 6) {
-                        Text(statusText)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(statusColor)
-                        
-                        Image(systemName: statusIcon)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(statusColor)
-                            .frame(width: 18, height: 18)
-                            .background(
-                                Circle()
-                                    .stroke(statusColor, lineWidth: 1)
-                            )
-                    }
-                }
+            // Bottom Remark Row
+            HStack(alignment: .top, spacing: 14) {
+                let marker = remark?.marker
+                Image(systemName: marker?.iconName ?? statusIcon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(marker?.color ?? statusColor)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill((marker?.color ?? statusColor).opacity(0.12))
+                    )
                 
-                // Vertical Separator
-                Color.appSeparator
-                    .frame(width: 1)
-                    .frame(height: 38)
+                Text(remark?.text ?? "")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
                 
-                // Remark Column (Fills remaining width)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("REMARK")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    Text(remarkText)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.primary)
-                        .lineSpacing(2)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer()
             }
             .padding(.horizontal, 4)
         }
@@ -1282,7 +1228,7 @@ struct SubcFatMassTrendCard: View {
                 .stroke(Color.appSeparator, lineWidth: 0.5)
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Subcutaneous fat mass history, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \(remarkText).")
+        .accessibilityLabel("Subcutaneous fat mass history, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \(remark?.text ?? "").")
     }
 }
 
@@ -1299,14 +1245,21 @@ struct VisceralFatMassTrendCard: View {
     let statusText: String
     let statusColor: Color
     let statusIcon: String
-    let remarkText: String
-    
-    let data: [VisceralFatMassPoint] = [
-        VisceralFatMassPoint(date: Calendar.current.date(byAdding: .day, value: -21, to: Date())!, value: 3.4),
-        VisceralFatMassPoint(date: Calendar.current.date(byAdding: .day, value: -14, to: Date())!, value: 3.8),
-        VisceralFatMassPoint(date: Calendar.current.date(byAdding: .day, value: -7, to: Date())!, value: 3.6),
-        VisceralFatMassPoint(date: Calendar.current.date(byAdding: .day, value: 0, to: Date())!, value: 4.2)
-    ]
+    let remark: InsightReportRemark?
+    let comment: String?
+    let data: [VisceralFatMassPoint]
+
+    private var yDomain: ClosedRange<Double> {
+        let values = data.map { $0.value }
+        guard let minVal = values.min(), let maxVal = values.max() else {
+            return 2.0...6.0
+        }
+        if minVal == maxVal {
+            return (minVal - 1)...(maxVal + 1)
+        }
+        let padding = (maxVal - minVal) * 0.15
+        return (minVal - padding)...(maxVal + padding)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -1324,9 +1277,10 @@ struct VisceralFatMassTrendCard: View {
                         .foregroundStyle(.primary)
                 }
                 
-                Text("Slightly upward trend over the past 4 weeks.")
+                Text(comment ?? "")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             
             // Swift Chart
@@ -1338,43 +1292,45 @@ struct VisceralFatMassTrendCard: View {
                     )
                     .foregroundStyle(Color.visceralDarkTeal.gradient)
                     .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
                     
-                    PointMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("Mass", point.value)
-                    )
-                    .foregroundStyle(Color.visceralDarkTeal)
-                    .annotation(position: .top, spacing: 4) {
-                        Text(String(format: "%.1f kg", point.value))
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .chartYScale(domain: 2.0...6.0)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .weekOfYear)) { value in
-                    AxisValueLabel(format: .dateTime.month().day())
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
-                        .foregroundStyle(.secondary.opacity(0.15))
-                    AxisValueLabel() {
-                        if let doubleValue = value.as(Double.self) {
-                            Text(String(format: "%.0f kg", doubleValue))
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                    if point.id == data.last?.id {
+                        PointMark(
+                            x: .value("Date", point.date, unit: .day),
+                            y: .value("Mass", point.value)
+                        )
+                        .foregroundStyle(Color.visceralDarkTeal)
+                        .symbol {
+                            Circle()
+                                .fill(Color.visceralDarkTeal)
+                                .frame(width: 8, height: 8)
+                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                         }
                     }
                 }
             }
-            .frame(height: 200)
-            .padding(.top, 4)
+            .chartYScale(domain: yDomain)
+            .chartXAxis(.hidden)
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
+                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisValueLabel()
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(height: 180)
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.appTertiaryBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            )
             
             // Divider
             Rectangle()
@@ -1382,49 +1338,25 @@ struct VisceralFatMassTrendCard: View {
                 .frame(height: 1)
                 .padding(.horizontal, 4)
             
-            // Bottom Verdict & Remark Row
-            HStack(alignment: .top, spacing: 16) {
-                // Verdict Column (Wraps to content width)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("VERDICT")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    HStack(spacing: 6) {
-                        Text(statusText)
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
-                            .foregroundStyle(statusColor)
-                        
-                        Image(systemName: statusIcon)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(statusColor)
-                            .frame(width: 18, height: 18)
-                            .background(
-                                Circle()
-                                    .stroke(statusColor, lineWidth: 1)
-                            )
-                    }
-                }
+            // Bottom Remark Row
+            HStack(alignment: .top, spacing: 14) {
+                let marker = remark?.marker
+                Image(systemName: marker?.iconName ?? statusIcon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(marker?.color ?? statusColor)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill((marker?.color ?? statusColor).opacity(0.12))
+                    )
                 
-                // Vertical Separator
-                Color.appSeparator
-                    .frame(width: 1)
-                    .frame(height: 38)
+                Text(remark?.text ?? "")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
                 
-                // Remark Column (Fills remaining width)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("REMARK")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .tracking(1.0)
-                    
-                    Text(remarkText)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(.primary)
-                        .lineSpacing(2)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer()
             }
             .padding(.horizontal, 4)
         }
@@ -1439,7 +1371,7 @@ struct VisceralFatMassTrendCard: View {
                 .stroke(Color.appSeparator, lineWidth: 0.5)
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Visceral fat mass history, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \(remarkText).")
+        .accessibilityLabel("Visceral fat mass history, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \(remark?.text ?? "").")
     }
 }
 
