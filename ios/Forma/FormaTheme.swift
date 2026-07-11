@@ -98,6 +98,35 @@ extension Color {
     })
 }
 
+enum FormaChartStyle {
+    static let lineStyle = StrokeStyle(
+        lineWidth: 2,
+        lineCap: .round,
+        lineJoin: .round
+    )
+    static let gridLineStyle = StrokeStyle(
+        lineWidth: 0.5,
+        lineCap: .round,
+        dash: [2, 4]
+    )
+    static let gridOpacity = 0.10
+    static let axisLabelOpacity = 0.42
+    static let endpointSize: CGFloat = 7
+
+    static func areaGradient(_ color: Color) -> LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: color.opacity(0.14), location: 0),
+                .init(color: color.opacity(0.04), location: 0.55),
+                .init(color: color.opacity(0.01), location: 0.82),
+                .init(color: color.opacity(0), location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+
 private struct FormaMetricCardModifier: ViewModifier {
     let horizontalPadding: CGFloat
     let padding: CGFloat
