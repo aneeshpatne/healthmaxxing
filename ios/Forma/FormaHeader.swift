@@ -5,26 +5,38 @@
 //  Created by Aneesh Patne on 19/06/26.
 //
 import SwiftUI
+import ClerkKit
 import ClerkKitUI
 
 let headerHeight: CGFloat = 128
+let collapsedHeaderHeight: CGFloat = 78
 
 private let headerContentHeight: CGFloat = 68
 
 struct FormaHeader: View {
     @Binding var activeTab: AppTab
     @Binding var selectedMetricsTab: MetricsTab
+    let isCollapsed: Bool
+
+    @Environment(Clerk.self) private var clerk
+
+    private var headerIsCollapsed: Bool {
+        activeTab == .metrics && isCollapsed
+    }
     
     // Dynamic greeting based on the current time of day
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
+        let firstName = clerk.user?.firstName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = firstName?.isEmpty == false ? firstName! : "there"
+
         switch hour {
         case 0..<12:
-            return "Good Morning, Aneesh"
+            return "Good Morning, \(name)"
         case 12..<17:
-            return "Good Afternoon, Aneesh"
+            return "Good Afternoon, \(name)"
         default:
-            return "Good Evening, Aneesh"
+            return "Good Evening, \(name)"
         }
     }
     
@@ -33,13 +45,15 @@ struct FormaHeader: View {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Forma")
-                        .font(Font.cormorantGaramond(size: 34).weight(.bold))
+                        .font(Font.cormorantGaramond(size: headerIsCollapsed ? 28 : 34).weight(.bold))
                         .foregroundStyle(.primary)
                         .kerning(0.5)
                     
                     Text(greeting)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .opacity(headerIsCollapsed ? 0 : 1)
+                        .frame(height: headerIsCollapsed ? 0 : nil)
                 }
                 
                 Spacer()
@@ -47,19 +61,18 @@ struct FormaHeader: View {
                     Settings()
                 } label: {
                     Image(systemName: "gearshape.fill")
-                        .font(.title2)
+                        .font(headerIsCollapsed ? .headline : .title2)
                         .foregroundStyle(Color.primary)
+                        .frame(width: 40, height: 40)
                 }
-                //
-                //                UserButton()
-                //                    .frame(width: 42, height: 42)
-                //                    .glassEffect(.regular, in: Circle())
+                .buttonStyle(.glass)
+                .accessibilityLabel("Settings")
             }
-            .frame(height: headerContentHeight)
+            .frame(height: headerIsCollapsed ? 52 : headerContentHeight)
             .padding(.horizontal, 20)
             
             if activeTab == .metrics {
-                GlassTabBar(selectedTab: $selectedMetricsTab)
+                GlassTabBar(selectedTab: $selectedMetricsTab, isCollapsed: headerIsCollapsed)
             }
         }
         .background {
@@ -96,5 +109,10 @@ struct FormaHeader: View {
 }
 
 #Preview {
-    FormaHeader(activeTab: .constant(.metrics), selectedMetricsTab: .constant(.insights))
+    FormaHeader(
+        activeTab: .constant(.metrics),
+        selectedMetricsTab: .constant(.insights),
+        isCollapsed: false
+    )
+    .environment(Clerk.shared)
 }
