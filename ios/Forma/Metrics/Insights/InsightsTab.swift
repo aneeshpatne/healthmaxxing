@@ -74,7 +74,7 @@ struct InsightsTab: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
-                            .tracking(1.0)
+                            .tracking(0.6)
 
                         Spacer()
 
@@ -138,7 +138,7 @@ struct InsightsTab: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
-                            .tracking(1.0)
+                            .tracking(0.6)
 
                         Spacer()
                     }
@@ -201,7 +201,7 @@ struct InsightsTab: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
-                            .tracking(1.0)
+                            .tracking(0.6)
 
                         Spacer()
                     }
@@ -267,7 +267,7 @@ struct InsightsTab: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
-                            .tracking(1.0)
+                            .tracking(0.6)
 
                         Spacer()
                     }
@@ -330,7 +330,7 @@ struct InsightsTab: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
-                            .tracking(1.0)
+                            .tracking(0.6)
 
                         Spacer()
                     }
@@ -406,7 +406,7 @@ struct InsightsTab: View {
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
-                            .tracking(1.0)
+                            .tracking(0.6)
 
                         Spacer()
 
@@ -634,7 +634,7 @@ private struct InsightReportStatusCard: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
-                    .tracking(1.0)
+                    .tracking(0.6)
 
                 Spacer()
 
@@ -745,8 +745,13 @@ private struct InsightReportStatusCard: View {
 // MARK: - Insights Card Modifier
 
 private struct InsightsCardModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hasAppeared = false
+
     func body(content: Content) -> some View {
         content
+            .opacity(hasAppeared || reduceMotion ? 1 : 0)
+            .offset(y: hasAppeared || reduceMotion ? 0 : 8)
             .padding(18)
             .background(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -758,6 +763,17 @@ private struct InsightsCardModifier: ViewModifier {
                     .stroke(Color.appSeparator, lineWidth: 0.5)
             )
             .padding(.horizontal, 16)
+            .onAppear {
+                guard !hasAppeared else { return }
+
+                if reduceMotion {
+                    hasAppeared = true
+                } else {
+                    withAnimation(.easeOut(duration: 0.24)) {
+                        hasAppeared = true
+                    }
+                }
+            }
     }
 }
 
