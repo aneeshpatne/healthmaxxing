@@ -10,23 +10,98 @@ private extension Color {
     static let performanceNegative = Color(uiColor: .systemRed)
 }
 
+private extension InsightReportMetricSection {
+    var hasWeightComparisonData: Bool {
+        firstNumber("currentWeightKg", "currentWeight") != nil
+            && firstNumber("targetWeightKg", "targetWeight") != nil
+    }
+
+    var hasLeanFatVectorData: Bool {
+        let initialWeight = firstNumber("initialWeightKg", "initialWeight", "startWeightKg", "startWeight")
+        let currentWeight = firstNumber("currentWeightKg", "currentWeight")
+        let targetWeight = firstNumber("targetWeightKg", "targetWeight")
+        let initialFat = compositionNumber("initial", "fatMassKg") ?? firstNumber("initialFatKg", "initialFatMassKg", "startFatKg", "startFatMassKg")
+        let currentFat = compositionNumber("current", "fatMassKg") ?? firstNumber("currentFatKg", "currentFatMassKg", "totalFatKg")
+        let targetFat = compositionNumber("target", "fatMassKg") ?? firstNumber("targetFatKg", "targetFatMassKg")
+        let initialLean = compositionNumber("initial", "leanMassKg") ?? firstNumber("initialLeanKg", "initialLeanMassKg", "startLeanKg", "startLeanMassKg") ?? derivedLean(weight: initialWeight, fat: initialFat)
+        let currentLean = compositionNumber("current", "leanMassKg") ?? firstNumber("currentLeanKg", "currentLeanMassKg", "totalLeanKg") ?? derivedLean(weight: currentWeight, fat: currentFat)
+        let targetLean = compositionNumber("target", "leanMassKg") ?? firstNumber("targetLeanKg", "targetLeanMassKg") ?? derivedLean(weight: targetWeight, fat: targetFat)
+
+        return initialFat != nil
+            && initialLean != nil
+            && currentFat != nil
+            && currentLean != nil
+            && targetFat != nil
+            && targetLean != nil
+    }
+
+    func firstNumber(_ keys: String...) -> Double? {
+        for key in keys {
+            if let number = nestedNumber(key) {
+                return number
+            }
+        }
+
+        return nil
+    }
+
+    func compositionNumber(_ phase: String, _ key: String) -> Double? {
+        nestedNumber(phase, key)
+    }
+
+    func derivedLean(weight: Double?, fat: Double?) -> Double? {
+        guard let weight, let fat else { return nil }
+        return max(0, weight - fat)
+    }
+}
+
 struct PerformanceTab: View {
     let payload: InsightReportPayload?
+
+    private var targetComparisonSection: InsightReportMetricSection? {
+        [
+            "target_vs_current_weight",
+            "recomp_vector_plot",
+            "initial_current_target_composition",
+            "lean_vs_fat_mass",
+            "lean_vs_fat_mass_target",
+            "current_vs_target_weight"
+        ]
+            .compactMap { payload?.performance[$0] }
+            .first { $0.hasWeightComparisonData || $0.hasLeanFatVectorData }
+    }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 20) {
-                FFMIGaugeCard(section: payload?.performance["ffmi_gauge"])
-                PerformanceReportSummaryCard(section: payload?.performance["fmi_vs_ffmi"])
-                CompositionMapCard()
-                PerformanceReportSummaryCard(section: payload?.performance["body_composition_flow"])
-                BodyCompositionFlowCard()
-                PerformanceReportSummaryCard(section: payload?.performance["composition_trends"])
-                CompositionTrendsCard(section: payload?.performance["composition_trends"])
-                PerformanceReportSummaryCard(section: payload?.performance["target_vs_current_weight"])
-                RecompVectorPlotCard()
-                ExcessFatGaugeCard(section: payload?.performance["excess_fat_gauge"])
-                BodyMeasurementsCard()
+                if payload?.performance.isEmpty != false {
+                    MetricsUnavailableContent(message: "Performance report data is unavailable.")
+                }
+                if let section = payload?.performance["ffmi_gauge"], section.numberValue != nil {
+                    FFMIGaugeCard(section: section)
+                }
+                if let section = payload?.performance["fmi_vs_ffmi"],
+                   (section.nestedNumber("ffmi") ?? section.nestedNumber("ffmiVal")) != nil,
+                   (section.nestedNumber("fmi") ?? section.nestedNumber("fmiVal")) != nil {
+                    CompositionMapCard(section: section)
+                }
+                if let section = payload?.performance["body_composition_flow"],
+                   (section.nestedNumber("totalWeightKg") ?? section.nestedNumber("totalWeight")) != nil,
+                   (section.nestedNumber("leanMassKg") ?? section.nestedNumber("leanMass")) != nil,
+                   (section.nestedNumber("fatMassKg") ?? section.nestedNumber("fatMass")) != nil {
+                    BodyCompositionFlowCard(section: section)
+                }
+                if let section = payload?.performance["composition_trends"], !section.trends.isEmpty {
+                    CompositionTrendsCard(section: section)
+                }
+                if let section = targetComparisonSection {
+                    RecompVectorPlotCard(section: section)
+                }
+                if let section = payload?.performance["excess_fat_gauge"],
+                   section.nestedNumber("totalFatKg") != nil,
+                   section.nestedNumber("targetFatKg") != nil {
+                    ExcessFatGaugeCard(section: section)
+                }
             }
             .padding(.top, 4)
             .padding(.bottom, 24)
@@ -239,15 +314,25 @@ struct FFMICategoryLegend: View {
 // MARK: - Composition Map Card
 
 struct CompositionMapCard: View {
+    let section: InsightReportMetricSection?
+    
+    private var ffmi: Double {
+        section?.nestedNumber("ffmi") ?? section?.nestedNumber("ffmiVal") ?? 19.52
+    }
+    
+    private var fmi: Double {
+        section?.nestedNumber("fmi") ?? section?.nestedNumber("fmiVal") ?? 6.42
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             // Header
             VStack(alignment: .leading, spacing: 6) {
-                Text("Composition Map")
+                Text(section?.displayTitle ?? "Composition Map")
                     .font(.headline)
                     .foregroundStyle(.primary)
                 
-                Text("Compare your Fat-Free Mass Index (muscle) against your Fat Mass Index (fat).")
+                Text(section?.title ?? "Compare your Fat-Free Mass Index (muscle) against your Fat Mass Index (fat).")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -264,7 +349,7 @@ struct CompositionMapCard: View {
                         .rotationEffect(.degrees(-90))
                         .frame(width: 16)
                     
-                    CompositionQuadrantChart(ffmi: 19.52, fmi: 6.42)
+                    CompositionQuadrantChart(ffmi: ffmi, fmi: fmi)
                 }
                 
                 // X Axis Label
@@ -278,10 +363,15 @@ struct CompositionMapCard: View {
             // Legend
             HStack(spacing: 8) {
                 Circle()
+                    .stroke(Color.performancePrimary.opacity(0.35), lineWidth: 8)
+                    .frame(width: 26, height: 26)
+                    .position(x: userX, y: userY)
+
+                Circle()
                     .fill(Color.performancePrimary.gradient)
                     .frame(width: 10, height: 10)
                 
-                Text("Your Position (19.52, 6.42)")
+                Text("Your Position (\(String(format: "%.2f", ffmi)), \(String(format: "%.2f", fmi)))")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
             }
@@ -292,18 +382,20 @@ struct CompositionMapCard: View {
                 .fill(Color.appSeparator)
                 .frame(height: 1)
             
-            // Insight text
+            // Bottom Remark Row
             HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "map.fill")
+                let remark = section?.remark
+                let marker = remark?.marker
+                Image(systemName: marker?.iconName ?? "map.fill")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.performancePrimary.gradient)
+                    .foregroundStyle(marker?.color ?? Color.performancePrimary)
                     .frame(width: 36, height: 36)
                     .background(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.performancePrimary.opacity(0.12))
+                            .fill((marker?.color ?? Color.performancePrimary).opacity(0.12))
                     )
                 
-                Text("Your lean mass is well-developed. Lowering fat mass will make your muscle definition more visible.")
+                Text(remark?.text ?? section?.displayComment ?? "Your lean mass is well-developed. Lowering fat mass will make your muscle definition more visible.")
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineSpacing(3)
@@ -311,6 +403,7 @@ struct CompositionMapCard: View {
                 
                 Spacer()
             }
+            .padding(.horizontal, 4)
         }
         .padding(20)
         .background(
@@ -423,21 +516,46 @@ struct CompositionQuadrantChart: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.appSeparator, lineWidth: 1)
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Body composition quadrant")
+        .accessibilityValue("Your position is FFMI \(String(format: "%.1f", ffmi)), FMI \(String(format: "%.1f", fmi))")
     }
 }
 
 // MARK: - Body Composition Flow Card
 
 struct BodyCompositionFlowCard: View {
+    let section: InsightReportMetricSection?
+    
+    private var totalWeight: Double {
+        section?.nestedNumber("totalWeightKg") ?? section?.nestedNumber("totalWeight") ?? 76.75
+    }
+    
+    private var leanMass: Double {
+        section?.nestedNumber("leanMassKg") ?? section?.nestedNumber("leanMass") ?? 57.75
+    }
+    
+    private var fatMass: Double {
+        section?.nestedNumber("fatMassKg") ?? section?.nestedNumber("fatMass") ?? 19.00
+    }
+    
+    private var leanPct: Double {
+        totalWeight > 0 ? (leanMass / totalWeight) * 100 : 75.2
+    }
+    
+    private var fatPct: Double {
+        totalWeight > 0 ? (fatMass / totalWeight) * 100 : 24.8
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             // Header
             VStack(alignment: .leading, spacing: 6) {
-                Text("Body Composition Flow")
+                Text(section?.displayTitle ?? "Body Composition Flow")
                     .font(.headline)
                     .foregroundStyle(.primary)
                 
-                Text("Breaks down your total body weight into lean mass and fat mass.")
+                Text(section?.title ?? "Breaks down your total body weight into lean mass and fat mass.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -450,7 +568,7 @@ struct BodyCompositionFlowCard: View {
                     Text("Total Weight")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Color.performancePrimary)
-                    Text("76.75 kg")
+                    Text(String(format: "%.2f kg", totalWeight))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(.primary)
                 }
@@ -474,7 +592,8 @@ struct BodyCompositionFlowCard: View {
                     let centerY = h / 2
                     let leftTopY = centerY - (boxHeight / 2)
                     let leftBottomY = centerY + (boxHeight / 2)
-                    let leftSplitY = leftTopY + (boxHeight * 0.75) // 75% lean, 25% fat
+                    let leanRatio = totalWeight > 0 ? CGFloat(leanMass / totalWeight) : 0.75
+                    let leftSplitY = leftTopY + (boxHeight * leanRatio)
                     
                     // Right Nodes are stacked with 12pt spacing
                     // Total height of right nodes = 76 + 12 + 76 = 164
@@ -528,10 +647,10 @@ struct BodyCompositionFlowCard: View {
                             .foregroundStyle(Color.performancePositive)
                         
                         HStack(spacing: 4) {
-                            Text("57.75 kg")
+                            Text(String(format: "%.2f kg", leanMass))
                                 .font(.subheadline.weight(.bold))
                                 .foregroundStyle(.primary)
-                            Text("75.2%")
+                            Text(String(format: "%.1f%%", leanPct))
                                 .font(.caption2.weight(.medium))
                                 .foregroundStyle(.secondary)
                         }
@@ -552,10 +671,10 @@ struct BodyCompositionFlowCard: View {
                             .foregroundStyle(Color.performanceNegative)
                         
                         HStack(spacing: 4) {
-                            Text("19.00 kg")
+                            Text(String(format: "%.2f kg", fatMass))
                                 .font(.subheadline.weight(.bold))
                                 .foregroundStyle(.primary)
-                            Text("24.8%")
+                            Text(String(format: "%.1f%%", fatPct))
                                 .font(.caption2.weight(.medium))
                                 .foregroundStyle(.secondary)
                         }
@@ -580,18 +699,20 @@ struct BodyCompositionFlowCard: View {
                 .fill(Color.appSeparator)
                 .frame(height: 1)
             
-            // Insight text
+            // Bottom Remark Row
             HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "arrow.triangle.branch")
+                let remark = section?.remark
+                let marker = remark?.marker
+                Image(systemName: marker?.iconName ?? "arrow.triangle.branch")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.performancePrimary.gradient)
+                    .foregroundStyle(marker?.color ?? Color.performancePrimary)
                     .frame(width: 36, height: 36)
                     .background(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.performancePrimary.opacity(0.12))
+                            .fill((marker?.color ?? Color.performancePrimary).opacity(0.12))
                     )
                 
-                Text("Lean mass is solid, fat mass is trending downward, and the ratio is improving over time.")
+                Text(remark?.text ?? section?.displayComment ?? "Lean mass is solid, fat mass is trending downward, and the ratio is improving over time.")
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineSpacing(3)
@@ -599,6 +720,7 @@ struct BodyCompositionFlowCard: View {
                 
                 Spacer()
             }
+            .padding(.horizontal, 4)
         }
         .padding(20)
         .background(
@@ -658,34 +780,19 @@ struct CompositionTrend: Identifiable {
 
 struct CompositionTrendsCard: View {
     let section: InsightReportMetricSection?
+    @State private var selectedDate: String?
 
     private var trendData: [CompositionTrend] {
         let reportData = (section?.trends ?? [:]).flatMap { key, points in
             points.map { CompositionTrend(date: $0.shortDate, value: $0.value, metric: key.displayTrendLabel) }
         }
 
-        if !reportData.isEmpty {
-            return reportData
-        }
-
-        return [
-        // Lean Mass
-        CompositionTrend(date: "May 24", value: 0.0, metric: "Lean Mass"),
-        CompositionTrend(date: "May 31", value: 0.12, metric: "Lean Mass"),
-        CompositionTrend(date: "Jun 7", value: -0.05, metric: "Lean Mass"),
-        CompositionTrend(date: "Jun 14", value: 0.08, metric: "Lean Mass"),
-        CompositionTrend(date: "Jun 22", value: 0.02, metric: "Lean Mass"),
-        
-        // Fat Mass
-        CompositionTrend(date: "May 24", value: 0.0, metric: "Fat Mass"),
-        CompositionTrend(date: "May 31", value: -0.15, metric: "Fat Mass"),
-        CompositionTrend(date: "Jun 7", value: -0.28, metric: "Fat Mass"),
-        CompositionTrend(date: "Jun 14", value: -0.38, metric: "Fat Mass"),
-            CompositionTrend(date: "Jun 22", value: -0.48, metric: "Fat Mass")
-        ]
+        return reportData
     }
     
     var body: some View {
+        let latestDate = trendData.map(\.date).last
+
         VStack(alignment: .leading, spacing: 24) {
             // Header
             VStack(alignment: .leading, spacing: 6) {
@@ -728,14 +835,15 @@ struct CompositionTrendsCard: View {
                 Chart(trendData) { item in
                     LineMark(
                         x: .value("Date", item.date),
-                        y: .value("Change", item.value)
+                        y: .value("Change", item.value),
+                        series: .value("Metric", item.metric)
                     )
                     .foregroundStyle(colorForMetric(item.metric))
                     .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                     .interpolationMethod(.catmullRom)
                     
                     // Endpoint markers
-                    if item.date == "Jun 22" {
+                    if item.date == latestDate {
                         PointMark(
                             x: .value("Date", item.date),
                             y: .value("Change", item.value)
@@ -750,6 +858,7 @@ struct CompositionTrendsCard: View {
                         }
                     }
                 }
+                .chartXSelection(value: $selectedDate)
                 .chartLegend(.hidden)
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
@@ -761,10 +870,6 @@ struct CompositionTrendsCard: View {
                             AxisGridLine(stroke: StrokeStyle(lineWidth: 1))
                                 .foregroundStyle(.secondary.opacity(0.4))
                         }
-                        
-                        AxisValueLabel()
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
                     }
                 }
                 .chartXAxis {
@@ -775,6 +880,28 @@ struct CompositionTrendsCard: View {
                     }
                 }
                 .frame(height: 180)
+
+                if let selectedDate {
+                    let selectedItems = trendData.filter { $0.date == selectedDate }
+                    if !selectedItems.isEmpty {
+                        HStack(alignment: .top, spacing: 12) {
+                            Text(selectedDate)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                ForEach(selectedItems) { item in
+                                    Text("\(item.metric): \(item.value, specifier: "%.1f")")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+
+                            Spacer()
+                        }
+                        .padding(.top, 2)
+                    }
+                }
             }
             .padding(16)
             .background(
@@ -785,6 +912,9 @@ struct CompositionTrendsCard: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(Color.appSeparator, lineWidth: 0.5)
             )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Composition trends chart")
+            .accessibilityValue("Shows lean mass and fat mass changes over time")
             
             // Subtle separator
             Rectangle()
@@ -802,7 +932,7 @@ struct CompositionTrendsCard: View {
                             .fill(Color.performanceNegative.opacity(0.12))
                     )
                 
-                Text(section?.displayComment ?? "Fat mass is down 0.48 kg over the last 30 days, while lean mass is essentially unchanged.")
+                Text(section?.displayComment ?? "")
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineSpacing(3)
@@ -846,60 +976,121 @@ struct VectorPoint: Identifiable {
 }
 
 struct RecompVectorPlotCard: View {
-    private let vectorData: [VectorPoint] = [
-        VectorPoint(fat: 20.0, lean: 57.0, phase: "History"),
-        VectorPoint(fat: 19.0, lean: 57.8, phase: "History"),
-        VectorPoint(fat: 19.0, lean: 57.8, phase: "Future"),
-        VectorPoint(fat: 12.7, lean: 57.7, phase: "Future")
-    ]
+    let section: InsightReportMetricSection?
+    
+    private var initialWeight: Double? {
+        section?.firstNumber("initialWeightKg", "initialWeight", "startWeightKg", "startWeight")
+            ?? composedWeight("initial")
+    }
+
+    private var currentWeight: Double? {
+        section?.firstNumber("currentWeightKg", "currentWeight")
+            ?? composedWeight("current")
+    }
+    
+    private var targetWeight: Double? {
+        section?.firstNumber("targetWeightKg", "targetWeight")
+            ?? composedWeight("target")
+    }
+    
+    private var initialFat: Double? {
+        section?.compositionNumber("initial", "fatMassKg")
+            ?? section?.firstNumber("initialFatKg", "initialFatMassKg", "startFatKg", "startFatMassKg")
+    }
+
+    private var initialLean: Double? {
+        section?.compositionNumber("initial", "leanMassKg")
+            ?? section?.firstNumber("initialLeanKg", "initialLeanMassKg", "startLeanKg", "startLeanMassKg")
+            ?? section?.derivedLean(weight: initialWeight, fat: initialFat)
+    }
+
+    private var currentFat: Double? {
+        section?.compositionNumber("current", "fatMassKg")
+            ?? section?.firstNumber("currentFatKg", "currentFatMassKg", "totalFatKg")
+    }
+
+    private var currentLean: Double? {
+        section?.compositionNumber("current", "leanMassKg")
+            ?? section?.firstNumber("currentLeanKg", "currentLeanMassKg", "totalLeanKg")
+            ?? section?.derivedLean(weight: currentWeight, fat: currentFat)
+    }
+
+    private var targetFat: Double? {
+        section?.compositionNumber("target", "fatMassKg")
+            ?? section?.firstNumber("targetFatKg", "targetFatMassKg")
+    }
+
+    private var targetLean: Double? {
+        section?.compositionNumber("target", "leanMassKg")
+            ?? section?.firstNumber("targetLeanKg", "targetLeanMassKg")
+            ?? section?.derivedLean(weight: targetWeight, fat: targetFat)
+    }
+
+    private func composedWeight(_ phase: String) -> Double? {
+        guard let lean = section?.compositionNumber(phase, "leanMassKg"),
+              let fat = section?.compositionNumber(phase, "fatMassKg") else {
+            return nil
+        }
+
+        return lean + fat
+    }
+
+    private var vectorValues: (initialFat: Double, initialLean: Double, currentFat: Double, currentLean: Double, targetFat: Double, targetLean: Double)? {
+        guard let initialFat, let initialLean, let currentFat, let currentLean, let targetFat, let targetLean else {
+            return nil
+        }
+
+        return (initialFat, initialLean, currentFat, currentLean, targetFat, targetLean)
+    }
+
+    private func xDomain(for values: (initialFat: Double, initialLean: Double, currentFat: Double, currentLean: Double, targetFat: Double, targetLean: Double)) -> ClosedRange<Double> {
+        let startFat = values.initialFat
+        let targetFat = values.targetFat
+        let minFat = min(startFat, targetFat)
+        let maxFat = max(startFat, targetFat)
+        return (minFat - 2.0)...(maxFat + 2.0)
+    }
+    
+    private func yDomain(for values: (initialFat: Double, initialLean: Double, currentFat: Double, currentLean: Double, targetFat: Double, targetLean: Double)) -> ClosedRange<Double> {
+        let startLean = values.initialLean
+        let currentLean = values.currentLean
+        let minLean = min(startLean, currentLean)
+        let maxLean = max(startLean, currentLean)
+        return (minLean - 2.0)...(maxLean + 2.0)
+    }
+    
+    private func vectorData(for values: (initialFat: Double, initialLean: Double, currentFat: Double, currentLean: Double, targetFat: Double, targetLean: Double)) -> [VectorPoint] {
+        [
+            VectorPoint(fat: values.initialFat, lean: values.initialLean, phase: "History"),
+            VectorPoint(fat: values.currentFat, lean: values.currentLean, phase: "History"),
+            VectorPoint(fat: values.currentFat, lean: values.currentLean, phase: "Future"),
+            VectorPoint(fat: values.targetFat, lean: values.targetLean, phase: "Future")
+        ]
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            RecompVectorHeader()
-            RecompVectorChart(vectorData: vectorData)
-            RecompWeightSummary()
-            RecompVectorInsight()
-        }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
-        .padding(.horizontal, 16)
-    }
-}
+            // Header
+            VStack(alignment: .leading, spacing: 6) {
+                Text(section?.displayTitle ?? "Recomp Vector Plot")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
 
-private struct RecompVectorHeader: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Recomp Vector Plot")
-                .font(.headline)
-                .foregroundStyle(.primary)
-
-            Text("Track your body composition journey across distinct zones.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
-
-private struct RecompVectorChart: View {
-    let vectorData: [VectorPoint]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Chart {
-                RecompLineMarks(vectorData: vectorData)
-                RecompArrowMark()
-                RecompStartMark()
-                RecompCurrentMark()
-                RecompTargetMark()
+                Text(section?.title ?? "Track your body composition journey across distinct zones.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            if let values = vectorValues {
+            // Chart Area
+            VStack(alignment: .leading, spacing: 14) {
+                Chart {
+                    RecompLineMarks(vectorData: vectorData(for: values))
+                    RecompArrowMark(fat: (values.currentFat + values.targetFat) / 2, lean: (values.currentLean + values.targetLean) / 2)
+                    RecompStartMark(fat: values.initialFat, lean: values.initialLean)
+                    RecompCurrentMark(fat: values.currentFat, lean: values.currentLean)
+                    RecompTargetMark(fat: values.targetFat, lean: values.targetLean)
                 }
                 .chartForegroundStyleScale([
                     "History": Color.gray.opacity(0.5),
@@ -910,8 +1101,8 @@ private struct RecompVectorChart: View {
                     "Future": StrokeStyle(lineWidth: 2.5, dash: [4, 4])
                 ])
                 .chartLegend(.hidden)
-                .chartXScale(domain: 10.0...22.0)
-                .chartYScale(domain: 55.0...60.0)
+                .chartXScale(domain: xDomain(for: values))
+                .chartYScale(domain: yDomain(for: values))
                 .chartXAxisLabel("Fat Mass (kg)", position: .bottom, alignment: .center)
                 .chartYAxisLabel("Lean Mass (kg)", position: .leading, alignment: .center)
                 .chartXAxis {
@@ -934,106 +1125,69 @@ private struct RecompVectorChart: View {
                 }
                 .frame(height: 220)
                 .padding(.top, 10)
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.appTertiaryBackground)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            )
+            }
+            
+            // Weight Summary
+            if let currentWeight, let targetWeight {
+                RecompWeightSummary(currentWeight: currentWeight, targetWeight: targetWeight)
+            }
+            
+            // Bottom Remark Row
+            HStack(alignment: .top, spacing: 14) {
+                let remark = section?.remark
+                let marker = remark?.marker
+                Image(systemName: marker?.iconName ?? "target")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(marker?.color ?? Color.performancePositive)
+                    .frame(width: 36, height: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill((marker?.color ?? Color.performancePositive).opacity(0.12))
+                    )
+
+                Text(remark?.text ?? section?.displayComment ?? "There is a fat-loss target between your current and goal physique.")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer()
+            }
+            .padding(.horizontal, 4)
         }
-        .padding(16)
+        .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.appTertiaryBackground)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color.appSecondaryBackground)
+                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(Color.appSeparator, lineWidth: 0.5)
         )
-    }
-}
-
-private struct RecompLineMarks: ChartContent {
-    let vectorData: [VectorPoint]
-
-    var body: some ChartContent {
-        ForEach(vectorData) { item in
-            LineMark(
-                x: .value("Fat Mass", item.fat),
-                y: .value("Lean Mass", item.lean)
-            )
-            .foregroundStyle(by: .value("Phase", item.phase))
-            .lineStyle(by: .value("Phase", item.phase))
-        }
-    }
-}
-
-private struct RecompArrowMark: ChartContent {
-    var body: some ChartContent {
-        PointMark(x: .value("Fat", 15.85), y: .value("Lean", 57.75))
-            .foregroundStyle(.clear)
-            .annotation(position: .overlay) {
-                Image(systemName: "arrow.left")
-                    .font(.system(size: 16, weight: .heavy))
-                    .foregroundStyle(Color.performancePositive)
-                    .background(Circle().fill(Color.appTertiaryBackground).frame(width: 20, height: 20))
-            }
-    }
-}
-
-private struct RecompStartMark: ChartContent {
-    var body: some ChartContent {
-        PointMark(x: .value("Fat", 20.0), y: .value("Lean", 57.0))
-            .foregroundStyle(.gray)
-            .symbolSize(80)
-            .annotation(position: .bottom) {
-                Text("Start")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.gray)
-            }
-    }
-}
-
-private struct RecompCurrentMark: ChartContent {
-    var body: some ChartContent {
-        PointMark(x: .value("Fat", 19.0), y: .value("Lean", 57.8))
-            .foregroundStyle(Color.performancePrimary)
-            .symbolSize(140)
-            .symbol {
-                Circle()
-                    .fill(Color.performancePrimary)
-                    .frame(width: 12, height: 12)
-                    .overlay(Circle().stroke(Color.white, lineWidth: 2))
-                    .shadow(color: Color.performancePrimary.opacity(0.3), radius: 3)
-            }
-            .annotation(position: .topTrailing) {
-                Text("Current")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(Color.performancePrimary)
-            }
-    }
-}
-
-private struct RecompTargetMark: ChartContent {
-    var body: some ChartContent {
-        PointMark(x: .value("Fat", 12.7), y: .value("Lean", 57.7))
-            .foregroundStyle(Color.performancePositive)
-            .symbolSize(140)
-            .symbol {
-                Circle()
-                    .fill(Color.performancePositive)
-                    .frame(width: 12, height: 12)
-                    .overlay(Circle().stroke(Color.white, lineWidth: 2))
-                    .shadow(color: Color.performancePositive.opacity(0.3), radius: 3)
-            }
-            .annotation(position: .topLeading) {
-                Text("Goal")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(Color.performancePositive)
-            }
+        .padding(.horizontal, 16)
     }
 }
 
 private struct RecompWeightSummary: View {
+    let currentWeight: Double
+    let targetWeight: Double
+    
     var body: some View {
         HStack {
             Spacer()
 
-            weight(label: "Current Weight", value: "76.8 kg")
+            weight(label: "Current Weight", value: String(format: "%.1f kg", currentWeight))
             Spacer()
 
             Image(systemName: "arrow.right")
@@ -1041,7 +1195,7 @@ private struct RecompWeightSummary: View {
                 .foregroundStyle(Color.performancePositive)
 
             Spacer()
-            weight(label: "Target Weight", value: "70.4 kg")
+            weight(label: "Target Weight", value: String(format: "%.1f kg", targetWeight))
             Spacer()
         }
         .padding(.vertical, 16)
@@ -1067,26 +1221,96 @@ private struct RecompWeightSummary: View {
     }
 }
 
-private struct RecompVectorInsight: View {
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: "target")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.performancePositive.gradient)
-                .frame(width: 36, height: 36)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.performancePositive.opacity(0.12))
-                )
+private struct RecompLineMarks: ChartContent {
+    let vectorData: [VectorPoint]
 
-            Text("There is a 6.3 kg fat-loss target between your current and goal physique, well within reach at your current trajectory.")
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-                .lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer()
+    var body: some ChartContent {
+        ForEach(vectorData) { item in
+            LineMark(
+                x: .value("Fat Mass", item.fat),
+                y: .value("Lean Mass", item.lean)
+            )
+            .foregroundStyle(by: .value("Phase", item.phase))
+            .lineStyle(by: .value("Phase", item.phase))
         }
+    }
+}
+
+private struct RecompArrowMark: ChartContent {
+    let fat: Double
+    let lean: Double
+    
+    var body: some ChartContent {
+        PointMark(x: .value("Fat", fat), y: .value("Lean", lean))
+            .foregroundStyle(.clear)
+            .annotation(position: .overlay) {
+                Image(systemName: "arrow.left")
+                    .font(.system(size: 16, weight: .heavy))
+                    .foregroundStyle(Color.performancePositive)
+                    .background(Circle().fill(Color.appTertiaryBackground).frame(width: 20, height: 20))
+            }
+    }
+}
+
+private struct RecompStartMark: ChartContent {
+    let fat: Double
+    let lean: Double
+    
+    var body: some ChartContent {
+        PointMark(x: .value("Fat", fat), y: .value("Lean", lean))
+            .foregroundStyle(.gray)
+            .symbolSize(80)
+            .annotation(position: .bottom) {
+                Text("Initial")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.gray)
+            }
+    }
+}
+
+private struct RecompCurrentMark: ChartContent {
+    let fat: Double
+    let lean: Double
+    
+    var body: some ChartContent {
+        PointMark(x: .value("Fat", fat), y: .value("Lean", lean))
+            .foregroundStyle(Color.performancePrimary)
+            .symbolSize(140)
+            .symbol {
+                Circle()
+                    .fill(Color.performancePrimary)
+                    .frame(width: 12, height: 12)
+                    .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                    .shadow(color: Color.performancePrimary.opacity(0.3), radius: 3)
+            }
+            .annotation(position: .topTrailing) {
+                Text("Current")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.performancePrimary)
+            }
+    }
+}
+
+private struct RecompTargetMark: ChartContent {
+    let fat: Double
+    let lean: Double
+    
+    var body: some ChartContent {
+        PointMark(x: .value("Fat", fat), y: .value("Lean", lean))
+            .foregroundStyle(Color.performancePositive)
+            .symbolSize(140)
+            .symbol {
+                Circle()
+                    .fill(Color.performancePositive)
+                    .frame(width: 12, height: 12)
+                    .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                    .shadow(color: Color.performancePositive.opacity(0.3), radius: 3)
+            }
+            .annotation(position: .topLeading) {
+                Text("Goal")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.performancePositive)
+            }
     }
 }
 
@@ -1094,10 +1318,12 @@ private struct RecompVectorInsight: View {
 
 struct ExcessFatGaugeCard: View {
     let section: InsightReportMetricSection?
-    var currentFat: Double { max(0.1, section?.nestedNumber("totalFatKg") ?? 19.0) }
-    var targetFat: Double { min(currentFat, max(0, section?.nestedNumber("targetFatKg") ?? 12.7)) }
+    var currentFat: Double { max(0.1, section?.nestedNumber("totalFatKg") ?? 0.1) }
+    var targetFat: Double { min(currentFat, max(0, section?.nestedNumber("targetFatKg") ?? 0)) }
     
-    var excessFat: Double { currentFat - targetFat }
+    var excessFat: Double {
+        section?.nestedNumber("excessFatKg") ?? (currentFat - targetFat)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -1180,41 +1406,6 @@ struct ExcessFatGaugeCard: View {
     }
 }
 
-struct PerformanceReportSummaryCard: View {
-    let section: InsightReportMetricSection?
-
-    var body: some View {
-        if let section {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(section.displayTitle)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-
-                if let title = section.title, title != section.displayTitle {
-                    Text(title)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if !section.displayComment.isEmpty {
-                    Text(section.displayComment)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.appSeparator, lineWidth: 1)
-            }
-            .padding(.horizontal, 16)
-        }
-    }
-}
 
 struct ExcessFatSemicircularGauge: View {
     let current: Double
