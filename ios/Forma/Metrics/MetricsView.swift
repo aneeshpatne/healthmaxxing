@@ -13,6 +13,7 @@ struct MetricsView: View {
     @Binding var selectedTab: MetricsTab
     @Binding var isHeaderCollapsed: Bool
     @StateObject private var reportStore = MetricsReportStore()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -66,8 +67,12 @@ struct MetricsView: View {
             let shouldCollapse = offset < -24
             guard shouldCollapse != isHeaderCollapsed else { return }
 
-            withAnimation(.easeInOut(duration: 0.22)) {
+            if reduceMotion {
                 isHeaderCollapsed = shouldCollapse
+            } else {
+                withAnimation(.easeOut(duration: 0.22)) {
+                    isHeaderCollapsed = shouldCollapse
+                }
             }
         }
         .safeAreaPadding(
@@ -163,14 +168,23 @@ enum MetricsTab: String, CaseIterable {
 struct GlassTabBar: View {
     @Binding var selectedTab: MetricsTab
     let isCollapsed: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 10) {
                 ForEach(MetricsTab.allCases, id: \.self) { tab in
                     Button {
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                        let update = {
                             selectedTab = tab
+                        }
+
+                        if reduceMotion {
+                            update()
+                        } else {
+                            withAnimation(.spring(response: 0.28, dampingFraction: 1.0)) {
+                                update()
+                            }
                         }
                     } label: {
                         Text(tab.title)
@@ -183,7 +197,7 @@ struct GlassTabBar: View {
                             .foregroundStyle(selectedTab == tab ? .primary : .secondary)
                     }
                     .contentShape(Rectangle())
-                    .buttonStyle(.plain)
+                    .buttonStyle(MetricTabButtonStyle())
                     .accessibilityValue(selectedTab == tab ? "Selected" : "")
                     .glassEffect(
                         selectedTab == tab
@@ -195,6 +209,20 @@ struct GlassTabBar: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, isCollapsed ? 4 : 8)
         }
+    }
+}
+
+private struct MetricTabButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(
+                reduceMotion ? nil : .easeOut(duration: 0.12),
+                value: configuration.isPressed
+            )
     }
 }
 
@@ -274,11 +302,14 @@ struct SkeletonCard: View {
 
 struct ShimmerModifier: ViewModifier {
     @State private var phase: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     
     func body(content: Content) -> some View {
         content
-            .modifier(AnimatedShimmerModifier(phase: phase))
+            .modifier(AnimatedShimmerModifier(phase: reduceMotion ? 0.5 : phase))
             .onAppear {
+                guard !reduceMotion else { return }
+
                 withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
                     phase = 1
                 }
