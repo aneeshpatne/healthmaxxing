@@ -18,36 +18,97 @@ struct RecordView: View {
 
     private let apiClient = APIClient()
 
+    fileprivate enum MainButtonState {
+        case ready
+        case reading
+        case submitting
+        case queued
+        case failed
+    }
+
+    private var currentButtonState: MainButtonState {
+        if isSubmittingMeasurement {
+            return .submitting
+        }
+
+        if scaleManager.isReading {
+            return .reading
+        }
+
+        if submissionError != nil {
+            return .failed
+        }
+
+        if case .failed = scaleManager.state {
+            return .failed
+        }
+
+        if let submitted = submittedMeasurement, submitted == scaleManager.latestMeasurement {
+            return .queued
+        }
+
+        if scaleManager.state == .finished && submissionStatus != nil && submissionError == nil {
+            return .queued
+        }
+
+        return .ready
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                ScaleStatusCard(
+            VStack(alignment: .leading, spacing: 20) {
+                DeviceStatusCard(
                     state: scaleManager.state,
-                    measurement: scaleManager.latestMeasurement,
-                    isReading: scaleManager.isReading,
-                    startAction: scaleManager.startReading,
-                    stopAction: scaleManager.stopReading
+                    measurement: scaleManager.latestMeasurement
                 )
 
-                LatestMeasurementGrid(measurement: scaleManager.latestMeasurement)
+                MetricCardsSection(measurement: scaleManager.latestMeasurement)
 
-                MeasurementSubmissionPanel(
-                    measurement: scaleManager.latestMeasurement,
-                    isSubmitting: isSubmittingMeasurement,
-                    status: submissionStatus,
-                    errorMessage: submissionError,
-                    jobId: latestReportJobId,
-                    submitAction: {
-                        Task {
-                            await submitLatestMeasurement()
+                VStack(alignment: .leading, spacing: 12) {
+                    LiquidGlassButton(
+                        state: currentButtonState,
+                        readingStatusLabel: scaleManager.state.label,
+                        action: handleMainButtonAction
+                    )
+
+                    if let submissionStatus, currentButtonState == .queued {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text(submissionStatus)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
                         }
-                    },
-                    submitDemoAction: {
-                        Task {
-                            await submitDemoMeasurement()
-                        }
+                        .padding(.horizontal, 6)
                     }
-                )
+
+                    if let latestReportJobId, currentButtonState == .queued {
+                        Text("Job ID: \(latestReportJobId.uuidString)")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .padding(.horizontal, 6)
+                    }
+
+                    if let activeErrorMessage {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                            Text(activeErrorMessage)
+                                .font(.subheadline)
+                                .foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.red.opacity(0.2), lineWidth: 1)
+                        )
+                    }
+                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
@@ -61,6 +122,47 @@ struct RecordView: View {
                 await submitLatestMeasurement()
             }
         }
+    }
+
+    private var activeErrorMessage: String? {
+        if let submissionError {
+            return submissionError
+        }
+        if case .failed(let message) = scaleManager.state {
+            return message
+        }
+        return nil
+    }
+
+    private func handleMainButtonAction() {
+        switch currentButtonState {
+        case .ready:
+            submissionError = nil
+            submissionStatus = nil
+            submittedMeasurement = nil
+            scaleManager.startReading()
+
+        case .reading:
+            scaleManager.stopReading()
+
+        case .failed:
+            submissionError = nil
+            if scaleManager.latestMeasurement.isFinal && canSubmitMeasurement(scaleManager.latestMeasurement) && submittedMeasurement != scaleManager.latestMeasurement {
+                Task {
+                    await submitLatestMeasurement()
+                }
+            } else {
+                submittedMeasurement = nil
+                scaleManager.startReading()
+            }
+
+        case .submitting, .queued:
+            break
+        }
+    }
+
+    private func canSubmitMeasurement(_ measurement: ScaleMeasurement) -> Bool {
+        measurement.weightKg != nil && measurement.heartRate != nil && measurement.impedanceOhms != nil
     }
 
     @MainActor
@@ -97,16 +199,6 @@ struct RecordView: View {
         ) {
             submittedMeasurement = measurement
         }
-    }
-
-    @MainActor
-    private func submitDemoMeasurement() async {
-        await submitMeasurement(
-            weight: 76.30,
-            heartbeat: 77,
-            impedance: 579,
-            successStatusPrefix: "Demo report"
-        )
     }
 
     @MainActor
@@ -174,54 +266,79 @@ struct RecordView: View {
 
         return "Server returned \(statusCode): \(trimmedBody)"
     }
-
 }
 
-private struct ScaleStatusCard: View {
+// MARK: - Device Status Card
+
+private struct DeviceStatusCard: View {
     let state: ScaleConnectionState
     let measurement: ScaleMeasurement
-    let isReading: Bool
-    let startAction: () -> Void
-    let stopAction: () -> Void
+
+    private var isConnected: Bool {
+        switch state {
+        case .connecting, .discoveringServices, .listening, .finished:
+            return true
+        default:
+            return false
+        }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: iconName)
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(Color.sleekAccent)
-                    .frame(width: 34, height: 34)
-                    .background(Color.appSubtleFill, in: Circle())
+        HStack(spacing: 14) {
+            Image(systemName: iconName)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color.sleekAccent)
+                .frame(width: 36, height: 36)
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("BLE Scale")
-                        .font(.headline)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text("Forma BLE Scale")
+                        .font(.headline.weight(.semibold))
+
+                    HStack(spacing: 4) {
+                        Image(systemName: isConnected ? "bluetooth.fill" : "bluetooth")
+                            .font(.system(size: 10, weight: .bold))
+                        Text(isConnected ? "CONNECTED" : "BLE")
+                            .font(.system(size: 9, weight: .bold))
+                    }
+                    .foregroundStyle(isConnected ? Color.sleekAccent : Color.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(
+                        (isConnected ? Color.sleekAccent : Color.secondary).opacity(0.12),
+                        in: Capsule()
+                    )
+                }
+
+                HStack(spacing: 6) {
+                    PulsingDot(color: statusDotColor)
 
                     Text(statusText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(1)
                 }
 
-                Spacer(minLength: 0)
+                if state == .idle {
+                    Text("Keep Bluetooth on and stand still while Forma reads the scale.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
-            Button(action: isReading ? stopAction : startAction) {
-                Label(isReading ? "Stop Reading" : "Read From Scale", systemImage: isReading ? "stop.fill" : "dot.radiowaves.left.and.right")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.sleekAccent)
-            .controlSize(.large)
+            Spacer(minLength: 0)
         }
-        .padding(18)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
+        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(Color.appSeparator, lineWidth: 1)
-        }
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Forma BLE Scale")
+        .accessibilityValue(statusText)
     }
 
     private var iconName: String {
@@ -233,7 +350,20 @@ private struct ScaleStatusCard: View {
         case .waitingForBluetooth, .scanning, .connecting, .discoveringServices, .listening:
             return "antenna.radiowaves.left.and.right"
         case .idle:
-            return "scalemass"
+            return "scalemass.fill"
+        }
+    }
+
+    private var statusDotColor: Color {
+        switch state {
+        case .finished:
+            return .green
+        case .failed:
+            return .red
+        case .waitingForBluetooth, .scanning, .connecting, .discoveringServices, .listening:
+            return Color.sleekAccent
+        case .idle:
+            return .green
         }
     }
 
@@ -242,156 +372,556 @@ private struct ScaleStatusCard: View {
         case .failed(let message):
             return message
         case .finished where measurement.weightKg == nil:
-            return "Reading complete. No weight was decoded."
+            return "Reading complete. No weight decoded."
+        case .idle:
+            return "Ready to measure"
         default:
             return state.label
         }
     }
 }
 
-private struct LatestMeasurementGrid: View {
-    let measurement: ScaleMeasurement
+// MARK: - Pulsing Status Dot
+
+private struct PulsingDot: View {
+    var color: Color = .green
+    @State private var isPulsing = false
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 12) {
-            MeasurementTile(
-                title: "Weight",
-                value: measurement.weightKg.map { String(format: "%.2f", $0) } ?? "--",
-                unit: "kg",
-                systemImage: "scalemass"
-            )
+        ZStack {
+            Circle()
+                .fill(color.opacity(0.35))
+                .frame(width: 12, height: 12)
+                .scaleEffect(isPulsing ? 1.6 : 1.0)
+                .opacity(isPulsing ? 0.0 : 0.8)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                        isPulsing = true
+                    }
+                }
 
-            MeasurementTile(
-                title: "Heart Rate",
-                value: measurement.heartRate.map(String.init) ?? "--",
-                unit: "bpm",
-                systemImage: "heart.fill"
-            )
-
-            MeasurementTile(
-                title: "Impedance",
-                value: measurement.impedanceOhms.map { String(format: "%.0f", $0) } ?? "--",
-                unit: "ohms",
-                systemImage: "waveform.path.ecg"
-            )
+            Circle()
+                .fill(color)
+                .frame(width: 7, height: 7)
         }
-    }
-
-    private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: 150), spacing: 12)]
     }
 }
 
-private struct MeasurementTile: View {
+// MARK: - Metric Cards Section
+
+private struct MetricCardsSection: View {
+    let measurement: ScaleMeasurement
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                HalfMetricCard(
+                    title: "Weight",
+                    value: measurement.weightKg.map { String(format: "%.1f", $0) } ?? "--.-",
+                    unit: "kg",
+                    systemImage: "scalemass.fill",
+                    accentColor: Color.sleekAccent
+                )
+
+                HalfMetricCard(
+                    title: "Heart Rate",
+                    value: measurement.heartRate.map(String.init) ?? "--",
+                    unit: "bpm",
+                    systemImage: "heart.fill",
+                    accentColor: Color(red: 0.92, green: 0.25, blue: 0.55)
+                )
+            }
+
+            FullBioDataCard(
+                title: "Impedance",
+                value: measurement.impedanceOhms.map { String(format: "%.0f", $0) } ?? "---",
+                unit: "ohms",
+                systemImage: "waveform.path.ecg",
+                accentColor: Color(red: 0.15, green: 0.75, blue: 0.95)
+            )
+        }
+    }
+}
+
+// MARK: - Metric Cards
+
+private struct HalfMetricCard: View {
     let title: String
     let value: String
     let unit: String
     let systemImage: String
+    let accentColor: Color
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(accentColor)
+                .frame(width: 28, height: 28, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
-                Spacer(minLength: 0)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(value)
+                        .font(.system(size: 31, weight: .semibold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
 
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.sleekAccent)
-            }
-
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                Text(value)
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-
-                Text(unit)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
+                    Text(unit)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 118, alignment: .leading)
-        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
+        .frame(maxWidth: .infinity, minHeight: 122, alignment: .leading)
+        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(Color.appSeparator, lineWidth: 1)
-        }
+        )
     }
 }
 
-private struct MeasurementSubmissionPanel: View {
-    let measurement: ScaleMeasurement
-    let isSubmitting: Bool
-    let status: String?
-    let errorMessage: String?
-    let jobId: UUID?
-    let submitAction: () -> Void
-    let submitDemoAction: () -> Void
-
-    private var canSubmit: Bool {
-        measurement.weightKg != nil && measurement.heartRate != nil && measurement.impedanceOhms != nil
-    }
+private struct FullBioDataCard: View {
+    let title: String
+    let value: String
+    let unit: String
+    let systemImage: String
+    let accentColor: Color
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button(action: submitAction) {
-                Label("Submit Measurement", systemImage: "square.and.arrow.up")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.sleekAccent)
-            .controlSize(.large)
-            .disabled(!canSubmit || isSubmitting)
+        HStack(alignment: .center, spacing: 14) {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(accentColor)
+                .frame(width: 30, height: 30)
 
-            Button(action: submitDemoAction) {
-                Label("Submit Demo", systemImage: "testtube.2")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .tint(Color.sleekAccent)
-            .controlSize(.large)
-            .disabled(isSubmitting)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
 
-            if isSubmitting {
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text(status ?? "Saving measurement")
-                        .font(.subheadline)
+                    Spacer()
+                }
+
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(value)
+                        .font(.system(size: 34, weight: .semibold, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+
+                    Text(unit)
+                        .font(.subheadline.weight(.bold))
                         .foregroundStyle(.secondary)
                 }
-            } else if let status {
-                Label(status, systemImage: "checkmark.circle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let jobId {
-                Text("Job \(jobId)")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-
-            if let errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
+        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(Color.appSeparator, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Liquid Glass Action Button
+
+private struct LiquidGlassButton: View {
+    let state: RecordView.MainButtonState
+    let readingStatusLabel: String
+    let action: () -> Void
+
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            nativeGlassButton
+        } else {
+            fallbackGlassButton
         }
+    }
+
+    @available(iOS 26.0, *)
+    private var nativeGlassButton: some View {
+        Button(action: action) {
+            buttonContent
+                .frame(maxWidth: .infinity, minHeight: 58)
+                .padding(.horizontal, 18)
+                .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.roundedRectangle(radius: 24))
+        .controlSize(.large)
+        .tint(tintColor)
+        .disabled(isDisabled)
+    }
+
+    private var fallbackGlassButton: some View {
+        Button(action: action) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(baseGradient)
+
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.32),
+                                Color.white.opacity(0.12),
+                                Color.clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.52),
+                                Color.white.opacity(0.18),
+                                Color.white.opacity(0.08)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+
+                HStack(spacing: 10) {
+                    buttonContent
+                }
+                .padding(.horizontal, 18)
+            }
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .shadow(color: glowColor, radius: 10, x: 0, y: 5)
+        }
+        .disabled(isDisabled)
+        .buttonStyle(ScaleButtonStyle())
+    }
+
+    private var buttonContent: some View {
+        HStack(spacing: 10) {
+            iconView
+                .frame(width: 26, height: 26)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(mainTitle)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
+
+                if let subtitle = subtitleText {
+                    Text(subtitle)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Color.white.opacity(0.85))
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            rightIndicator
+        }
+    }
+
+    private var mainTitle: String {
+        switch state {
+        case .ready:
+            return "Start Measurement"
+        case .reading:
+            return readingStatusLabel.isEmpty ? "Searching for scale..." : readingStatusLabel
+        case .submitting:
+            return "Saving Measurement..."
+        case .queued:
+            return "Measurement Queued"
+        case .failed:
+            return "Retry Measurement"
+        }
+    }
+
+    private var subtitleText: String? {
+        switch state {
+        case .ready:
+            return "Tap to connect"
+        case .reading:
+            return "Tap to cancel"
+        case .submitting:
+            return "Processing report"
+        case .queued:
+            return "Saved to your profile"
+        case .failed:
+            return "Tap to try again"
+        }
+    }
+
+    @ViewBuilder
+    private var iconView: some View {
+        switch state {
+        case .ready:
+            Image(systemName: "play.fill")
+                .font(.headline)
+                .foregroundStyle(.white)
+        case .reading:
+            ProgressView()
+                .tint(.white)
+        case .submitting:
+            ProgressView()
+                .tint(.white)
+        case .queued:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.headline)
+                .foregroundStyle(.white)
+        case .failed:
+            Image(systemName: "arrow.clockwise")
+                .font(.headline)
+                .foregroundStyle(.white)
+        }
+    }
+
+    @ViewBuilder
+    private var rightIndicator: some View {
+        switch state {
+        case .ready, .failed:
+            Image(systemName: "chevron.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.white.opacity(0.85))
+
+        case .reading:
+            HStack(spacing: 5) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                Text("Cancel")
+                    .font(.subheadline.weight(.bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.white.opacity(0.18), in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.24), lineWidth: 1)
+            )
+
+        case .submitting:
+            EmptyView()
+
+        case .queued:
+            Image(systemName: "lock.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.white.opacity(0.6))
+        }
+    }
+
+    private var baseGradient: LinearGradient {
+        switch state {
+        case .ready:
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.55, green: 0.45, blue: 1.0).opacity(0.95),
+                    Color(red: 0.24, green: 0.48, blue: 0.95).opacity(0.95)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+
+        case .reading:
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.90, green: 0.26, blue: 0.32).opacity(0.95),
+                    Color(red: 0.72, green: 0.14, blue: 0.22).opacity(0.95)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+
+        case .submitting:
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.45, green: 0.36, blue: 0.88).opacity(0.9),
+                    Color(red: 0.25, green: 0.42, blue: 0.85).opacity(0.9)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+
+        case .queued:
+            return LinearGradient(
+                colors: [
+                    Color.gray.opacity(0.28),
+                    Color.gray.opacity(0.2)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+
+        case .failed:
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.95, green: 0.48, blue: 0.18).opacity(0.95),
+                    Color(red: 0.85, green: 0.28, blue: 0.25).opacity(0.95)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+    }
+
+    private var tintColor: Color {
+        switch state {
+        case .ready:
+            return Color.sleekAccent
+        case .reading:
+            return .red
+        case .submitting:
+            return .indigo
+        case .queued:
+            return .gray
+        case .failed:
+            return .orange
+        }
+    }
+
+    private var glowColor: Color {
+        switch state {
+        case .ready:
+            return Color(red: 0.40, green: 0.34, blue: 0.90).opacity(0.28)
+        case .reading:
+            return Color.red.opacity(0.3)
+        case .submitting:
+            return Color.indigo.opacity(0.24)
+        case .queued:
+            return Color.clear
+        case .failed:
+            return Color.orange.opacity(0.28)
+        }
+    }
+
+    private var isDisabled: Bool {
+        switch state {
+        case .submitting, .queued:
+            return true
+        case .ready, .reading, .failed:
+            return false
+        }
+    }
+}
+
+// MARK: - Button Press Animation Style
+
+private struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Wave Drawing Utilities
+
+private struct SineWaveChart: View {
+    let color: Color
+
+    var body: some View {
+        ZStack {
+            SineWaveFillShape(amplitude: 10, frequency: 1.8)
+                .fill(
+                    LinearGradient(
+                        colors: [color.opacity(0.22), color.opacity(0.0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+
+            SineWaveShape(amplitude: 10, frequency: 1.8)
+                .stroke(color.opacity(0.55), lineWidth: 1.5)
+        }
+    }
+}
+
+private struct MeshWaveChart: View {
+    var body: some View {
+        ZStack {
+            SineWaveFillShape(amplitude: 14, frequency: 1.4)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.sleekAccent.opacity(0.2), Color.cyan.opacity(0.0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+
+            SineWaveShape(amplitude: 14, frequency: 1.4)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.sleekAccent, Color.cyan],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    lineWidth: 2
+                )
+
+            SineWaveShape(amplitude: 8, frequency: 2.6)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.purple.opacity(0.6), Color.blue.opacity(0.4)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    lineWidth: 1.2
+                )
+        }
+    }
+}
+
+private struct SineWaveShape: Shape {
+    var amplitude: CGFloat = 12
+    var frequency: CGFloat = 2
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let width = rect.width
+        let height = rect.height
+        let midY = height / 2
+
+        path.move(to: CGPoint(x: 0, y: midY))
+
+        for x in stride(from: 0, through: width, by: 2) {
+            let relativeX = x / width
+            let y = midY + sin(relativeX * .pi * frequency * 2) * amplitude
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+
+        return path
+    }
+}
+
+private struct SineWaveFillShape: Shape {
+    var amplitude: CGFloat = 12
+    var frequency: CGFloat = 2
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let width = rect.width
+        let height = rect.height
+        let midY = height / 2
+
+        path.move(to: CGPoint(x: 0, y: height))
+        path.addLine(to: CGPoint(x: 0, y: midY))
+
+        for x in stride(from: 0, through: width, by: 2) {
+            let relativeX = x / width
+            let y = midY + sin(relativeX * .pi * frequency * 2) * amplitude
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+
+        path.addLine(to: CGPoint(x: width, y: height))
+        path.closeSubpath()
+        return path
     }
 }
