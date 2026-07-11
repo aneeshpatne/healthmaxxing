@@ -163,17 +163,7 @@ struct FFMIGaugeCard: View {
                 Spacer()
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
-        .padding(.horizontal, 16)
+        .formaMetricCard()
     }
 }
 
@@ -363,11 +353,6 @@ struct CompositionMapCard: View {
             // Legend
             HStack(spacing: 8) {
                 Circle()
-                    .stroke(Color.performancePrimary.opacity(0.35), lineWidth: 8)
-                    .frame(width: 26, height: 26)
-                    .position(x: userX, y: userY)
-
-                Circle()
                     .fill(Color.performancePrimary.gradient)
                     .frame(width: 10, height: 10)
                 
@@ -500,6 +485,11 @@ struct CompositionQuadrantChart: View {
                 let userX = max(0, min(width, (ffmi - minFFMI) / (maxFFMI - minFFMI) * width))
                 let userY = max(0, min(height, height - ((fmi - minFMI) / (maxFMI - minFMI) * height)))
                 
+                Circle()
+                    .stroke(Color.performancePrimary.opacity(0.35), lineWidth: 8)
+                    .frame(width: 26, height: 26)
+                    .position(x: userX, y: userY)
+
                 Circle()
                     .fill(Color.performancePrimary.gradient)
                     .frame(width: 14, height: 14)
