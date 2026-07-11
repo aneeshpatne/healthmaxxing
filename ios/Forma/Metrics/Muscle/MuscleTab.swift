@@ -53,7 +53,7 @@ private struct MuscleReportCard: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.secondary)
                     .textCase(.uppercase)
-                    .tracking(1.0)
+                    .tracking(0.6)
 
                 Spacer()
 
