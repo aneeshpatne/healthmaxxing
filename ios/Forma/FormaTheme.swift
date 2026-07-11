@@ -97,3 +97,40 @@ extension Color {
         }
     })
 }
+
+private struct FormaMetricCardModifier: ViewModifier {
+    let horizontalPadding: CGFloat
+    let padding: CGFloat
+    let cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.appSecondaryBackground)
+                    .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            )
+            .padding(.horizontal, horizontalPadding)
+    }
+}
+
+extension View {
+    func formaMetricCard(
+        horizontalPadding: CGFloat = 12,
+        padding: CGFloat = 18,
+        cornerRadius: CGFloat = 20
+    ) -> some View {
+        modifier(
+            FormaMetricCardModifier(
+                horizontalPadding: horizontalPadding,
+                padding: padding,
+                cornerRadius: cornerRadius
+            )
+        )
+    }
+}
