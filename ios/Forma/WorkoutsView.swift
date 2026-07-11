@@ -12,7 +12,7 @@ struct WorkoutsView: View {
         ScrollView {
             EmptyView()
         }
-        .safeAreaPadding(.top, headerHeight)
+        .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
         .background(Color.appBackground.ignoresSafeArea())
     }
 }
