@@ -208,7 +208,7 @@ struct FatTab: View {
             )
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 16)
         .padding(.vertical, 16)
     }
 }
@@ -777,7 +777,6 @@ struct VisceralSubcutaneousCard: View {
             .padding(.top, 4)
         }
         .padding(.vertical, 16)
-        .padding(.horizontal, 16)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(Color.appSecondaryBackground)
