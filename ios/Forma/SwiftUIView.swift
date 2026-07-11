@@ -17,7 +17,7 @@ enum AppTab {
 struct SwiftUIView: View {
     @State private var activeTab: AppTab = .metrics
     @State private var selectedMetricsTab: MetricsTab = .insights
-    @State private var isMetricsHeaderCollapsed = false
+    @State private var isMetricsAtTop = true
 
     var body: some View {
         NavigationStack {
@@ -25,36 +25,75 @@ struct SwiftUIView: View {
                 Tab("Metrics", systemImage: "chart.xyaxis.line", value: .metrics) {
                     MetricsView(
                         selectedTab: $selectedMetricsTab,
-                        isHeaderCollapsed: $isMetricsHeaderCollapsed
+                        isAtTop: $isMetricsAtTop
                     )
-                        .ignoresSafeArea(.container, edges: .top)
                 }
 
                 Tab("Workouts", systemImage: "figure.strengthtraining.traditional", value: .workouts) {
                     WorkoutsView()
-                        .ignoresSafeArea(.container, edges: .top)
                 }
 
                 Tab("Record", systemImage: "record.circle", value: .record) {
                     RecordView()
-                        .ignoresSafeArea(.container, edges: .top)
                 }
 
                 Tab("Vitals", systemImage: "heart.text.square", value: .vitals) {
                     VitalsView()
-                        .ignoresSafeArea(.container, edges: .top)
                 }
             }
             .tabBarMinimizeBehavior(.onScrollDown)
             .background(Color.appBackground.ignoresSafeArea())
             .overlay(alignment: .top) {
-                FormaHeader(
-                    activeTab: $activeTab,
-                    selectedMetricsTab: $selectedMetricsTab,
-                    isCollapsed: isMetricsHeaderCollapsed
-                )
+                GlassEffectContainer(spacing: 12) {
+                    HStack {
+                        if activeTab != .metrics || isMetricsAtTop {
+                            FormaBrandMark()
+                                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        }
+
+                        Spacer(minLength: 0)
+
+                        FloatingSettingsButton()
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .padding(.horizontal, 16)
+                .safeAreaPadding(.top, 8)
+                .animation(.easeOut(duration: 0.2), value: activeTab != .metrics || isMetricsAtTop)
             }
         }
+    }
+}
+
+enum FormaLayout {
+    static let floatingSettingsClearance: CGFloat = 60
+}
+
+struct FormaBrandMark: View {
+    var body: some View {
+        Text("Forma")
+            .font(.system(size: 20, weight: .heavy, design: .rounded))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 14)
+            .frame(height: 44)
+            .glassEffect(.regular, in: Capsule())
+            .accessibilityLabel("Forma")
+    }
+}
+
+struct FloatingSettingsButton: View {
+    var body: some View {
+        NavigationLink {
+            Settings()
+        } label: {
+            Image(systemName: "gearshape.fill")
+                .font(.title3)
+                .foregroundStyle(Color.primary)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .frame(width: 44, height: 44)
+        .accessibilityLabel("Settings")
     }
 }
 
