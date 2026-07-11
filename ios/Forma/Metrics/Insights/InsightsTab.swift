@@ -13,13 +13,37 @@ struct InsightsTab: View {
     private var reportPayload: InsightReportPayload? {
         InsightReportPayload(data: completedReport?.data)
     }
-    private var effortScore: Double {
-        min(100, max(0, reportPayload?.effortScore?.score ?? 82))
+    private var effortScore: Double? {
+        reportPayload?.effortScore?.score.map { min(100, max(0, $0)) }
     }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 20) {
+            if completedReport == nil && isLoadingReports {
+                MetricsReportStatusScreen(
+                    title: "Generating report",
+                    message: reportStatus ?? "Checking report status.",
+                    isLoading: true
+                )
+            } else if reportPayload == nil {
+                InsightReportStatusCard(
+                    isLoading: isLoadingReports,
+                    status: reportStatus,
+                    errorMessage: reportError,
+                    activeJob: activeJob,
+                    latestReport: latestReport,
+                    completedReport: completedReport,
+                    refreshAction: {
+                        Task {
+                            await loadAndPollReports()
+                        }
+                    }
+                )
+                .insightsCard()
+                .padding(.top, 4)
+                .padding(.bottom, 24)
+            } else {
+                VStack(spacing: 20) {
                 InsightReportStatusCard(
                     isLoading: isLoadingReports,
                     status: reportStatus,
@@ -35,6 +59,7 @@ struct InsightsTab: View {
                 )
                 .insightsCard()
 
+                if let overview = reportPayload?.overview {
                 // MARK: - Weekly Summary Card
                 VStack(alignment: .leading, spacing: 18) {
                     // Header
@@ -45,7 +70,7 @@ struct InsightsTab: View {
                             .frame(width: 26, height: 26)
                             .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                        Text(reportPayload?.overview?.title ?? "Weekly Summary")
+                        Text(overview.title ?? overview.displayTitle)
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -53,16 +78,10 @@ struct InsightsTab: View {
 
                         Spacer()
 
-                        Text("Jun 16 – 22")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 4)
-                            .background(.fill.tertiary, in: Capsule())
                     }
 
                     // Insight text
-                    Text(reportPayload?.overview?.headline ?? "Foundation is strong — body fat trending down while lean mass holds steady.")
+                    Text(overview.headline ?? overview.displayComment)
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -76,21 +95,22 @@ struct InsightsTab: View {
 
                     // Premium insight row
                     HStack(spacing: 14) {
-                        Image(systemName: "flame.fill")
+                        let marker = overview.remark?.marker
+                        Image(systemName: marker?.iconName ?? "flame.fill")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(marker?.color ?? .orange)
                             .frame(width: 36, height: 36)
                             .background(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(.orange.opacity(0.1))
+                                    .fill((marker?.color ?? .orange).opacity(0.1))
                             )
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(reportPayload?.overview?.remark?.marker?.displayRemarkMarker ?? "Body Fat")
+                            Text(marker?.displayRemarkMarker ?? "Insight")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.primary)
 
-                            Text(reportPayload?.overview?.remark?.text ?? "Down 0.4% this week")
+                            Text(overview.remark?.text ?? overview.displayComment)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -98,21 +118,12 @@ struct InsightsTab: View {
                         Spacer()
 
                         // Trend badge
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.down.right")
-                                .font(.system(size: 10, weight: .bold))
-                            Text("−0.4%")
-                                .font(.caption.weight(.bold))
-                                .monospacedDigit()
-                        }
-                        .foregroundStyle(.green)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.green.opacity(0.1), in: Capsule())
                     }
                 }
                 .insightsCard()
+                }
 
+                if let foundation = reportPayload?.foundation {
                 // MARK: - Strong Base Card
                 VStack(alignment: .leading, spacing: 18) {
                     // Header
@@ -123,7 +134,7 @@ struct InsightsTab: View {
                             .frame(width: 26, height: 26)
                             .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                        Text(reportPayload?.foundation?.title ?? "Strong Base")
+                        Text(foundation.title ?? foundation.displayTitle)
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -133,7 +144,7 @@ struct InsightsTab: View {
                     }
 
                     // Headline
-                    Text(reportPayload?.foundation?.headline ?? "54.6 kg of lean mass gives you a strong foundation")
+                    Text(foundation.headline ?? foundation.displayComment)
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -141,7 +152,7 @@ struct InsightsTab: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Body
-                    Text(reportPayload?.foundation?.comment ?? "At 172 cm, your current muscle base supports a strong, athletic look as you continue leaning out.")
+                    Text(foundation.comment ?? foundation.remark?.text ?? "")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
@@ -154,16 +165,17 @@ struct InsightsTab: View {
 
                     // Insight row
                     HStack(spacing: 14) {
-                        Image(systemName: "checkmark.circle.fill")
+                        let marker = foundation.remark?.marker
+                        Image(systemName: marker?.iconName ?? "checkmark.circle.fill")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.green)
+                            .foregroundStyle(marker?.color ?? .green)
                             .frame(width: 36, height: 36)
                             .background(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(.green.opacity(0.1))
+                                    .fill((marker?.color ?? .green).opacity(0.1))
                             )
 
-                        Text(reportPayload?.foundation?.remark?.text ?? "Keep protein intake steady and stay consistent with strength training to maintain this muscle.")
+                        Text(foundation.remark?.text ?? foundation.displayComment)
                             .font(.subheadline)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -172,7 +184,9 @@ struct InsightsTab: View {
                     }
                 }
                 .insightsCard()
+                }
 
+                if let progress = reportPayload?.progress {
                 // MARK: - Progress Trend Card
                 VStack(alignment: .leading, spacing: 18) {
                     // Header
@@ -183,7 +197,7 @@ struct InsightsTab: View {
                             .frame(width: 26, height: 26)
                             .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                        Text(reportPayload?.progress?.title ?? "Progress Trend")
+                        Text(progress.title ?? progress.displayTitle)
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -193,7 +207,7 @@ struct InsightsTab: View {
                     }
 
                     // Headline
-                    Text(reportPayload?.progress?.headline ?? "Body fat is moving down across every view")
+                    Text(progress.headline ?? progress.displayComment)
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -201,14 +215,14 @@ struct InsightsTab: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Body
-                    Text(reportPayload?.progress?.comment ?? "Subcutaneous fat is down 0.89 kg over the last 30 days, while overall fat markers continue trending lower.")
+                    Text(progress.comment ?? progress.remark?.text ?? "")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Chart card
-                    ProgressTrendChart(trendData: reportPayload?.progress?.trendData)
+                    ProgressTrendChart(trendData: progress.trendData)
 
                     // Subtle separator
                     Rectangle()
@@ -217,16 +231,17 @@ struct InsightsTab: View {
 
                     // Insight row
                     HStack(spacing: 14) {
-                        Image(systemName: "sparkle")
+                        let marker = progress.remark?.marker
+                        Image(systemName: marker?.iconName ?? "sparkle")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Color.appSecondaryBackground)
                             .frame(width: 36, height: 36)
                             .background(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(.green.opacity(0.85))
+                                    .fill((marker?.color ?? .green).opacity(0.85))
                             )
 
-                        Text(reportPayload?.progress?.remark?.text ?? "Steady progress like this is a strong sign your current rhythm is working. Keep the pace consistent.")
+                        Text(progress.remark?.text ?? progress.displayComment)
                             .font(.subheadline)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -235,7 +250,9 @@ struct InsightsTab: View {
                     }
                 }
                 .insightsCard()
+                }
 
+                if let lever = reportPayload?.lever {
                 // MARK: - Waist Focus Card
                 VStack(alignment: .leading, spacing: 18) {
                     // Header
@@ -246,7 +263,7 @@ struct InsightsTab: View {
                             .frame(width: 26, height: 26)
                             .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                        Text(reportPayload?.lever?.title ?? "Waist Focus")
+                        Text(lever.title ?? lever.displayTitle)
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -256,7 +273,7 @@ struct InsightsTab: View {
                     }
 
                     // Headline
-                    Text(reportPayload?.lever?.headline ?? "A smaller waist will make your upper body stand out")
+                    Text(lever.headline ?? lever.displayComment)
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -264,7 +281,7 @@ struct InsightsTab: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Body
-                    Text(reportPayload?.lever?.comment ?? "With a 90 cm waist, 103 cm shoulders, and 106 cm chest, you already have the structure for a strong V-taper. Reducing your waist will make that shape more pronounced.")
+                    Text(lever.comment ?? lever.remark?.text ?? "")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
@@ -277,16 +294,17 @@ struct InsightsTab: View {
 
                     // Insight row
                     HStack(spacing: 14) {
-                        Image(systemName: "arrow.up.forward.circle.fill")
+                        let marker = lever.remark?.marker
+                        Image(systemName: marker?.iconName ?? "arrow.up.forward.circle.fill")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.green)
+                            .foregroundStyle(marker?.color ?? .green)
                             .frame(width: 36, height: 36)
                             .background(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(.green.opacity(0.1))
+                                    .fill((marker?.color ?? .green).opacity(0.1))
                             )
 
-                        Text(reportPayload?.lever?.remark?.text ?? "Even a modest reduction in waist size can significantly improve your shoulder-to-waist ratio.")
+                        Text(lever.remark?.text ?? lever.displayComment)
                             .font(.subheadline)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -295,7 +313,9 @@ struct InsightsTab: View {
                     }
                 }
                 .insightsCard()
+                }
 
+                if let physiqueArchetype = reportPayload?.physiqueArchetype {
                 // MARK: - Broad Frame Card
                 VStack(alignment: .leading, spacing: 18) {
                     // Header
@@ -306,7 +326,7 @@ struct InsightsTab: View {
                             .frame(width: 26, height: 26)
                             .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                        Text(reportPayload?.physiqueArchetype?.title ?? "Broad Frame")
+                        Text(physiqueArchetype.title ?? "Physique")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -316,7 +336,7 @@ struct InsightsTab: View {
                     }
 
                     // Headline
-                    Text(reportPayload?.physiqueArchetype?.headline ?? "Strong Foundation Frame")
+                    Text(physiqueArchetype.headline ?? physiqueArchetype.comment ?? "")
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundStyle(.primary)
@@ -324,7 +344,7 @@ struct InsightsTab: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Body
-                    Text(reportPayload?.physiqueArchetype?.comment ?? "Your frame is broad and solid, giving you a strong base to build on. As your waist leans out, your natural shape will become even more defined.")
+                    Text(physiqueArchetype.comment ?? "")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineSpacing(4)
@@ -360,7 +380,7 @@ struct InsightsTab: View {
                                     .fill(.blue.opacity(0.1))
                             )
 
-                        Text(reportPayload?.physiqueArchetype?.bodyType.map { "Body type: \($0.capitalized)" } ?? "Keep developing your shoulders, back, and upper chest. These are your strongest visual assets and will make the biggest impact as you lean out.")
+                        Text(physiqueArchetype.bodyType.map { "Body type: \($0.capitalized)" } ?? physiqueArchetype.comment ?? "")
                             .font(.subheadline)
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -369,7 +389,9 @@ struct InsightsTab: View {
                     }
                 }
                 .insightsCard()
+                }
 
+                if let effortScore, let effortSection = reportPayload?.effortScore {
                 // MARK: - Effort Score Card
                 VStack(alignment: .leading, spacing: 18) {
                     // Header and primary score
@@ -380,7 +402,7 @@ struct InsightsTab: View {
                             .frame(width: 26, height: 26)
                             .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                        Text(reportPayload?.effortScore?.title ?? "Effort Score")
+                        Text(effortSection.title ?? "Effort Score")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.secondary)
                             .textCase(.uppercase)
@@ -439,16 +461,17 @@ struct InsightsTab: View {
 
                     // Contextual insight
                     HStack(alignment: .top, spacing: 14) {
-                        Image(systemName: "chart.line.downtrend.xyaxis")
+                        let marker = effortSection.remark?.marker
+                        Image(systemName: marker?.iconName ?? "chart.line.downtrend.xyaxis")
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.green)
+                            .foregroundStyle(marker?.color ?? .green)
                             .frame(width: 36, height: 36)
                             .background(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(.green.opacity(0.1))
+                                    .fill((marker?.color ?? .green).opacity(0.1))
                             )
 
-                        Text(reportPayload?.effortScore?.comment ?? reportPayload?.effortScore?.remark?.text ?? "Your body fat is trending down while muscle remains stable, which is driving a strong effort score.")
+                        Text(effortSection.comment ?? effortSection.remark?.text ?? "")
                             .font(.subheadline)
                             .foregroundStyle(.primary)
                             .lineSpacing(3)
@@ -458,9 +481,11 @@ struct InsightsTab: View {
                     }
                 }
                 .insightsCard()
+                }
             }
             .padding(.top, 4)
             .padding(.bottom, 24)
+            }
         }
         .task {
             await loadAndPollReports()
@@ -620,6 +645,7 @@ private struct InsightReportStatusCard: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .disabled(isLoading)
+                .accessibilityLabel("Refresh report")
             }
 
             HStack(spacing: 10) {
@@ -637,15 +663,26 @@ private struct InsightReportStatusCard: View {
                 Text(secondaryText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if completedReport == nil, activeJob == nil, latestReport == nil, errorMessage == nil {
+                Text("Record a measurement in Record to generate your first report.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .accessibilityElement(children: .contain)
     }
 
     private var primaryText: String {
         if let errorMessage {
             return errorMessage
+        }
+
+        if completedReport != nil {
+            return "Latest report ready"
         }
 
         if let status {
@@ -657,18 +694,27 @@ private struct InsightReportStatusCard: View {
 
     private var secondaryText: String? {
         if let activeJob {
-            return "Job \(activeJob.jobId)"
+            return "Report generation in progress · \(activeJob.generationStatus.capitalized)"
         }
 
         if let completedReport {
-            return "Report \(completedReport.reportId)"
+            return "Updated \(formattedDate(completedReport.updatedAt))"
         }
 
         if let latestReport {
-            return "Report \(latestReport.reportId)"
+            return "Updated \(formattedDate(latestReport.updatedAt))"
         }
 
         return nil
+    }
+
+    private func formattedDate(_ value: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        guard let date = formatter.date(from: value) else {
+            return "recently"
+        }
+
+        return date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 
     private var iconName: String {
@@ -701,17 +747,17 @@ private struct InsightReportStatusCard: View {
 private struct InsightsCardModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .padding(20)
+            .padding(18)
             .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(Color.appSecondaryBackground)
                     .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .stroke(Color.appSeparator, lineWidth: 0.5)
             )
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 12)
     }
 }
 
@@ -721,58 +767,76 @@ private extension View {
     }
 }
 
+private extension InsightReportSection {
+    var displayTitle: String {
+        title ?? headline ?? "Report"
+    }
+
+    var displayComment: String {
+        comment ?? remark?.text ?? headline ?? ""
+    }
+}
+
+private extension InsightReportProgressSection {
+    var displayTitle: String {
+        title ?? headline ?? "Report"
+    }
+
+    var displayComment: String {
+        comment ?? remark?.text ?? headline ?? ""
+    }
+}
+
 // MARK: - Progress Trend Chart
 
 private struct ProgressTrendChart: View {
     let trendData: [String: [InsightReportTrendPoint]]?
+    @State private var selectedDate: String?
 
     private var data: [FatMetric] {
         let reportData = (trendData ?? [:]).flatMap { key, points in
             points.map { FatMetric(date: $0.shortDate, value: $0.value, metric: key.displayTrendLabel) }
         }
 
-        if !reportData.isEmpty {
-            return reportData
-        }
-
-        return [
-        // Body Fat
-        FatMetric(date: "May 24", value: 18.5, metric: "Body Fat"),
-        FatMetric(date: "May 31", value: 18.2, metric: "Body Fat"),
-        FatMetric(date: "Jun 7", value: 18.0, metric: "Body Fat"),
-        FatMetric(date: "Jun 14", value: 17.9, metric: "Body Fat"),
-        FatMetric(date: "Jun 22", value: 17.8, metric: "Body Fat"),
-
-        // Subcutaneous Fat
-        FatMetric(date: "May 24", value: 14.2, metric: "Subcutaneous Fat"),
-        FatMetric(date: "May 31", value: 14.0, metric: "Subcutaneous Fat"),
-        FatMetric(date: "Jun 7", value: 13.7, metric: "Subcutaneous Fat"),
-        FatMetric(date: "Jun 14", value: 13.5, metric: "Subcutaneous Fat"),
-        FatMetric(date: "Jun 22", value: 13.4, metric: "Subcutaneous Fat"),
-
-        // Visceral Fat
-        FatMetric(date: "May 24", value: 8.5, metric: "Visceral Fat"),
-        FatMetric(date: "May 31", value: 8.3, metric: "Visceral Fat"),
-        FatMetric(date: "Jun 7", value: 8.1, metric: "Visceral Fat"),
-        FatMetric(date: "Jun 14", value: 7.9, metric: "Visceral Fat"),
-            FatMetric(date: "Jun 22", value: 7.8, metric: "Visceral Fat")
-        ]
+        return reportData
     }
 
-    private let metrics: [(String, Color)] = [
-        ("Body Fat", .green),
-        ("Subcutaneous Fat", Color(red: 0.35, green: 0.55, blue: 0.95)),
-        ("Visceral Fat", Color(red: 0.95, green: 0.65, blue: 0.25))
-    ]
+    private var yDomain: ClosedRange<Double> {
+        let values = data.map { $0.value }
+        guard let minVal = values.min(), let maxVal = values.max() else {
+            return 0...100
+        }
+        if minVal == maxVal {
+            return (minVal - 1.5)...(maxVal + 1.5)
+        }
+        return (minVal - 1.5)...(maxVal + 1.5)
+    }
+
+    private var uniqueMetrics: [String] {
+        var seen = Set<String>()
+        var result = [String]()
+        for item in data {
+            if !seen.contains(item.metric) {
+                seen.insert(item.metric)
+                result.append(item.metric)
+            }
+        }
+        return result
+    }
 
     var body: some View {
+        let latestDate = data.map { $0.date }.last
+        
         VStack(alignment: .leading, spacing: 14) {
+            if data.isEmpty {
+                MetricsUnavailableContent(message: "Trend data is unavailable for this report.")
+            } else {
             // Legend
             HStack(spacing: 14) {
-                ForEach(metrics, id: \.0) { metric, color in
+                ForEach(uniqueMetrics, id: \.self) { metric in
                     HStack(spacing: 5) {
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(color)
+                            .fill(colorForMetric(metric))
                             .frame(width: 10, height: 3)
 
                         Text(metric)
@@ -788,18 +852,30 @@ private struct ProgressTrendChart: View {
             Chart(data) { item in
                 LineMark(
                     x: .value("Date", item.date),
-                    y: .value("Value", item.value)
+                    y: .value("Value", item.value),
+                    series: .value("Metric", item.metric)
                 )
                 .foregroundStyle(colorForMetric(item.metric))
                 .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 .interpolationMethod(.catmullRom)
-                .symbol {
-                    Circle()
-                        .fill(colorForMetric(item.metric))
-                        .frame(width: 4, height: 4)
-                        .shadow(color: colorForMetric(item.metric).opacity(0.3), radius: 2, x: 0, y: 1)
+                
+                if let latestDate, item.date == latestDate {
+                    PointMark(
+                        x: .value("Date", item.date),
+                        y: .value("Value", item.value)
+                    )
+                    .foregroundStyle(colorForMetric(item.metric))
+                    .symbol {
+                        Circle()
+                            .fill(colorForMetric(item.metric))
+                            .frame(width: 8, height: 8)
+                            .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                            .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
+                    }
                 }
             }
+            .chartXSelection(value: $selectedDate)
+            .chartYScale(domain: yDomain)
             .chartLegend(.hidden)
             .chartYAxis {
                 AxisMarks(position: .leading) { _ in
@@ -810,14 +886,31 @@ private struct ProgressTrendChart: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-            .chartXAxis {
-                AxisMarks { _ in
-                    AxisValueLabel()
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+            .chartXAxis(.hidden)
+            .frame(height: 160)
+
+            if let selectedDate {
+                let selectedItems = data.filter { $0.date == selectedDate }
+                if !selectedItems.isEmpty {
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(selectedDate)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.primary)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            ForEach(selectedItems) { item in
+                                Text("\(item.metric): \(item.value, specifier: "%.1f")")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Spacer()
+                    }
+                    .padding(.top, 2)
                 }
             }
-            .frame(height: 160)
+            }
         }
         .padding(16)
         .background(
@@ -831,11 +924,23 @@ private struct ProgressTrendChart: View {
     }
 
     private func colorForMetric(_ metric: String) -> Color {
-        switch metric {
-        case "Body Fat": return .green
-        case "Subcutaneous Fat": return Color(red: 0.35, green: 0.55, blue: 0.95)
-        case "Visceral Fat": return Color(red: 0.95, green: 0.65, blue: 0.25)
-        default: return .secondary
+        let lower = metric.lowercased()
+        if lower.contains("body fat") || lower.contains("fat ratio") {
+            return .green
+        } else if lower.contains("subcutaneous") {
+            return Color(red: 0.35, green: 0.55, blue: 0.95)
+        } else if lower.contains("visceral") {
+            return Color(red: 0.95, green: 0.65, blue: 0.25)
+        } else if lower.contains("fat mass") || lower.contains("fat") {
+            return .red
+        } else if lower.contains("muscle") {
+            return .orange
+        } else if lower.contains("lean") {
+            return .blue
+        } else if lower.contains("bone") {
+            return .gray
+        } else {
+            return .secondary
         }
     }
 }
