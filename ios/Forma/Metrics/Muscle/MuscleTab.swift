@@ -83,15 +83,25 @@ private struct MuscleReportCard: View {
 
             // Swift Chart Plot
             if let trendPoints = section.trends.first?.value, !trendPoints.isEmpty {
+                let chartDomain = yDomain(for: trendPoints)
+
                 Chart {
                     ForEach(trendPoints, id: \.createdAt) { point in
+                        AreaMark(
+                            x: .value("Date", point.date),
+                            yStart: .value("Baseline", chartDomain.lowerBound),
+                            yEnd: .value("Value", point.value)
+                        )
+                        .foregroundStyle(FormaChartStyle.areaGradient(Color.sleekAccent))
+                        .interpolationMethod(.monotone)
+
                         LineMark(
                             x: .value("Date", point.date),
                             y: .value("Value", point.value)
                         )
-                        .foregroundStyle(Color.sleekAccent.gradient)
-                        .interpolationMethod(.catmullRom)
-                        .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .foregroundStyle(Color.sleekAccent)
+                        .interpolationMethod(.monotone)
+                        .lineStyle(FormaChartStyle.lineStyle)
                     }
                     
                     if let lastPoint = trendPoints.last {
@@ -103,22 +113,22 @@ private struct MuscleReportCard: View {
                         .symbol {
                             Circle()
                                 .fill(Color.sleekAccent)
-                                .frame(width: 8, height: 8)
-                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
+                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
                                 .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                         }
                     }
                 }
                 .chartXSelection(value: $selectedDate)
-                .chartYScale(domain: yDomain(for: trendPoints))
+                .chartYScale(domain: chartDomain)
                 .chartXAxis(.hidden)
                 .chartYAxis {
                     AxisMarks(position: .leading) { _ in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-                            .foregroundStyle(.secondary.opacity(0.15))
+                        AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
+                            .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
                         AxisValueLabel()
                             .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
                     }
                 }
                 .frame(height: 160)

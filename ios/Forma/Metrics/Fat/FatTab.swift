@@ -513,13 +513,21 @@ struct FatHistoryCard: View {
             // Swift Chart
             Chart {
                 ForEach(data) { point in
+                    AreaMark(
+                        x: .value("Date", point.date, unit: .day),
+                        yStart: .value("Baseline", yDomain.lowerBound),
+                        yEnd: .value("Ratio", point.ratio)
+                    )
+                    .foregroundStyle(FormaChartStyle.areaGradient(Color.goodGreen))
+                    .interpolationMethod(.monotone)
+
                     LineMark(
                         x: .value("Date", point.date, unit: .day),
                         y: .value("Ratio", point.ratio)
                     )
-                    .foregroundStyle(Color.goodGreen.gradient)
-                    .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .foregroundStyle(Color.goodGreen)
+                    .interpolationMethod(.monotone)
+                    .lineStyle(FormaChartStyle.lineStyle)
                     
                     if point.id == data.last?.id {
                         PointMark(
@@ -530,8 +538,8 @@ struct FatHistoryCard: View {
                         .symbol {
                             Circle()
                                 .fill(Color.goodGreen)
-                                .frame(width: 8, height: 8)
-                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
+                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
                                 .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                         }
                     }
@@ -541,11 +549,11 @@ struct FatHistoryCard: View {
             .chartXAxis(.hidden)
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
+                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
                     AxisValueLabel()
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
                 }
             }
             .frame(height: 180)
@@ -855,13 +863,21 @@ struct FatMassTrendCard: View {
             // Swift Chart
             Chart {
                 ForEach(data) { point in
+                    AreaMark(
+                        x: .value("Date", point.date, unit: .day),
+                        yStart: .value("Baseline", yDomain.lowerBound),
+                        yEnd: .value("Mass", point.value)
+                    )
+                    .foregroundStyle(FormaChartStyle.areaGradient(Color.extremityRed))
+                    .interpolationMethod(.monotone)
+
                     LineMark(
                         x: .value("Date", point.date, unit: .day),
                         y: .value("Mass", point.value)
                     )
-                    .foregroundStyle(Color.extremityRed.gradient)
-                    .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .foregroundStyle(Color.extremityRed)
+                    .interpolationMethod(.monotone)
+                    .lineStyle(FormaChartStyle.lineStyle)
                     
                     if point.id == data.last?.id {
                         PointMark(
@@ -872,8 +888,8 @@ struct FatMassTrendCard: View {
                         .symbol {
                             Circle()
                                 .fill(Color.extremityRed)
-                                .frame(width: 8, height: 8)
-                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
+                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
                                 .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                         }
                     }
@@ -883,11 +899,11 @@ struct FatMassTrendCard: View {
             .chartXAxis(.hidden)
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
+                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
                     AxisValueLabel()
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
                 }
             }
             .frame(height: 180)
@@ -999,13 +1015,21 @@ struct VisceralSubcRatioTrendCard: View {
             // Swift Chart
             Chart {
                 ForEach(data) { point in
+                    AreaMark(
+                        x: .value("Date", point.date, unit: .day),
+                        yStart: .value("Baseline", yDomain.lowerBound),
+                        yEnd: .value("Ratio", point.value)
+                    )
+                    .foregroundStyle(FormaChartStyle.areaGradient(Color.visceralDarkTeal))
+                    .interpolationMethod(.monotone)
+
                     LineMark(
                         x: .value("Date", point.date, unit: .day),
                         y: .value("Ratio", point.value)
                     )
-                    .foregroundStyle(Color.visceralDarkTeal.gradient)
-                    .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .foregroundStyle(Color.visceralDarkTeal)
+                    .interpolationMethod(.monotone)
+                    .lineStyle(FormaChartStyle.lineStyle)
                     
                     if point.id == data.last?.id {
                         PointMark(
@@ -1016,8 +1040,8 @@ struct VisceralSubcRatioTrendCard: View {
                         .symbol {
                             Circle()
                                 .fill(Color.visceralDarkTeal)
-                                .frame(width: 8, height: 8)
-                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
+                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
                                 .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                         }
                     }
@@ -1027,11 +1051,11 @@ struct VisceralSubcRatioTrendCard: View {
             .chartXAxis(.hidden)
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
+                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
                     AxisValueLabel()
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
                 }
             }
             .frame(height: 180)
@@ -1142,13 +1166,21 @@ struct SubcFatMassTrendCard: View {
             // Swift Chart
             Chart {
                 ForEach(data) { point in
+                    AreaMark(
+                        x: .value("Date", point.date, unit: .day),
+                        yStart: .value("Baseline", yDomain.lowerBound),
+                        yEnd: .value("Mass", point.value)
+                    )
+                    .foregroundStyle(FormaChartStyle.areaGradient(Color.subcutaneousLightTeal))
+                    .interpolationMethod(.monotone)
+
                     LineMark(
                         x: .value("Date", point.date, unit: .day),
                         y: .value("Mass", point.value)
                     )
-                    .foregroundStyle(Color.subcutaneousLightTeal.gradient)
-                    .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .foregroundStyle(Color.subcutaneousLightTeal)
+                    .interpolationMethod(.monotone)
+                    .lineStyle(FormaChartStyle.lineStyle)
                     
                     if point.id == data.last?.id {
                         PointMark(
@@ -1159,8 +1191,8 @@ struct SubcFatMassTrendCard: View {
                         .symbol {
                             Circle()
                                 .fill(Color.subcutaneousLightTeal)
-                                .frame(width: 8, height: 8)
-                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
+                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
                                 .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                         }
                     }
@@ -1170,11 +1202,11 @@ struct SubcFatMassTrendCard: View {
             .chartXAxis(.hidden)
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
+                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
                     AxisValueLabel()
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
                 }
             }
             .frame(height: 180)
@@ -1285,13 +1317,21 @@ struct VisceralFatMassTrendCard: View {
             // Swift Chart
             Chart {
                 ForEach(data) { point in
+                    AreaMark(
+                        x: .value("Date", point.date, unit: .day),
+                        yStart: .value("Baseline", yDomain.lowerBound),
+                        yEnd: .value("Mass", point.value)
+                    )
+                    .foregroundStyle(FormaChartStyle.areaGradient(Color.visceralDarkTeal))
+                    .interpolationMethod(.monotone)
+
                     LineMark(
                         x: .value("Date", point.date, unit: .day),
                         y: .value("Mass", point.value)
                     )
-                    .foregroundStyle(Color.visceralDarkTeal.gradient)
-                    .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .foregroundStyle(Color.visceralDarkTeal)
+                    .interpolationMethod(.monotone)
+                    .lineStyle(FormaChartStyle.lineStyle)
                     
                     if point.id == data.last?.id {
                         PointMark(
@@ -1302,8 +1342,8 @@ struct VisceralFatMassTrendCard: View {
                         .symbol {
                             Circle()
                                 .fill(Color.visceralDarkTeal)
-                                .frame(width: 8, height: 8)
-                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
+                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
                                 .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                         }
                     }
@@ -1313,11 +1353,11 @@ struct VisceralFatMassTrendCard: View {
             .chartXAxis(.hidden)
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
+                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
                     AxisValueLabel()
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
                 }
             }
             .frame(height: 180)

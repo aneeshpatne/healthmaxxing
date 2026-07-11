@@ -7,88 +7,72 @@
 
 import SwiftUI
 
-let glassTabBarHeight: CGFloat = 52
-
 struct MetricsView: View {
     @Binding var selectedTab: MetricsTab
-    @Binding var isHeaderCollapsed: Bool
+    @Binding var isAtTop: Bool
     @StateObject private var reportStore = MetricsReportStore()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            GeometryReader { proxy in
-                Color.clear
-                    .preference(
-                        key: MetricsScrollOffsetKey.self,
-                        value: proxy.frame(in: .named("metricsScroll")).minY
-                    )
-            }
-            .frame(height: 0)
+            GlassTabBar(selectedTab: $selectedTab)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
 
-            if reportStore.isLoading && reportStore.payload == nil {
-                MetricsReportStatusScreen(
-                    title: "Preparing report",
-                    message: reportStore.statusMessage,
-                    isLoading: true
-                )
-            } else if let payload = reportStore.payload {
-                switch selectedTab {
-                case .insights:
-                    InsightsTab()
-                case .performance:
-                    PerformanceTab(payload: payload)
-                case .fat:
-                    FatTab(payload: payload)
-                case .muscle:
-                    MuscleTab(payload: payload)
+            Group {
+                if reportStore.isLoading && reportStore.payload == nil {
+                    MetricsReportStatusScreen(
+                        title: "Preparing report",
+                        message: reportStore.statusMessage,
+                        isLoading: true
+                    )
+                } else if let payload = reportStore.payload {
+                    switch selectedTab {
+                    case .insights:
+                        InsightsTab()
+                    case .performance:
+                        PerformanceTab(payload: payload)
+                    case .fat:
+                        FatTab(payload: payload)
+                    case .muscle:
+                        MuscleTab(payload: payload)
+                    }
+                } else if let errorMessage = reportStore.errorMessage {
+                    MetricsReportStatusScreen(
+                        title: "Report unavailable",
+                        message: errorMessage,
+                        systemImage: "exclamationmark.triangle.fill",
+                        tint: .red
+                    )
+                } else {
+                    MetricsReportStatusScreen(
+                        title: "No report yet",
+                        message: "Record a measurement to generate your first report.",
+                        systemImage: "doc.text.magnifyingglass",
+                        tint: .secondary
+                    )
                 }
-            } else if let errorMessage = reportStore.errorMessage {
-                MetricsReportStatusScreen(
-                    title: "Report unavailable",
-                    message: errorMessage,
-                    systemImage: "exclamationmark.triangle.fill",
-                    tint: .red
-                )
-            } else {
-                MetricsReportStatusScreen(
-                    title: "No report yet",
-                    message: "Record a measurement to generate your first report.",
-                    systemImage: "doc.text.magnifyingglass",
-                    tint: .secondary
-                )
             }
         }
         .task {
             await reportStore.loadAndPollReport()
         }
-        .coordinateSpace(name: "metricsScroll")
-        .onPreferenceChange(MetricsScrollOffsetKey.self) { offset in
-            let shouldCollapse = offset < -24
-            guard shouldCollapse != isHeaderCollapsed else { return }
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.contentOffset.y + geometry.contentInsets.top
+        } action: { _, offset in
+            let shouldShowBrand = offset < 24
+            guard shouldShowBrand != isAtTop else { return }
 
             if reduceMotion {
-                isHeaderCollapsed = shouldCollapse
+                isAtTop = shouldShowBrand
             } else {
-                withAnimation(.easeOut(duration: 0.22)) {
-                    isHeaderCollapsed = shouldCollapse
+                withAnimation(.easeOut(duration: 0.2)) {
+                    isAtTop = shouldShowBrand
                 }
             }
         }
-        .safeAreaPadding(
-            .top,
-            (isHeaderCollapsed ? collapsedHeaderHeight : headerHeight) + glassTabBarHeight
-        )
-        .scrollEdgeEffectStyle(.hard, for: .top)
+        .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
         .background(Color.appBackground.ignoresSafeArea())
-    }
-}
-
-private struct MetricsScrollOffsetKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }
 
@@ -167,7 +151,6 @@ enum MetricsTab: String, CaseIterable {
 
 struct GlassTabBar: View {
     @Binding var selectedTab: MetricsTab
-    let isCollapsed: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -192,7 +175,7 @@ struct GlassTabBar: View {
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                             .frame(minWidth: 58)
-                            .frame(minHeight: isCollapsed ? 42 : 48)
+                            .frame(minHeight: 48)
                             .padding(.horizontal, 8)
                             .foregroundStyle(selectedTab == tab ? .primary : .secondary)
                     }
@@ -207,7 +190,7 @@ struct GlassTabBar: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, isCollapsed ? 4 : 8)
+            .padding(.vertical, 8)
         }
     }
 }
@@ -357,7 +340,7 @@ extension View {
 #Preview {
     MetricsView(
         selectedTab: .constant(.insights),
-        isHeaderCollapsed: .constant(false)
+        isAtTop: .constant(true)
     )
         .background(Color.appBackground)
 }

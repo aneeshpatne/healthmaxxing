@@ -329,24 +329,16 @@ struct CompositionMapCard: View {
             }
             
             // Main Chart Area
-            VStack(spacing: 12) {
-                HStack(spacing: 12) {
-                    // Y Axis Label
-                    Text("FMI — Fat Mass")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .fixedSize()
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 16)
-                    
-                    CompositionQuadrantChart(ffmi: ffmi, fmi: fmi)
-                }
-                
-                // X Axis Label
-                Text("FFMI — Muscle Mass")
+            HStack(spacing: 12) {
+                // Y Axis Label
+                Text("FMI — Fat Mass")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 28) // Offset to align with chart
+                    .fixedSize()
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 16)
+
+                CompositionQuadrantChart(ffmi: ffmi, fmi: fmi)
             }
             .padding(.vertical, 8)
             
@@ -779,6 +771,18 @@ struct CompositionTrendsCard: View {
 
         return reportData
     }
+
+    private var yDomain: ClosedRange<Double> {
+        let values = trendData.map(\.value)
+        guard let minimum = values.min(), let maximum = values.max() else {
+            return -1...1
+        }
+        guard minimum != maximum else {
+            return (minimum - 1)...(maximum + 1)
+        }
+        let padding = max((maximum - minimum) * 0.15, 0.5)
+        return (minimum - padding)...(maximum + padding)
+    }
     
     var body: some View {
         let latestDate = trendData.map(\.date).last
@@ -823,14 +827,23 @@ struct CompositionTrendsCard: View {
                 
                 // Chart
                 Chart(trendData) { item in
+                    AreaMark(
+                        x: .value("Date", item.date),
+                        yStart: .value("Baseline", yDomain.lowerBound),
+                        yEnd: .value("Change", item.value),
+                        series: .value("Metric", item.metric)
+                    )
+                    .foregroundStyle(FormaChartStyle.areaGradient(colorForMetric(item.metric)))
+                    .interpolationMethod(.monotone)
+
                     LineMark(
                         x: .value("Date", item.date),
                         y: .value("Change", item.value),
                         series: .value("Metric", item.metric)
                     )
                     .foregroundStyle(colorForMetric(item.metric))
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                    .interpolationMethod(.catmullRom)
+                    .lineStyle(FormaChartStyle.lineStyle)
+                    .interpolationMethod(.monotone)
                     
                     // Endpoint markers
                     if item.date == latestDate {
@@ -842,33 +855,32 @@ struct CompositionTrendsCard: View {
                         .symbol {
                             Circle()
                                 .fill(colorForMetric(item.metric))
-                                .frame(width: 8, height: 8)
-                                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
+                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
                                 .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
                         }
                     }
                 }
                 .chartXSelection(value: $selectedDate)
                 .chartLegend(.hidden)
+                .chartYScale(domain: yDomain)
                 .chartYAxis {
                     AxisMarks(position: .leading) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-                            .foregroundStyle(.secondary.opacity(0.15))
+                        AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
+                            .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
                         
                         // Bold the zero line
                         if let yValue = value.as(Double.self), yValue == 0 {
                             AxisGridLine(stroke: StrokeStyle(lineWidth: 1))
-                                .foregroundStyle(.secondary.opacity(0.4))
+                                .foregroundStyle(Color.secondary.opacity(0.22))
                         }
-                    }
-                }
-                .chartXAxis {
-                    AxisMarks { _ in
+
                         AxisValueLabel()
                             .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
                     }
                 }
+                .chartXAxis(.hidden)
                 .frame(height: 180)
 
                 if let selectedDate {
@@ -1087,30 +1099,21 @@ struct RecompVectorPlotCard: View {
                     "Future": Color.performancePositive
                 ])
                 .chartLineStyleScale([
-                    "History": StrokeStyle(lineWidth: 1.5),
-                    "Future": StrokeStyle(lineWidth: 2.5, dash: [4, 4])
+                    "History": StrokeStyle(lineWidth: 1.75, lineCap: .round, lineJoin: .round),
+                    "Future": StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [4, 4])
                 ])
                 .chartLegend(.hidden)
                 .chartXScale(domain: xDomain(for: values))
                 .chartYScale(domain: yDomain(for: values))
-                .chartXAxisLabel("Fat Mass (kg)", position: .bottom, alignment: .center)
                 .chartYAxisLabel("Lean Mass (kg)", position: .leading, alignment: .center)
-                .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 6)) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
-                            .foregroundStyle(.secondary.opacity(0.15))
-                        AxisValueLabel()
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
+                .chartXAxis(.hidden)
                 .chartYAxis {
                     AxisMarks(values: .automatic(desiredCount: 5)) { value in
-                        AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
-                            .foregroundStyle(.secondary.opacity(0.15))
+                        AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
+                            .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
                         AxisValueLabel()
                             .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
                     }
                 }
                 .frame(height: 220)
@@ -1222,6 +1225,7 @@ private struct RecompLineMarks: ChartContent {
             )
             .foregroundStyle(by: .value("Phase", item.phase))
             .lineStyle(by: .value("Phase", item.phase))
+            .interpolationMethod(.monotone)
         }
     }
 }

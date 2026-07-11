@@ -866,14 +866,23 @@ private struct ProgressTrendChart: View {
 
             // Chart — no animation, renders immediately
             Chart(data) { item in
+                AreaMark(
+                    x: .value("Date", item.date),
+                    yStart: .value("Baseline", yDomain.lowerBound),
+                    yEnd: .value("Value", item.value),
+                    series: .value("Metric", item.metric)
+                )
+                .foregroundStyle(FormaChartStyle.areaGradient(colorForMetric(item.metric)))
+                .interpolationMethod(.monotone)
+
                 LineMark(
                     x: .value("Date", item.date),
                     y: .value("Value", item.value),
                     series: .value("Metric", item.metric)
                 )
                 .foregroundStyle(colorForMetric(item.metric))
-                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                .interpolationMethod(.catmullRom)
+                .lineStyle(FormaChartStyle.lineStyle)
+                .interpolationMethod(.monotone)
                 
                 if let latestDate, item.date == latestDate {
                     PointMark(
@@ -884,8 +893,8 @@ private struct ProgressTrendChart: View {
                     .symbol {
                         Circle()
                             .fill(colorForMetric(item.metric))
-                            .frame(width: 8, height: 8)
-                            .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                            .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
+                            .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
                             .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
                     }
                 }
@@ -895,11 +904,11 @@ private struct ProgressTrendChart: View {
             .chartLegend(.hidden)
             .chartYAxis {
                 AxisMarks(position: .leading) { _ in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [3, 3]))
-                        .foregroundStyle(.secondary.opacity(0.15))
+                    AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
+                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
                     AxisValueLabel()
                         .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
                 }
             }
             .chartXAxis(.hidden)
