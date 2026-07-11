@@ -6,6 +6,48 @@
 //
 
 import Foundation
+import SwiftUI
+
+enum RemarkMarker: String, Codable, Equatable {
+    case trendUp = "trend_up"
+    case trendDown = "trend_down"
+    case aiRecommendation = "ai_recommendation"
+    case caution = "caution"
+    case complement = "complement"
+
+    var iconName: String {
+        switch self {
+        case .trendUp:
+            return "arrow.up.forward.circle.fill"
+        case .trendDown:
+            return "arrow.down.forward.circle.fill"
+        case .aiRecommendation:
+            return "sparkle"
+        case .caution:
+            return "exclamationmark.triangle.fill"
+        case .complement:
+            return "checkmark.circle.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .trendUp, .trendDown:
+            return .green
+        case .aiRecommendation:
+            return .purple
+        case .caution:
+            return .orange
+        case .complement:
+            return .green
+        }
+    }
+
+    var displayRemarkMarker: String {
+        rawValue.displayRemarkMarker
+    }
+}
+
 
 struct InsightReportPayload: Equatable {
     let overview: InsightReportSection?
@@ -121,7 +163,7 @@ struct InsightReportEffortScoreSection: Equatable {
 }
 
 struct InsightReportRemark: Equatable {
-    let marker: String?
+    let marker: RemarkMarker?
     let text: String?
 
     init?(json: JSONValue?) {
@@ -129,7 +171,11 @@ struct InsightReportRemark: Equatable {
             return nil
         }
 
-        self.marker = object["marker"]?.stringValue
+        if let markerStr = object["marker"]?.stringValue {
+            self.marker = RemarkMarker(rawValue: markerStr)
+        } else {
+            self.marker = nil
+        }
         self.text = object["text"]?.stringValue
     }
 }
@@ -171,6 +217,10 @@ struct InsightReportMetricSection: Equatable {
 
     func nestedNumber(_ key: String) -> Double? {
         value?.objectValue?[key]?.numberValue
+    }
+
+    func nestedNumber(_ firstKey: String, _ secondKey: String) -> Double? {
+        value?.objectValue?[firstKey]?.objectValue?[secondKey]?.numberValue
     }
 
     static func trendSections(from json: JSONValue?) -> [String: [InsightReportTrendPoint]] {
