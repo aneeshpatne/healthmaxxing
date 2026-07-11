@@ -757,7 +757,7 @@ private struct InsightsCardModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .stroke(Color.appSeparator, lineWidth: 0.5)
             )
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 16)
     }
 }
 
