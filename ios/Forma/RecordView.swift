@@ -113,7 +113,7 @@ struct RecordView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
         }
-        .safeAreaPadding(.top, headerHeight)
+        .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
         .background(Color.appBackground.ignoresSafeArea())
         .onChange(of: scaleManager.state) { _, state in
             guard state == .finished else { return }
