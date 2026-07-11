@@ -17,13 +17,16 @@ enum AppTab {
 struct SwiftUIView: View {
     @State private var activeTab: AppTab = .metrics
     @State private var selectedMetricsTab: MetricsTab = .insights
+    @State private var isMetricsHeaderCollapsed = false
 
     var body: some View {
         NavigationStack {
             TabView(selection: $activeTab) {
                 Tab("Metrics", systemImage: "chart.xyaxis.line", value: .metrics) {
-                    MetricsView(selectedTab: $selectedMetricsTab)
-                        .safeAreaPadding(.top, headerHeight + glassTabBarHeight)
+                    MetricsView(
+                        selectedTab: $selectedMetricsTab,
+                        isHeaderCollapsed: $isMetricsHeaderCollapsed
+                    )
                         .ignoresSafeArea(.container, edges: .top)
                 }
 
@@ -45,7 +48,11 @@ struct SwiftUIView: View {
             .tabBarMinimizeBehavior(.onScrollDown)
             .background(Color.appBackground.ignoresSafeArea())
             .overlay(alignment: .top) {
-                FormaHeader(activeTab: $activeTab, selectedMetricsTab: $selectedMetricsTab)
+                FormaHeader(
+                    activeTab: $activeTab,
+                    selectedMetricsTab: $selectedMetricsTab,
+                    isCollapsed: isMetricsHeaderCollapsed
+                )
             }
         }
     }
