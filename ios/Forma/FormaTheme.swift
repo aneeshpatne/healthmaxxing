@@ -121,7 +121,7 @@ private struct FormaMetricCardModifier: ViewModifier {
 
 extension View {
     func formaMetricCard(
-        horizontalPadding: CGFloat = 12,
+        horizontalPadding: CGFloat = 16,
         padding: CGFloat = 18,
         cornerRadius: CGFloat = 20
     ) -> some View {
