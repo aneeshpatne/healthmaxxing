@@ -246,7 +246,7 @@ struct FFMISemicircularGauge: View {
                     Text("YOUR FFMI")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
-                        .tracking(1.0)
+                        .tracking(0.6)
                 }
                 .position(x: width / 2, y: height - 20)
             }
@@ -1455,7 +1455,7 @@ struct ExcessFatSemicircularGauge: View {
                     Text("TO LOSE")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
-                        .tracking(1.5)
+                        .tracking(1.0)
                 }
                 .position(x: width / 2, y: height - 20)
             }
