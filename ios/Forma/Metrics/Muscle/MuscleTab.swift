@@ -19,13 +19,14 @@ struct MuscleTab: View {
                 }
             }
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 0)
         .padding(.vertical, 16)
     }
 }
 
 private struct MuscleReportCard: View {
     let section: InsightReportMetricSection
+    @State private var selectedDate: Date?
 
     private func yDomain(for points: [InsightReportTrendPoint]) -> ClosedRange<Double> {
         let values = points.map { $0.value }
@@ -108,6 +109,7 @@ private struct MuscleReportCard: View {
                         }
                     }
                 }
+                .chartXSelection(value: $selectedDate)
                 .chartYScale(domain: yDomain(for: trendPoints))
                 .chartXAxis(.hidden)
                 .chartYAxis {
@@ -129,6 +131,26 @@ private struct MuscleReportCard: View {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(Color.appSeparator, lineWidth: 0.5)
                 )
+
+                if let selectedDate {
+                    let selectedPoints = trendPoints.filter {
+                        Calendar.current.isDate($0.date, inSameDayAs: selectedDate)
+                    }
+                    if !selectedPoints.isEmpty {
+                        HStack(alignment: .top, spacing: 12) {
+                            Text(selectedDate.formatted(.dateTime.month(.abbreviated).day()))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+
+                            Text(selectedPoints.map { String(format: "%.1f", $0.value) }.joined(separator: " · "))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Spacer()
+                        }
+                        .padding(.top, 2)
+                    }
+                }
             }
 
             // Bottom Remark Row
@@ -160,15 +182,6 @@ private struct MuscleReportCard: View {
                 .padding(.horizontal, 4)
             }
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
+        .formaMetricCard()
     }
 }
