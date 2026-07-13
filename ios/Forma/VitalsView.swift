@@ -13,6 +13,6 @@ struct VitalsView: View {
             EmptyView()
         }
         .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
-        .background(Color.appBackground.ignoresSafeArea())
+        .background(FormaBackground())
     }
 }
