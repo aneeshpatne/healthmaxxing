@@ -42,7 +42,7 @@ struct SwiftUIView: View {
                 }
             }
             .tabBarMinimizeBehavior(.onScrollDown)
-            .background(Color.appBackground.ignoresSafeArea())
+            .background(FormaBackground())
             .overlay(alignment: .top) {
                 GlassEffectContainer(spacing: 12) {
                     HStack {
@@ -57,8 +57,8 @@ struct SwiftUIView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .padding(.horizontal, 16)
-                .safeAreaPadding(.top, 8)
+                .padding(.horizontal, FormaSpacing.screenGutter)
+                .safeAreaPadding(.top, FormaSpacing.xs)
                 .animation(.easeOut(duration: 0.2), value: activeTab != .metrics || isMetricsAtTop)
             }
         }
@@ -72,9 +72,10 @@ enum FormaLayout {
 struct FormaBrandMark: View {
     var body: some View {
         Text("Forma")
-            .font(.system(size: 20, weight: .heavy, design: .rounded))
+            .font(FormaTypography.wordmark)
+            .tracking(-0.35)
             .foregroundStyle(.primary)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, FormaSpacing.sm)
             .frame(height: 44)
             .glassEffect(.regular, in: Capsule())
             .accessibilityLabel("Forma")
