@@ -16,8 +16,8 @@ struct MetricsView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             GlassTabBar(selectedTab: $selectedTab)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+                .padding(.horizontal, FormaSpacing.screenGutter)
+                .padding(.bottom, FormaSpacing.md)
 
             Group {
                 if reportStore.isLoading && reportStore.payload == nil {
@@ -72,7 +72,7 @@ struct MetricsView: View {
             }
         }
         .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
-        .background(Color.appBackground.ignoresSafeArea())
+        .background(FormaBackground())
     }
 }
 
@@ -134,7 +134,7 @@ struct MetricsUnavailableContent: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(Color.appTertiaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Color.appTertiaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
@@ -223,7 +223,7 @@ struct MetricsSkeletonView: View {
 struct SkeletonRow: View {
     var body: some View {
         HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.secondary.opacity(0.12))
                 .frame(width: 36, height: 36)
             
@@ -257,7 +257,7 @@ struct SkeletonCard: View {
             }
             
             // Visualization Area
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.secondary.opacity(0.05))
                 .frame(height: 150)
             
@@ -269,17 +269,8 @@ struct SkeletonCard: View {
             // Bottom Row
             SkeletonRow()
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
-        .padding(.horizontal, 16)
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
+        .padding(.horizontal, FormaSpacing.screenGutter)
     }
 }
 
