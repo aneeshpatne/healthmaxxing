@@ -41,9 +41,9 @@ struct Profiles: View {
                     }
                     .padding()
                     .background(Color.appSecondaryBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: 10)
                             .stroke(Color.red.opacity(0.3), lineWidth: 1)
                     )
                 }
@@ -66,10 +66,10 @@ struct Profiles: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 20)
+            .padding(.horizontal, FormaSpacing.screenGutter)
+            .padding(.vertical, FormaSpacing.lg)
         }
-        .background(Color.appBackground.ignoresSafeArea())
+        .background(FormaBackground())
         .navigationTitle("Profiles")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -669,14 +669,7 @@ private struct ProfileRow: View {
                 .padding(.top, 4)
             }
         }
-        .padding(18)
-        .background(Color.appSecondaryBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: Color.cardShadow, radius: 8, x: 0, y: 4)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 1)
-        )
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
     }
 
     private func initialsView(for name: String) -> some View {
@@ -796,13 +789,7 @@ private struct SkeletonCardView: View {
                 }
             }
         }
-        .padding(18)
-        .background(Color.appSecondaryBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 1)
-        )
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
         .opacity(isAnimating ? 0.4 : 0.8)
         .onAppear {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
