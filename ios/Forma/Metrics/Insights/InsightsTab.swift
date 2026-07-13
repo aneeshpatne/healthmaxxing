@@ -18,7 +18,7 @@ struct InsightsTab: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
+        Group {
             if completedReport == nil && isLoadingReports {
                 MetricsReportStatusScreen(
                     title: "Generating report",
@@ -62,23 +62,7 @@ struct InsightsTab: View {
                 if let overview = reportPayload?.overview {
                 // MARK: - Weekly Summary Card
                 VStack(alignment: .leading, spacing: 18) {
-                    // Header
-                    HStack(spacing: 8) {
-                        Image(systemName: "waveform.path.ecg")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Color.accentColor)
-                            .frame(width: 26, height: 26)
-                            .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-                        Text(overview.title ?? overview.displayTitle)
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                            .tracking(0.6)
-
-                        Spacer()
-
-                    }
+                    FormaCardHeader(overview.title ?? overview.displayTitle)
 
                     // Insight text
                     Text(overview.headline ?? overview.displayComment)
@@ -94,31 +78,11 @@ struct InsightsTab: View {
                         .frame(height: 1)
 
                     // Premium insight row
-                    HStack(spacing: 14) {
-                        let marker = overview.remark?.marker
-                        Image(systemName: marker?.iconName ?? "flame.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(marker?.color ?? .orange)
-                            .frame(width: 36, height: 36)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill((marker?.color ?? .orange).opacity(0.1))
-                            )
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(marker?.displayRemarkMarker ?? "Insight")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.primary)
-
-                            Text(overview.remark?.text ?? overview.displayComment)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
-
-                        // Trend badge
-                    }
+                    FormaCallout(
+                        text: overview.remark?.text ?? overview.displayComment,
+                        systemImage: overview.remark?.marker?.iconName ?? "flame.fill",
+                        tint: overview.remark?.marker?.color ?? .orange
+                    )
                 }
                 .insightsCard()
                 }
@@ -126,22 +90,7 @@ struct InsightsTab: View {
                 if let foundation = reportPayload?.foundation {
                 // MARK: - Strong Base Card
                 VStack(alignment: .leading, spacing: 18) {
-                    // Header
-                    HStack(spacing: 8) {
-                        Image(systemName: "leaf.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.green)
-                            .frame(width: 26, height: 26)
-                            .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-                        Text(foundation.title ?? foundation.displayTitle)
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                            .tracking(0.6)
-
-                        Spacer()
-                    }
+                    FormaCardHeader(foundation.title ?? foundation.displayTitle)
 
                     // Headline
                     Text(foundation.headline ?? foundation.displayComment)
@@ -164,24 +113,11 @@ struct InsightsTab: View {
                         .frame(height: 1)
 
                     // Insight row
-                    HStack(spacing: 14) {
-                        let marker = foundation.remark?.marker
-                        Image(systemName: marker?.iconName ?? "checkmark.circle.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(marker?.color ?? .green)
-                            .frame(width: 36, height: 36)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill((marker?.color ?? .green).opacity(0.1))
-                            )
-
-                        Text(foundation.remark?.text ?? foundation.displayComment)
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Spacer()
-                    }
+                    FormaCallout(
+                        text: foundation.remark?.text ?? foundation.displayComment,
+                        systemImage: foundation.remark?.marker?.iconName ?? "checkmark.circle.fill",
+                        tint: foundation.remark?.marker?.color ?? .green
+                    )
                 }
                 .insightsCard()
                 }
@@ -189,22 +125,7 @@ struct InsightsTab: View {
                 if let progress = reportPayload?.progress {
                 // MARK: - Progress Trend Card
                 VStack(alignment: .leading, spacing: 18) {
-                    // Header
-                    HStack(spacing: 8) {
-                        Image(systemName: "chart.line.downtrend.xyaxis")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.green)
-                            .frame(width: 26, height: 26)
-                            .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-                        Text(progress.title ?? progress.displayTitle)
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                            .tracking(0.6)
-
-                        Spacer()
-                    }
+                    FormaCardHeader(progress.title ?? progress.displayTitle)
 
                     // Headline
                     Text(progress.headline ?? progress.displayComment)
@@ -230,24 +151,11 @@ struct InsightsTab: View {
                         .frame(height: 1)
 
                     // Insight row
-                    HStack(spacing: 14) {
-                        let marker = progress.remark?.marker
-                        Image(systemName: marker?.iconName ?? "sparkle")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Color.appSecondaryBackground)
-                            .frame(width: 36, height: 36)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill((marker?.color ?? .green).opacity(0.85))
-                            )
-
-                        Text(progress.remark?.text ?? progress.displayComment)
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Spacer()
-                    }
+                    FormaCallout(
+                        text: progress.remark?.text ?? progress.displayComment,
+                        systemImage: progress.remark?.marker?.iconName ?? "sparkle",
+                        tint: progress.remark?.marker?.color ?? .green
+                    )
                 }
                 .insightsCard()
                 }
@@ -255,22 +163,7 @@ struct InsightsTab: View {
                 if let lever = reportPayload?.lever {
                 // MARK: - Waist Focus Card
                 VStack(alignment: .leading, spacing: 18) {
-                    // Header
-                    HStack(spacing: 8) {
-                        Image(systemName: "ruler.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.green)
-                            .frame(width: 26, height: 26)
-                            .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-                        Text(lever.title ?? lever.displayTitle)
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                            .tracking(0.6)
-
-                        Spacer()
-                    }
+                    FormaCardHeader(lever.title ?? lever.displayTitle)
 
                     // Headline
                     Text(lever.headline ?? lever.displayComment)
@@ -293,24 +186,11 @@ struct InsightsTab: View {
                         .frame(height: 1)
 
                     // Insight row
-                    HStack(spacing: 14) {
-                        let marker = lever.remark?.marker
-                        Image(systemName: marker?.iconName ?? "arrow.up.forward.circle.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(marker?.color ?? .green)
-                            .frame(width: 36, height: 36)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill((marker?.color ?? .green).opacity(0.1))
-                            )
-
-                        Text(lever.remark?.text ?? lever.displayComment)
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Spacer()
-                    }
+                    FormaCallout(
+                        text: lever.remark?.text ?? lever.displayComment,
+                        systemImage: lever.remark?.marker?.iconName ?? "arrow.up.forward.circle.fill",
+                        tint: lever.remark?.marker?.color ?? .green
+                    )
                 }
                 .insightsCard()
                 }
@@ -318,22 +198,7 @@ struct InsightsTab: View {
                 if let physiqueArchetype = reportPayload?.physiqueArchetype {
                 // MARK: - Broad Frame Card
                 VStack(alignment: .leading, spacing: 18) {
-                    // Header
-                    HStack(spacing: 8) {
-                        Image(systemName: "figure.strengthtraining.traditional")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.blue)
-                            .frame(width: 26, height: 26)
-                            .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-                        Text(physiqueArchetype.title ?? "Physique")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                            .tracking(0.6)
-
-                        Spacer()
-                    }
+                    FormaCardHeader(physiqueArchetype.title ?? "Physique")
 
                     // Headline
                     Text(physiqueArchetype.headline ?? physiqueArchetype.comment ?? "")
@@ -357,9 +222,9 @@ struct InsightsTab: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 180)
                         .background(Color.appTertiaryBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         .overlay {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 .stroke(Color.appSeparator, lineWidth: 0.5)
                         }
                         .accessibilityLabel("Broad body frame illustration")
@@ -370,23 +235,11 @@ struct InsightsTab: View {
                         .frame(height: 1)
 
                     // Insight row
-                    HStack(alignment: .top, spacing: 14) {
-                        Image(systemName: "dumbbell.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.blue)
-                            .frame(width: 36, height: 36)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(.blue.opacity(0.1))
-                            )
-
-                        Text(physiqueArchetype.bodyType.map { "Body type: \($0.capitalized)" } ?? physiqueArchetype.comment ?? "")
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Spacer()
-                    }
+                    FormaCallout(
+                        text: physiqueArchetype.bodyType.map { "Body type: \($0.capitalized)" } ?? physiqueArchetype.comment ?? "",
+                        systemImage: "dumbbell.fill",
+                        tint: .blue
+                    )
                 }
                 .insightsCard()
                 }
@@ -394,22 +247,7 @@ struct InsightsTab: View {
                 if let effortScore, let effortSection = reportPayload?.effortScore {
                 // MARK: - Effort Score Card
                 VStack(alignment: .leading, spacing: 18) {
-                    // Header and primary score
-                    HStack(spacing: 8) {
-                        Image(systemName: "speedometer")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.green)
-                            .frame(width: 26, height: 26)
-                            .background(.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-                        Text(effortSection.title ?? "Effort Score")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                            .tracking(0.6)
-
-                        Spacer()
-
+                    FormaCardHeader(effortSection.title ?? "Effort Score") {
                         Text(String(format: "%.0f", effortScore))
                             .font(.subheadline.weight(.bold))
                             .monospacedDigit()
@@ -460,25 +298,11 @@ struct InsightsTab: View {
                         .frame(height: 1)
 
                     // Contextual insight
-                    HStack(alignment: .top, spacing: 14) {
-                        let marker = effortSection.remark?.marker
-                        Image(systemName: marker?.iconName ?? "chart.line.downtrend.xyaxis")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(marker?.color ?? .green)
-                            .frame(width: 36, height: 36)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill((marker?.color ?? .green).opacity(0.1))
-                            )
-
-                        Text(effortSection.comment ?? effortSection.remark?.text ?? "")
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                            .lineSpacing(3)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        Spacer()
-                    }
+                    FormaCallout(
+                        text: effortSection.comment ?? effortSection.remark?.text ?? "",
+                        systemImage: effortSection.remark?.marker?.iconName ?? "chart.line.downtrend.xyaxis",
+                        tint: effortSection.remark?.marker?.color ?? .green
+                    )
                 }
                 .insightsCard()
                 }
@@ -487,6 +311,7 @@ struct InsightsTab: View {
             .padding(.bottom, 24)
             }
         }
+        .padding(.horizontal, FormaSpacing.screenGutter)
         .task {
             await loadAndPollReports()
         }
@@ -623,21 +448,7 @@ private struct InsightReportStatusCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Image(systemName: iconName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(iconColor)
-                    .frame(width: 26, height: 26)
-                    .background(iconColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-                Text("AI Report")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.6)
-
-                Spacer()
-
+            FormaCardHeader("AI Report") {
                 Button(action: refreshAction) {
                     Image(systemName: "arrow.clockwise")
                         .font(.caption.weight(.bold))
@@ -717,63 +528,14 @@ private struct InsightReportStatusCard: View {
         return date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 
-    private var iconName: String {
-        if errorMessage != nil {
-            return "exclamationmark.triangle.fill"
-        }
-
-        if isLoading || activeJob != nil {
-            return "hourglass"
-        }
-
-        return "sparkles"
-    }
-
-    private var iconColor: Color {
-        if errorMessage != nil {
-            return .red
-        }
-
-        if isLoading || activeJob != nil {
-            return .orange
-        }
-
-        return Color.accentColor
-    }
 }
 
 // MARK: - Insights Card Modifier
 
 private struct InsightsCardModifier: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hasAppeared = false
-
     func body(content: Content) -> some View {
         content
-            .opacity(hasAppeared || reduceMotion ? 1 : 0)
-            .offset(y: hasAppeared || reduceMotion ? 0 : 8)
-            .padding(18)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color.appSecondaryBackground)
-                    .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.appSeparator, lineWidth: 0.5)
-            )
-            .padding(.horizontal, 16)
-            .onAppear {
-                guard !hasAppeared else { return }
-
-                if reduceMotion {
-                    hasAppeared = true
-                } else {
-                    withAnimation(.easeOut(duration: 0.24)) {
-                        hasAppeared = true
-                    }
-                }
-            }
+            .formaSurface(.card, padding: FormaSpacing.cardInset)
     }
 }
 
@@ -807,25 +569,15 @@ private extension InsightReportProgressSection {
 
 private struct ProgressTrendChart: View {
     let trendData: [String: [InsightReportTrendPoint]]?
-    @State private var selectedDate: String?
 
     private var data: [FatMetric] {
         let reportData = (trendData ?? [:]).flatMap { key, points in
-            points.map { FatMetric(date: $0.shortDate, value: $0.value, metric: key.displayTrendLabel) }
+            points.map { FatMetric(date: $0.date, value: $0.value, metric: key.displayTrendLabel) }
         }
 
-        return reportData
-    }
-
-    private var yDomain: ClosedRange<Double> {
-        let values = data.map { $0.value }
-        guard let minVal = values.min(), let maxVal = values.max() else {
-            return 0...100
+        return reportData.sorted {
+            $0.date == $1.date ? $0.metric < $1.metric : $0.date < $1.date
         }
-        if minVal == maxVal {
-            return (minVal - 1.5)...(maxVal + 1.5)
-        }
-        return (minVal - 1.5)...(maxVal + 1.5)
     }
 
     private var uniqueMetrics: [String] {
@@ -841,140 +593,49 @@ private struct ProgressTrendChart: View {
     }
 
     var body: some View {
-        let latestDate = data.map { $0.date }.last
-        
         VStack(alignment: .leading, spacing: 14) {
-            if data.isEmpty {
-                MetricsUnavailableContent(message: "Trend data is unavailable for this report.")
-            } else {
-            // Legend
-            HStack(spacing: 14) {
-                ForEach(uniqueMetrics, id: \.self) { metric in
-                    HStack(spacing: 5) {
-                        RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(colorForMetric(metric))
-                            .frame(width: 10, height: 3)
-
-                        Text(metric)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Spacer()
-            }
-
-            // Chart — no animation, renders immediately
-            Chart(data) { item in
-                AreaMark(
-                    x: .value("Date", item.date),
-                    yStart: .value("Baseline", yDomain.lowerBound),
-                    yEnd: .value("Value", item.value),
-                    series: .value("Metric", item.metric)
-                )
-                .foregroundStyle(FormaChartStyle.areaGradient(colorForMetric(item.metric)))
-                .interpolationMethod(.monotone)
-
-                LineMark(
-                    x: .value("Date", item.date),
-                    y: .value("Value", item.value),
-                    series: .value("Metric", item.metric)
-                )
-                .foregroundStyle(colorForMetric(item.metric))
-                .lineStyle(FormaChartStyle.lineStyle)
-                .interpolationMethod(.monotone)
-                
-                if let latestDate, item.date == latestDate {
-                    PointMark(
-                        x: .value("Date", item.date),
-                        y: .value("Value", item.value)
-                    )
-                    .foregroundStyle(colorForMetric(item.metric))
-                    .symbol {
-                        Circle()
-                            .fill(colorForMetric(item.metric))
-                            .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
-                            .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
-                            .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
-                    }
-                }
-            }
-            .chartXSelection(value: $selectedDate)
-            .chartYScale(domain: yDomain)
-            .chartLegend(.hidden)
-            .chartYAxis {
-                AxisMarks(position: .leading) { _ in
-                    AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
-                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
-                    AxisValueLabel()
-                        .font(.caption2)
-                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
-                }
-            }
-            .chartXAxis(.hidden)
-            .frame(height: 160)
-
-            if let selectedDate {
-                let selectedItems = data.filter { $0.date == selectedDate }
-                if !selectedItems.isEmpty {
-                    HStack(alignment: .top, spacing: 12) {
-                        Text(selectedDate)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.primary)
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            ForEach(selectedItems) { item in
-                                Text("\(item.metric): \(item.value, specifier: "%.1f")")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+            if uniqueMetrics.count > 1 {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: FormaSpacing.sm) {
+                        ForEach(uniqueMetrics, id: \.self) { metric in
+                            Label {
+                                Text(metric).font(.caption2.weight(.medium))
+                            } icon: {
+                                Circle().fill(colorForMetric(metric)).frame(width: 6, height: 6)
                             }
+                            .foregroundStyle(.secondary)
                         }
-
-                        Spacer()
                     }
-                    .padding(.top, 2)
                 }
             }
-            }
+
+            FormaTimeSeriesChart(
+                points: data.map {
+                    FormaChartPoint(
+                        date: $0.date,
+                        value: $0.value,
+                        metric: $0.metric,
+                        color: colorForMetric($0.metric)
+                    )
+                }
+            )
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.appTertiaryBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
     }
 
     private func colorForMetric(_ metric: String) -> Color {
         let lower = metric.lowercased()
-        if lower.contains("body fat") || lower.contains("fat ratio") {
-            return .green
-        } else if lower.contains("subcutaneous") {
-            return Color(red: 0.35, green: 0.55, blue: 0.95)
-        } else if lower.contains("visceral") {
-            return Color(red: 0.95, green: 0.65, blue: 0.25)
-        } else if lower.contains("fat mass") || lower.contains("fat") {
-            return .red
-        } else if lower.contains("muscle") {
-            return .orange
-        } else if lower.contains("lean") {
-            return .blue
-        } else if lower.contains("bone") {
-            return .gray
-        } else {
-            return .secondary
-        }
+        return FormaChartMetric.infer(from: lower).color
     }
 }
 
 private struct FatMetric: Identifiable {
-    let id = UUID()
-    let date: String
+    let date: Date
     let value: Double
     let metric: String
+
+    var id: String {
+        "\(metric)|\(date.timeIntervalSinceReferenceDate)"
+    }
 }
 
 #Preview {
