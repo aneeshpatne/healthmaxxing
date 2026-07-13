@@ -72,8 +72,7 @@ struct PerformanceTab: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 20) {
+        VStack(spacing: FormaSpacing.cardGap) {
                 if payload?.performance.isEmpty != false {
                     MetricsUnavailableContent(message: "Performance report data is unavailable.")
                 }
@@ -102,10 +101,10 @@ struct PerformanceTab: View {
                    section.nestedNumber("targetFatKg") != nil {
                     ExcessFatGaugeCard(section: section)
                 }
-            }
-            .padding(.top, 4)
-            .padding(.bottom, 24)
         }
+        .padding(.horizontal, FormaSpacing.screenGutter)
+        .padding(.top, FormaSpacing.xxs)
+        .padding(.bottom, FormaSpacing.xl)
     }
 }
 
@@ -117,17 +116,10 @@ struct FFMIGaugeCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            // Header
-            VStack(alignment: .leading, spacing: 6) {
-                Text(section?.displayTitle ?? "FFMI Gauge")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                
-                Text(section?.title ?? "Fat-Free Mass Index measures your muscle mass relative to height.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            FormaCardHeader(
+                section?.displayTitle ?? "FFMI Gauge",
+                subtitle: section?.title ?? "Fat-Free Mass Index measures your muscle mass relative to height."
+            )
             
             // Gauge Visualization & Score
             FFMISemicircularGauge(value: value)
@@ -144,24 +136,10 @@ struct FFMIGaugeCard: View {
                 .frame(height: 1)
             
             // Insight text
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.performancePrimary.gradient)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.performancePrimary.opacity(0.12))
-                    )
-                
-                Text(section?.displayComment ?? "FFMI around 20 reflects a well-trained frame with room to reveal more definition as fat comes down.")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Spacer()
-            }
+            FormaCallout(
+                text: section?.displayComment ?? "FFMI around 20 reflects a well-trained frame with room to reveal more definition as fat comes down.",
+                tint: Color.performancePrimary
+            )
         }
         .formaMetricCard()
     }
@@ -316,17 +294,10 @@ struct CompositionMapCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            // Header
-            VStack(alignment: .leading, spacing: 6) {
-                Text(section?.displayTitle ?? "Composition Map")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                
-                Text(section?.title ?? "Compare your Fat-Free Mass Index (muscle) against your Fat Mass Index (fat).")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            FormaCardHeader(
+                section?.displayTitle ?? "Composition Map",
+                subtitle: section?.title ?? "Compare your Fat-Free Mass Index (muscle) against your Fat Mass Index (fat)."
+            )
             
             // Main Chart Area
             HStack(spacing: 12) {
@@ -360,39 +331,14 @@ struct CompositionMapCard: View {
                 .frame(height: 1)
             
             // Bottom Remark Row
-            HStack(alignment: .top, spacing: 14) {
-                let remark = section?.remark
-                let marker = remark?.marker
-                Image(systemName: marker?.iconName ?? "map.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(marker?.color ?? Color.performancePrimary)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill((marker?.color ?? Color.performancePrimary).opacity(0.12))
-                    )
-                
-                Text(remark?.text ?? section?.displayComment ?? "Your lean mass is well-developed. Lowering fat mass will make your muscle definition more visible.")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Spacer()
-            }
+            FormaCallout(
+                text: section?.remark?.text ?? section?.displayComment ?? "Your lean mass is well-developed. Lowering fat mass will make your muscle definition more visible.",
+                systemImage: section?.remark?.marker?.iconName ?? "map.fill",
+                tint: section?.remark?.marker?.color ?? Color.performancePrimary
+            )
             .padding(.horizontal, 4)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
-        .padding(.horizontal, 16)
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
     }
 }
 
@@ -493,9 +439,9 @@ struct CompositionQuadrantChart: View {
             }
         }
         .frame(height: 220)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.appSeparator, lineWidth: 1)
         )
         .accessibilityElement(children: .ignore)
@@ -531,17 +477,10 @@ struct BodyCompositionFlowCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            // Header
-            VStack(alignment: .leading, spacing: 6) {
-                Text(section?.displayTitle ?? "Body Composition Flow")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                
-                Text(section?.title ?? "Breaks down your total body weight into lean mass and fat mass.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            FormaCardHeader(
+                section?.displayTitle ?? "Body Composition Flow",
+                subtitle: section?.title ?? "Breaks down your total body weight into lean mass and fat mass."
+            )
             
             // Flow Diagram
             HStack(spacing: 0) {
@@ -556,9 +495,9 @@ struct BodyCompositionFlowCard: View {
                 }
                 .padding(.horizontal, 14)
                 .frame(width: 115, height: 76, alignment: .leading)
-                .background(Color.performancePrimary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(Color.performancePrimary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(Color.performancePrimary.opacity(0.2), lineWidth: 1)
                 )
                 .zIndex(1)
@@ -640,9 +579,9 @@ struct BodyCompositionFlowCard: View {
                     .padding(.horizontal, 14)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(height: 76)
-                    .background(Color.performancePositive.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(Color.performancePositive.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(Color.performancePositive.opacity(0.2), lineWidth: 1)
                     )
                     
@@ -664,9 +603,9 @@ struct BodyCompositionFlowCard: View {
                     .padding(.horizontal, 14)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(height: 76)
-                    .background(Color.performanceNegative.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .background(Color.performanceNegative.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(Color.performanceNegative.opacity(0.2), lineWidth: 1)
                     )
                 }
@@ -682,39 +621,14 @@ struct BodyCompositionFlowCard: View {
                 .frame(height: 1)
             
             // Bottom Remark Row
-            HStack(alignment: .top, spacing: 14) {
-                let remark = section?.remark
-                let marker = remark?.marker
-                Image(systemName: marker?.iconName ?? "arrow.triangle.branch")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(marker?.color ?? Color.performancePrimary)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill((marker?.color ?? Color.performancePrimary).opacity(0.12))
-                    )
-                
-                Text(remark?.text ?? section?.displayComment ?? "Lean mass is solid, fat mass is trending downward, and the ratio is improving over time.")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Spacer()
-            }
+            FormaCallout(
+                text: section?.remark?.text ?? section?.displayComment ?? "Lean mass is solid, fat mass is trending downward, and the ratio is improving over time.",
+                systemImage: section?.remark?.marker?.iconName ?? "arrow.triangle.branch",
+                tint: section?.remark?.marker?.color ?? Color.performancePrimary
+            )
             .padding(.horizontal, 4)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
-        .padding(.horizontal, 16)
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
     }
 }
 
@@ -754,165 +668,46 @@ struct SankeyRibbon: Shape {
 // MARK: - Composition Trends Card
 
 struct CompositionTrend: Identifiable {
-    let id = UUID()
-    let date: String
+    let date: Date
     let value: Double
     let metric: String
+
+    var id: String {
+        "\(metric)|\(date.timeIntervalSinceReferenceDate)"
+    }
 }
 
 struct CompositionTrendsCard: View {
     let section: InsightReportMetricSection?
-    @State private var selectedDate: String?
 
     private var trendData: [CompositionTrend] {
         let reportData = (section?.trends ?? [:]).flatMap { key, points in
-            points.map { CompositionTrend(date: $0.shortDate, value: $0.value, metric: key.displayTrendLabel) }
+            points.map { CompositionTrend(date: $0.date, value: $0.value, metric: key.displayTrendLabel) }
         }
 
-        return reportData
+        return reportData.sorted {
+            $0.date == $1.date ? $0.metric < $1.metric : $0.date < $1.date
+        }
     }
 
-    private var yDomain: ClosedRange<Double> {
-        let values = trendData.map(\.value)
-        guard let minimum = values.min(), let maximum = values.max() else {
-            return -1...1
-        }
-        guard minimum != maximum else {
-            return (minimum - 1)...(maximum + 1)
-        }
-        let padding = max((maximum - minimum) * 0.15, 0.5)
-        return (minimum - padding)...(maximum + padding)
-    }
-    
     var body: some View {
-        let latestDate = trendData.map(\.date).last
-
         VStack(alignment: .leading, spacing: 24) {
-            // Header
-            VStack(alignment: .leading, spacing: 6) {
-                Text(section?.displayTitle ?? "Composition Trends")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                
-                Text(section?.title ?? "Track changes in your lean mass and fat mass from your baseline.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            // Chart Area
-            VStack(alignment: .leading, spacing: 14) {
-                // Legend
-                HStack(spacing: 14) {
-                    HStack(spacing: 5) {
-                        RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(Color.performancePositive)
-                            .frame(width: 10, height: 3)
-                        
-                        Text("Lean Mass")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    HStack(spacing: 5) {
-                        RoundedRectangle(cornerRadius: 2, style: .continuous)
-                            .fill(Color.performanceNegative)
-                            .frame(width: 10, height: 3)
-                        
-                        Text("Fat Mass")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                
-                // Chart
-                Chart(trendData) { item in
-                    AreaMark(
-                        x: .value("Date", item.date),
-                        yStart: .value("Baseline", yDomain.lowerBound),
-                        yEnd: .value("Change", item.value),
-                        series: .value("Metric", item.metric)
-                    )
-                    .foregroundStyle(FormaChartStyle.areaGradient(colorForMetric(item.metric)))
-                    .interpolationMethod(.monotone)
-
-                    LineMark(
-                        x: .value("Date", item.date),
-                        y: .value("Change", item.value),
-                        series: .value("Metric", item.metric)
-                    )
-                    .foregroundStyle(colorForMetric(item.metric))
-                    .lineStyle(FormaChartStyle.lineStyle)
-                    .interpolationMethod(.monotone)
-                    
-                    // Endpoint markers
-                    if item.date == latestDate {
-                        PointMark(
-                            x: .value("Date", item.date),
-                            y: .value("Change", item.value)
-                        )
-                        .foregroundStyle(colorForMetric(item.metric))
-                        .symbol {
-                            Circle()
-                                .fill(colorForMetric(item.metric))
-                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
-                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
-                                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        }
-                    }
-                }
-                .chartXSelection(value: $selectedDate)
-                .chartLegend(.hidden)
-                .chartYScale(domain: yDomain)
-                .chartYAxis {
-                    AxisMarks(position: .leading) { value in
-                        AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
-                            .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
-                        
-                        // Bold the zero line
-                        if let yValue = value.as(Double.self), yValue == 0 {
-                            AxisGridLine(stroke: StrokeStyle(lineWidth: 1))
-                                .foregroundStyle(Color.secondary.opacity(0.22))
-                        }
-
-                        AxisValueLabel()
-                            .font(.caption2)
-                            .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
-                    }
-                }
-                .chartXAxis(.hidden)
-                .frame(height: 180)
-
-                if let selectedDate {
-                    let selectedItems = trendData.filter { $0.date == selectedDate }
-                    if !selectedItems.isEmpty {
-                        HStack(alignment: .top, spacing: 12) {
-                            Text(selectedDate)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.primary)
-
-                            VStack(alignment: .leading, spacing: 3) {
-                                ForEach(selectedItems) { item in
-                                    Text("\(item.metric): \(item.value, specifier: "%.1f")")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-
-                            Spacer()
-                        }
-                        .padding(.top, 2)
-                    }
-                }
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.appTertiaryBackground)
+            FormaCardHeader(
+                section?.displayTitle ?? "Composition Trends",
+                subtitle: section?.title ?? "Track changes in your lean mass and fat mass from your baseline."
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            
+            FormaTimeSeriesChart(
+                points: trendData.map {
+                    FormaChartPoint(
+                        date: $0.date,
+                        value: $0.value,
+                        metric: $0.metric,
+                        color: colorForMetric($0.metric)
+                    )
+                },
+                unit: "kg",
+                includeZero: true
             )
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Composition trends chart")
@@ -924,36 +719,13 @@ struct CompositionTrendsCard: View {
                 .frame(height: 1)
             
             // Insight text
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "chart.line.downtrend.xyaxis")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.performanceNegative.gradient)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.performanceNegative.opacity(0.12))
-                    )
-                
-                Text(section?.displayComment ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Spacer()
-            }
+            FormaCallout(
+                text: section?.displayComment ?? "",
+                systemImage: "chart.line.downtrend.xyaxis",
+                tint: Color.performanceNegative
+            )
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
-        .padding(.horizontal, 16)
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
     }
 
     private func colorForMetric(_ metric: String) -> Color {
@@ -1072,17 +844,10 @@ struct RecompVectorPlotCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            // Header
-            VStack(alignment: .leading, spacing: 6) {
-                Text(section?.displayTitle ?? "Recomp Vector Plot")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-
-                Text(section?.title ?? "Track your body composition journey across distinct zones.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            FormaCardHeader(
+                section?.displayTitle ?? "Recomp Vector Plot",
+                subtitle: section?.title ?? "Track your body composition journey across distinct zones."
+            )
             
             if let values = vectorValues {
             // Chart Area
@@ -1105,8 +870,17 @@ struct RecompVectorPlotCard: View {
                 .chartLegend(.hidden)
                 .chartXScale(domain: xDomain(for: values))
                 .chartYScale(domain: yDomain(for: values))
+                .chartXAxisLabel("Fat Mass (kg)", position: .bottom, alignment: .center)
                 .chartYAxisLabel("Lean Mass (kg)", position: .leading, alignment: .center)
-                .chartXAxis(.hidden)
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 3)) { _ in
+                        AxisTick(stroke: StrokeStyle(lineWidth: 0.5))
+                            .foregroundStyle(Color.secondary.opacity(0.20))
+                        AxisValueLabel()
+                            .font(FormaTypography.chartLabel)
+                            .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
+                    }
+                }
                 .chartYAxis {
                     AxisMarks(values: .automatic(desiredCount: 5)) { value in
                         AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
@@ -1121,11 +895,11 @@ struct RecompVectorPlotCard: View {
             }
             .padding(16)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color.appTertiaryBackground)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(Color.appSeparator, lineWidth: 0.5)
             )
             }
@@ -1136,39 +910,14 @@ struct RecompVectorPlotCard: View {
             }
             
             // Bottom Remark Row
-            HStack(alignment: .top, spacing: 14) {
-                let remark = section?.remark
-                let marker = remark?.marker
-                Image(systemName: marker?.iconName ?? "target")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(marker?.color ?? Color.performancePositive)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill((marker?.color ?? Color.performancePositive).opacity(0.12))
-                    )
-
-                Text(remark?.text ?? section?.displayComment ?? "There is a fat-loss target between your current and goal physique.")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Spacer()
-            }
+            FormaCallout(
+                text: section?.remark?.text ?? section?.displayComment ?? "There is a fat-loss target between your current and goal physique.",
+                systemImage: section?.remark?.marker?.iconName ?? "target",
+                tint: section?.remark?.marker?.color ?? Color.performancePositive
+            )
             .padding(.horizontal, 4)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
-        .padding(.horizontal, 16)
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
     }
 }
 
@@ -1193,11 +942,11 @@ private struct RecompWeightSummary: View {
         }
         .padding(.vertical, 16)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.performancePositive.opacity(0.08))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.performancePositive.opacity(0.2), lineWidth: 1)
         )
     }
@@ -1321,17 +1070,10 @@ struct ExcessFatGaugeCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            // Header
-            VStack(alignment: .leading, spacing: 6) {
-                Text(section?.displayTitle ?? "Excess Fat Gauge")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                
-                Text(section?.title ?? "Compare your current fat mass against your target fat mass.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            FormaCardHeader(
+                section?.displayTitle ?? "Excess Fat Gauge",
+                subtitle: section?.title ?? "Compare your current fat mass against your target fat mass."
+            )
             
             // Gauge Visualization
             VStack(spacing: 20) {
@@ -1367,36 +1109,13 @@ struct ExcessFatGaugeCard: View {
                 .frame(height: 1)
             
             // Insight text
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: "flame")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.performanceCaution.gradient)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.performanceCaution.opacity(0.12))
-                    )
-                
-                Text(section?.displayComment ?? "The gap between current and target fat is clear and closeable. Every 0.5 kg drop moves you visibly closer.")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Spacer()
-            }
+            FormaCallout(
+                text: section?.displayComment ?? "The gap between current and target fat is clear and closeable. Every 0.5 kg drop moves you visibly closer.",
+                systemImage: "flame",
+                tint: Color.performanceCaution
+            )
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
-        .padding(.horizontal, 16)
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
     }
 }
 
@@ -1501,17 +1220,7 @@ struct BodyMeasurementsCard: View {
             BodyMeasurementsHeader()
             BodyMeasurementsMap(measurements: measurements)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
-        .padding(.horizontal, 16)
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
     }
 }
 
@@ -1541,7 +1250,7 @@ private struct BodyMeasurementsMap: View {
             let imageHeight: CGFloat = 240
             
             ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(Color.appTertiaryBackground)
 
                 // Subtle radial glow behind the body
@@ -1584,9 +1293,9 @@ private struct BodyMeasurementsMap: View {
             }
         }
         .frame(height: 320)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.appSeparator, lineWidth: 0.5)
         )
         .accessibilityElement(children: .contain)
