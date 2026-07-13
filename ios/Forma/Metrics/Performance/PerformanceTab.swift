@@ -896,7 +896,7 @@ struct RecompVectorPlotCard: View {
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.appTertiaryBackground)
+                    .fill(Color.appChartBackground)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -1251,7 +1251,7 @@ private struct BodyMeasurementsMap: View {
             
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.appTertiaryBackground)
+                    .fill(Color.appChartBackground)
 
                 // Subtle radial glow behind the body
                 Ellipse()

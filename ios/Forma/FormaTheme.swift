@@ -56,6 +56,12 @@ extension Color {
             : UIColor(red: 0.915, green: 0.930, blue: 0.920, alpha: 1)
     })
 
+    static let appChartBackground = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.018, green: 0.025, blue: 0.022, alpha: 1)
+            : UIColor(red: 0.885, green: 0.900, blue: 0.890, alpha: 1)
+    })
+
     static let appSeparator = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(white: 1, alpha: 0.065)
@@ -157,6 +163,7 @@ struct FormaBackground: View {
 
 enum FormaSurfaceStyle: Equatable {
     case inset
+    case chart
     case card
     case hero
     case floating
@@ -164,6 +171,7 @@ enum FormaSurfaceStyle: Equatable {
     var radius: CGFloat {
         switch self {
         case .inset: FormaRadius.inset
+        case .chart: FormaRadius.inset
         case .card: FormaRadius.card
         case .hero: FormaRadius.hero
         case .floating: FormaRadius.hero
@@ -173,6 +181,7 @@ enum FormaSurfaceStyle: Equatable {
     var fill: Color {
         switch self {
         case .inset: .appTertiaryBackground
+        case .chart: .appChartBackground
         case .card, .hero, .floating: .appSecondaryBackground
         }
     }
@@ -193,7 +202,7 @@ private struct FormaSurfaceModifier: ViewModifier {
             }
         }
         .background {
-            if style == .inset {
+            if style == .inset || style == .chart {
                 shape.fill(style.fill)
             } else {
                 shape
@@ -520,7 +529,7 @@ struct FormaTimeSeriesChart: View {
             }
         }
         .padding(FormaSpacing.md)
-        .formaSurface(.inset, padding: nil)
+        .formaSurface(.chart, padding: nil)
         .onChange(of: points.map(\.id)) { _, ids in
             guard let selectedDate else { return }
             if !points.contains(where: { $0.date == selectedDate }) || ids.isEmpty {

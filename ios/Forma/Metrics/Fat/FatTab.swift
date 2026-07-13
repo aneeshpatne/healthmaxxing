@@ -42,12 +42,6 @@ private extension Color {
             ? UIColor(red: 0.45, green: 0.85, blue: 0.85, alpha: 1.0)
             : UIColor(red: 0.20, green: 0.70, blue: 0.70, alpha: 1.0)
     })
-    
-    static let innerPanelBackground = Color(uiColor: UIColor { traitCollection in
-        traitCollection.userInterfaceStyle == .dark
-            ? UIColor(red: 0.12, green: 0.14, blue: 0.16, alpha: 1.0)
-            : UIColor(red: 0.94, green: 0.96, blue: 0.98, alpha: 1.0)
-    })
 }
 
 struct FatRatioMetrics {
@@ -629,7 +623,7 @@ struct VisceralSubcutaneousCard: View {
             .padding(.horizontal, 8)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.innerPanelBackground)
+                    .fill(Color.appChartBackground)
             )
             
             if let text = remark?.text ?? comment,
