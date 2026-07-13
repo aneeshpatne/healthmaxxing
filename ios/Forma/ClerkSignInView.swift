@@ -13,18 +13,23 @@ struct ClerkSignInView: View {
 
     var body: some View {
         ZStack {
-            Color.appBackground
-                .ignoresSafeArea()
+            FormaBackground()
 
-            VStack(alignment: .leading, spacing: 28) {
-                VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: FormaSpacing.xxl) {
+                VStack(alignment: .leading, spacing: FormaSpacing.xs) {
                     Text("Forma")
-                        .font(Font.cormorantGaramond(size: 54).weight(.bold))
+                        .font(.system(size: 48, weight: .bold, design: .default))
+                        .tracking(-1.4)
                         .foregroundStyle(.primary)
 
-                    Text("Sign in to continue")
-                        .font(.title3.weight(.medium))
+                    Text("Your body, understood over time.")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Text("Sign in to record measurements and follow the changes that matter.")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Button {
@@ -33,11 +38,14 @@ struct ClerkSignInView: View {
                     Label("Continue with Clerk", systemImage: "person.crop.circle.badge.checkmark")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .frame(minHeight: 54)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.roundedRectangle(radius: FormaRadius.inset))
+                .tint(.sleekAccent)
             }
-            .padding(28)
+            .formaSurface(.hero, padding: FormaSpacing.xxl)
+            .padding(FormaSpacing.screenGutter)
             .frame(maxWidth: 430, alignment: .leading)
         }
         .sheet(isPresented: $authIsPresented) {
