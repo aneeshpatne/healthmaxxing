@@ -32,14 +32,16 @@ enum RemarkMarker: String, Codable, Equatable {
 
     var color: Color {
         switch self {
-        case .trendUp, .trendDown:
-            return .green
+        case .trendUp:
+            return .formaTeal
+        case .trendDown:
+            return .formaCoral
         case .aiRecommendation:
-            return .purple
+            return .formaCyan
         case .caution:
-            return .orange
+            return .formaAmber
         case .complement:
-            return .green
+            return .formaTeal
         }
     }
 
@@ -248,6 +250,7 @@ struct InsightReportTrendPoint: Equatable {
     var date: Date {
         ISO8601DateFormatter.reportDateFormatter.date(from: createdAt)
             ?? ISO8601DateFormatter.reportDateFormatterWithoutFractions.date(from: createdAt)
+            ?? ISO8601DateFormatter.reportDateFormatterDateOnly.date(from: createdAt)
             ?? Date()
     }
 
@@ -272,6 +275,12 @@ private extension ISO8601DateFormatter {
     static let reportDateFormatterWithoutFractions: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    static let reportDateFormatterDateOnly: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
         return formatter
     }()
 }
@@ -319,13 +328,13 @@ extension String {
 
     var displayTrendLabel: String {
         switch self {
-        case "body_fat_pct":
+        case "body_fat_pct", "fatPercent":
             return "Body Fat"
         case "fat_mass_kg", "fatMassKg", "fatMass30Days":
             return "Fat Mass"
         case "leanMass30Days":
             return "Lean Mass"
-        case "muscle_mass_kg", "muscleRatio":
+        case "muscle_mass_kg", "muscleMassKg", "muscleRatio":
             return "Muscle Mass"
         case "visceralFatMassKg", "visceralFatPercent":
             return "Visceral Fat"
