@@ -1,165 +1,635 @@
-//
-//  FormaTheme.swift
-//  Forma
-//
-//  Created by Antigravity on 22/06/26.
-//
-
 import SwiftUI
+import Charts
+
+// MARK: - Foundations
+
+enum FormaSpacing {
+    static let xxs: CGFloat = 4
+    static let xs: CGFloat = 8
+    static let sm: CGFloat = 12
+    static let md: CGFloat = 16
+    static let lg: CGFloat = 20
+    static let xl: CGFloat = 24
+    static let xxl: CGFloat = 32
+
+    static let screenGutter = lg
+    static let cardGap = md
+    static let sectionGap = xl
+    static let cardInset = lg
+}
+
+enum FormaRadius {
+    static let badge: CGFloat = 8
+    static let inset: CGFloat = 14
+    static let action: CGFloat = 16
+    static let card: CGFloat = 18
+    static let hero: CGFloat = 24
+}
+
+enum FormaTypography {
+    static let wordmark = Font.system(size: 20, weight: .bold, design: .default)
+    static let eyebrow = Font.caption.weight(.bold)
+    static let cardTitle = Font.headline.weight(.semibold)
+    static let body = Font.subheadline
+    static let metric = Font.system(size: 34, weight: .semibold, design: .rounded)
+    static let heroMetric = Font.system(size: 64, weight: .semibold, design: .rounded)
+    static let unit = Font.subheadline.weight(.semibold)
+    static let chartLabel = Font.caption2.weight(.medium)
+}
 
 extension Color {
-
-    // MARK: - Backgrounds
-
-    /// App background — soft warm gray in light mode, rich charcoal (not pure black) in dark mode.
-    static let appBackground = Color(uiColor: UIColor { traitCollection in
-        switch traitCollection.userInterfaceStyle {
-        case .dark:
-            // Rich charcoal with a hint of blue-violet (#101014) — depth without the harshness of pure black
-            return UIColor(red: 0.063, green: 0.063, blue: 0.078, alpha: 1.0)
-        default:
-            // Warm light gray (#F4F4F8) — softer than system gray, avoids sterile white
-            return UIColor(red: 0.957, green: 0.957, blue: 0.973, alpha: 1.0)
-        }
+    static let appBackground = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.028, green: 0.037, blue: 0.034, alpha: 1)
+            : UIColor(red: 0.955, green: 0.960, blue: 0.956, alpha: 1)
     })
 
-    /// App secondary background — warm off-white cards in light mode, elevated charcoal in dark mode.
-    static let appSecondaryBackground = Color(uiColor: UIColor { traitCollection in
-        switch traitCollection.userInterfaceStyle {
-        case .dark:
-            // Warm elevated charcoal (#1A1A20) — slightly lighter than background, subtle blue undertone
-            return UIColor(red: 0.102, green: 0.102, blue: 0.125, alpha: 1.0)
-        default:
-            // Creamy off-white (#FAFAFE) — not sterile pure white, feels warmer
-            return UIColor(red: 0.980, green: 0.980, blue: 0.996, alpha: 1.0)
-        }
+    static let appSecondaryBackground = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.052, green: 0.067, blue: 0.061, alpha: 0.98)
+            : UIColor(red: 0.982, green: 0.986, blue: 0.982, alpha: 0.98)
     })
 
-    /// Tertiary surface — for nested elements, chart backgrounds, subtle insets.
-    static let appTertiaryBackground = Color(uiColor: UIColor { traitCollection in
-        switch traitCollection.userInterfaceStyle {
-        case .dark:
-            // Slightly lifted dark (#222228)
-            return UIColor(red: 0.133, green: 0.133, blue: 0.157, alpha: 1.0)
-        default:
-            // Very subtle cool gray (#EFEFF4)
-            return UIColor(red: 0.937, green: 0.937, blue: 0.957, alpha: 1.0)
-        }
+    static let appTertiaryBackground = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.078, green: 0.098, blue: 0.090, alpha: 1)
+            : UIColor(red: 0.915, green: 0.930, blue: 0.920, alpha: 1)
     })
 
-    // MARK: - Separators & Fills
-
-    /// Subtle separator — barely visible line for card dividers.
-    static let appSeparator = Color(uiColor: UIColor { traitCollection in
-        switch traitCollection.userInterfaceStyle {
-        case .dark:
-            return UIColor(white: 1.0, alpha: 0.06)
-        default:
-            return UIColor(white: 0.0, alpha: 0.05)
-        }
+    static let appSeparator = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.065)
+            : UIColor(red: 0.08, green: 0.14, blue: 0.11, alpha: 0.07)
     })
 
-    /// Subtle fill — for badges, pill backgrounds, secondary containers.
-    static let appSubtleFill = Color(uiColor: UIColor { traitCollection in
-        switch traitCollection.userInterfaceStyle {
-        case .dark:
-            return UIColor(white: 1.0, alpha: 0.05)
-        default:
-            return UIColor(white: 0.0, alpha: 0.03)
-        }
+    static let appSurfaceHighlight = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.055)
+            : UIColor(white: 1, alpha: 0.75)
     })
 
-    // MARK: - Accent
-
-    /// Sleek Accent Color — premium indigo/violet tones that feel modern and vibrant across both modes.
-    static let sleekAccent = Color(uiColor: UIColor { traitCollection in
-        switch traitCollection.userInterfaceStyle {
-        case .dark:
-            // Sleek Indigo / Violet (#9E86FF) — vibrant, premium, reads well on dark surfaces
-            return UIColor(red: 0.62, green: 0.525, blue: 1.0, alpha: 1.0)
-        default:
-            // Deep Royal Indigo (#4338CA) — bold, sophisticated, anchors the light theme
-            return UIColor(red: 0.263, green: 0.22, blue: 0.792, alpha: 1.0)
-        }
+    static let appSubtleFill = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.04)
+            : UIColor(red: 0.08, green: 0.16, blue: 0.12, alpha: 0.045)
     })
 
-    // MARK: - Card shadow
+    static let sleekAccent = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.48, green: 0.67, blue: 0.60, alpha: 1)
+            : UIColor(red: 0.20, green: 0.45, blue: 0.38, alpha: 1)
+    })
 
-    /// Refined card shadow color — warmer and subtler than pure black shadow.
-    static let cardShadow = Color(uiColor: UIColor { traitCollection in
-        switch traitCollection.userInterfaceStyle {
-        case .dark:
-            // Minimal shadow in dark mode — mostly rely on elevation difference
-            return UIColor(white: 0.0, alpha: 0.25)
-        default:
-            // Warm shadow with a slight blue tint for depth
-            return UIColor(red: 0.15, green: 0.15, blue: 0.22, alpha: 0.06)
-        }
+    static let actionInk = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.39, green: 0.56, blue: 0.50, alpha: 1)
+            : UIColor(red: 0.10, green: 0.20, blue: 0.17, alpha: 1)
+    })
+
+    static let actionForeground = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.035, green: 0.050, blue: 0.045, alpha: 1)
+            : UIColor.white
+    })
+
+    static let formaTeal = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.43, green: 0.66, blue: 0.58, alpha: 1)
+            : UIColor(red: 0.13, green: 0.46, blue: 0.37, alpha: 1)
+    })
+
+    static let formaCoral = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.82, green: 0.47, blue: 0.45, alpha: 1)
+            : UIColor(red: 0.68, green: 0.25, blue: 0.25, alpha: 1)
+    })
+
+    static let formaAmber = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.75, green: 0.63, blue: 0.39, alpha: 1)
+            : UIColor(red: 0.62, green: 0.43, blue: 0.13, alpha: 1)
+    })
+
+    static let formaCyan = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.47, green: 0.65, blue: 0.70, alpha: 1)
+            : UIColor(red: 0.19, green: 0.45, blue: 0.52, alpha: 1)
+    })
+
+    static let cardShadow = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0, alpha: 0.30)
+            : UIColor(red: 0.10, green: 0.09, blue: 0.20, alpha: 0.08)
+    })
+
+    static let contactShadow = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0, alpha: 0.22)
+            : UIColor(red: 0.08, green: 0.07, blue: 0.16, alpha: 0.05)
     })
 }
 
+// MARK: - Background and surfaces
+
+struct FormaBackground: View {
+    var body: some View {
+        ZStack {
+            Color.appBackground
+
+            RadialGradient(
+                colors: [Color.sleekAccent.opacity(0.035), .clear],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 430
+            )
+
+            RadialGradient(
+                colors: [Color.formaCyan.opacity(0.018), .clear],
+                center: .bottomTrailing,
+                startRadius: 0,
+                endRadius: 520
+            )
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
+}
+
+enum FormaSurfaceStyle: Equatable {
+    case inset
+    case card
+    case hero
+    case floating
+
+    var radius: CGFloat {
+        switch self {
+        case .inset: FormaRadius.inset
+        case .card: FormaRadius.card
+        case .hero: FormaRadius.hero
+        case .floating: FormaRadius.hero
+        }
+    }
+
+    var fill: Color {
+        switch self {
+        case .inset: .appTertiaryBackground
+        case .card, .hero, .floating: .appSecondaryBackground
+        }
+    }
+}
+
+private struct FormaSurfaceModifier: ViewModifier {
+    let style: FormaSurfaceStyle
+    let padding: CGFloat?
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: style.radius, style: .continuous)
+
+        Group {
+            if let padding {
+                content.padding(padding)
+            } else {
+                content
+            }
+        }
+        .background {
+            if style == .inset {
+                shape.fill(style.fill)
+            } else {
+                shape
+                    .fill(style.fill)
+                    .shadow(
+                        color: Color.cardShadow,
+                        radius: style == .floating ? 22 : (style == .hero ? 18 : 12),
+                        x: 0,
+                        y: style == .floating ? 11 : (style == .hero ? 9 : 6)
+                    )
+                    .shadow(
+                        color: Color.contactShadow,
+                        radius: style == .floating ? 3 : 2,
+                        x: 0,
+                        y: 1
+                    )
+            }
+        }
+        .overlay {
+            shape.strokeBorder(
+                LinearGradient(
+                    colors: [Color.appSurfaceHighlight, Color.appSeparator],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                lineWidth: 0.5
+            )
+        }
+    }
+}
+
+extension View {
+    func formaSurface(
+        _ style: FormaSurfaceStyle = .card,
+        padding: CGFloat? = FormaSpacing.cardInset
+    ) -> some View {
+        modifier(FormaSurfaceModifier(style: style, padding: padding))
+    }
+
+    func formaMetricCard(padding: CGFloat = FormaSpacing.cardInset) -> some View {
+        formaSurface(.card, padding: padding)
+    }
+}
+
+struct FormaCardHeader<Trailing: View>: View {
+    let title: String
+    var subtitle: String?
+    let trailing: Trailing
+
+    init(
+        _ title: String,
+        subtitle: String? = nil,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(alignment: subtitle == nil ? .center : .top, spacing: FormaSpacing.sm) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(FormaTypography.cardTitle)
+                    .foregroundStyle(.primary)
+
+                if let subtitle, !subtitle.isEmpty, subtitle != title {
+                    Text(subtitle)
+                        .font(FormaTypography.body)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: FormaSpacing.xs)
+            trailing
+        }
+    }
+}
+
+extension FormaCardHeader where Trailing == EmptyView {
+    init(_ title: String, subtitle: String? = nil) {
+        self.init(title, subtitle: subtitle) { EmptyView() }
+    }
+}
+
+struct FormaCallout: View {
+    let text: String
+    var systemImage = "sparkles"
+    var tint: Color = .sleekAccent
+
+    var body: some View {
+        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            HStack(alignment: .top, spacing: FormaSpacing.sm) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 30, height: 30)
+                    .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                Text(text)
+                    .font(FormaTypography.body)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+        }
+    }
+}
+
+// MARK: - Charts
+
+enum FormaChartMetric: String, CaseIterable {
+    case primary
+    case lean
+    case muscle
+    case fat
+    case visceral
+    case subcutaneous
+    case bone
+
+    var color: Color {
+        switch self {
+        case .primary: .sleekAccent
+        case .lean, .muscle: .formaTeal
+        case .fat: .formaCoral
+        case .visceral: .formaAmber
+        case .subcutaneous: .formaCyan
+        case .bone: .secondary
+        }
+    }
+
+    static func infer(from label: String) -> FormaChartMetric {
+        let label = label.lowercased()
+        if label.contains("visceral") { return .visceral }
+        if label.contains("subcutaneous") { return .subcutaneous }
+        if label.contains("muscle") { return .muscle }
+        if label.contains("lean") { return .lean }
+        if label.contains("bone") { return .bone }
+        if label.contains("fat") { return .fat }
+        return .primary
+    }
+}
+
 enum FormaChartStyle {
-    static let lineStyle = StrokeStyle(
-        lineWidth: 2,
-        lineCap: .round,
-        lineJoin: .round
-    )
-    static let gridLineStyle = StrokeStyle(
-        lineWidth: 0.5,
-        lineCap: .round,
-        dash: [2, 4]
-    )
-    static let gridOpacity = 0.10
-    static let axisLabelOpacity = 0.42
-    static let endpointSize: CGFloat = 7
+    static let lineStyle = StrokeStyle(lineWidth: 2.25, lineCap: .round, lineJoin: .round)
+    static let gridLineStyle = StrokeStyle(lineWidth: 0.5, lineCap: .round, dash: [2, 4])
+    static let gridOpacity = 0.12
+    static let axisLabelOpacity = 0.52
+    static let endpointSize: CGFloat = 8
+    static let compactHeight: CGFloat = 176
+    static let expandedHeight: CGFloat = 220
 
     static func areaGradient(_ color: Color) -> LinearGradient {
         LinearGradient(
             stops: [
-                .init(color: color.opacity(0.14), location: 0),
-                .init(color: color.opacity(0.04), location: 0.55),
-                .init(color: color.opacity(0.01), location: 0.82),
+                .init(color: color.opacity(0.16), location: 0),
+                .init(color: color.opacity(0.055), location: 0.58),
                 .init(color: color.opacity(0), location: 1)
             ],
             startPoint: .top,
             endPoint: .bottom
         )
     }
-}
 
-private struct FormaMetricCardModifier: ViewModifier {
-    let horizontalPadding: CGFloat
-    let padding: CGFloat
-    let cornerRadius: CGFloat
+    static func paddedDomain(values: [Double], includeZero: Bool = false) -> ClosedRange<Double> {
+        guard var lower = values.min(), var upper = values.max() else { return 0...1 }
+        if includeZero {
+            lower = min(0, lower)
+            upper = max(0, upper)
+        }
+        let spread = upper - lower
+        let padding = max(abs(upper) * 0.04, spread == 0 ? max(abs(upper) * 0.08, 1) : spread * 0.12)
+        return (lower - padding)...(upper + padding)
+    }
 
-    func body(content: Content) -> some View {
-        content
-            .padding(padding)
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color.appSecondaryBackground)
-                    .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Color.appSeparator, lineWidth: 0.5)
-            )
-            .padding(.horizontal, horizontalPadding)
+    static func axisDates(_ dates: [Date]) -> [Date] {
+        let sorted = Array(Set(dates)).sorted()
+        guard sorted.count > 2 else { return sorted }
+        return [sorted[0], sorted[sorted.count / 2], sorted[sorted.count - 1]]
+    }
+
+    static func nearestDate(to selection: Date?, in dates: [Date]) -> Date? {
+        guard let selection else { return dates.max() }
+        return dates.min { abs($0.timeIntervalSince(selection)) < abs($1.timeIntervalSince(selection)) }
     }
 }
 
-extension View {
-    func formaMetricCard(
-        horizontalPadding: CGFloat = 16,
-        padding: CGFloat = 18,
-        cornerRadius: CGFloat = 20
-    ) -> some View {
-        modifier(
-            FormaMetricCardModifier(
-                horizontalPadding: horizontalPadding,
-                padding: padding,
-                cornerRadius: cornerRadius
-            )
+struct FormaChartSummaryItem: Identifiable {
+    let id: String
+    let label: String
+    let value: String
+    let color: Color
+
+    init(label: String, value: String, color: Color) {
+        self.id = label
+        self.label = label
+        self.value = value
+        self.color = color
+    }
+}
+
+struct FormaChartFooter: View {
+    let date: Date?
+    let items: [FormaChartSummaryItem]
+    var prefix = "Latest"
+
+    var body: some View {
+        HStack(spacing: FormaSpacing.sm) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(prefix)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .textCase(.uppercase)
+                    .tracking(0.4)
+
+                if let date {
+                    Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+            }
+            .frame(width: 58, alignment: .leading)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: FormaSpacing.xs) {
+                    ForEach(items) { item in
+                        HStack(spacing: 5) {
+                            Circle().fill(item.color).frame(width: 6, height: 6)
+                            Text(item.label)
+                                .foregroundStyle(.secondary)
+                            Text(item.value)
+                                .foregroundStyle(.primary)
+                                .fontWeight(.semibold)
+                        }
+                        .font(.caption)
+                        .padding(.horizontal, 9)
+                        .frame(height: 30)
+                        .background(Color.appSubtleFill, in: Capsule())
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+    }
+}
+
+struct FormaChartEmptyState: View {
+    var hasSinglePoint = false
+
+    var body: some View {
+        VStack(spacing: FormaSpacing.xs) {
+            Image(systemName: hasSinglePoint ? "chart.line.uptrend.xyaxis" : "chart.xyaxis.line")
+                .font(.title3.weight(.medium))
+                .foregroundStyle(Color.sleekAccent)
+
+            Text(hasSinglePoint ? "More readings needed for a trend" : "No history yet")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+
+            Text(hasSinglePoint ? "Your next reading will start showing change over time." : "Record a measurement to begin this chart.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, minHeight: FormaChartStyle.compactHeight)
+    }
+}
+
+struct FormaChartPoint: Identifiable {
+    let date: Date
+    let value: Double
+    let metric: String
+    let color: Color
+
+    var id: String { "\(metric)|\(date.timeIntervalSinceReferenceDate)" }
+}
+
+struct FormaTimeSeriesChart: View {
+    let points: [FormaChartPoint]
+    var unit = ""
+    var includeZero = false
+    var height = FormaChartStyle.compactHeight
+
+    @State private var selectedDate: Date?
+
+    private var data: [FormaChartPoint] {
+        points.sorted {
+            $0.date == $1.date ? $0.metric < $1.metric : $0.date < $1.date
+        }
+    }
+
+    private var dates: [Date] { data.map(\.date) }
+    private var activeDate: Date? { FormaChartStyle.nearestDate(to: selectedDate, in: dates) }
+    private var domain: ClosedRange<Double> {
+        FormaChartStyle.paddedDomain(values: data.map(\.value), includeZero: includeZero)
+    }
+    private var latestDateByMetric: [String: Date] {
+        Dictionary(grouping: data, by: \.metric).compactMapValues { $0.map(\.date).max() }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FormaSpacing.sm) {
+            if data.isEmpty {
+                FormaChartEmptyState()
+            } else if data.count == 1 {
+                FormaChartEmptyState(hasSinglePoint: true)
+                Rectangle()
+                    .fill(Color.appSeparator)
+                    .frame(height: 0.5)
+                summaryFooter
+            } else {
+                chart
+                    .frame(height: height)
+                    .padding(.bottom, FormaSpacing.xxs)
+
+                Rectangle()
+                    .fill(Color.appSeparator)
+                    .frame(height: 0.5)
+
+                summaryFooter
+            }
+        }
+        .padding(FormaSpacing.md)
+        .formaSurface(.inset, padding: nil)
+        .onChange(of: points.map(\.id)) { _, ids in
+            guard let selectedDate else { return }
+            if !points.contains(where: { $0.date == selectedDate }) || ids.isEmpty {
+                self.selectedDate = nil
+            }
+        }
+    }
+
+    private var chart: some View {
+        Chart {
+            ForEach(data) { item in
+                AreaMark(
+                    x: .value("Date", item.date),
+                    yStart: .value("Baseline", domain.lowerBound),
+                    yEnd: .value("Value", item.value),
+                    series: .value("Metric", item.metric)
+                )
+                .foregroundStyle(FormaChartStyle.areaGradient(item.color))
+                .interpolationMethod(.monotone)
+            }
+
+            ForEach(data) { item in
+                LineMark(
+                    x: .value("Date", item.date),
+                    y: .value("Value", item.value),
+                    series: .value("Metric", item.metric)
+                )
+                .foregroundStyle(item.color)
+                .lineStyle(FormaChartStyle.lineStyle)
+                .interpolationMethod(.monotone)
+            }
+
+            ForEach(data) { item in
+                if latestDateByMetric[item.metric] == item.date {
+                    PointMark(x: .value("Date", item.date), y: .value("Value", item.value))
+                        .foregroundStyle(item.color)
+                        .symbol {
+                            Circle()
+                                .fill(item.color)
+                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
+                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
+                        }
+                }
+            }
+
+            if let activeDate, selectedDate != nil {
+                RuleMark(x: .value("Selected date", activeDate))
+                    .foregroundStyle(Color.secondary.opacity(0.28))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+
+                ForEach(items(on: activeDate)) { item in
+                    PointMark(x: .value("Selected date", item.date), y: .value("Selected value", item.value))
+                        .foregroundStyle(item.color)
+                        .symbolSize(42)
+                }
+            }
+        }
+        .chartXSelection(value: $selectedDate)
+        .chartLegend(.hidden)
+        .chartYScale(domain: domain)
+        .chartXScale(range: .plotDimension(startPadding: 8, endPadding: 8))
+        .chartPlotStyle { plot in
+            plot
+                .clipped()
+                .contentShape(Rectangle())
+        }
+        .chartXAxis {
+            AxisMarks(position: .bottom, values: FormaChartStyle.axisDates(dates)) { value in
+                AxisTick(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(Color.secondary.opacity(0.20))
+                AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                    .font(FormaTypography.chartLabel)
+                    .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
+            }
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { _ in
+                AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
+                    .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
+                AxisValueLabel()
+                    .font(FormaTypography.chartLabel)
+                    .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
+            }
+        }
+    }
+
+    private var summaryFooter: some View {
+        let date = activeDate
+        let selectedItems = date.map(items(on:)) ?? []
+        return FormaChartFooter(
+            date: date,
+            items: selectedItems.map {
+                FormaChartSummaryItem(
+                    label: $0.metric,
+                    value: formatted($0.value),
+                    color: $0.color
+                )
+            },
+            prefix: selectedDate == nil ? "Latest" : "Selected"
         )
+    }
+
+    private func items(on date: Date) -> [FormaChartPoint] {
+        let calendar = Calendar.current
+        return data.filter { calendar.isDate($0.date, inSameDayAs: date) }
+    }
+
+    private func formatted(_ value: Double) -> String {
+        let number = abs(value) >= 100 ? String(format: "%.0f", value) : String(format: "%.1f", value)
+        return unit.isEmpty ? number : "\(number) \(unit)"
     }
 }
