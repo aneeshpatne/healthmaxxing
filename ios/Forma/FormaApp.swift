@@ -18,6 +18,7 @@ struct FormaApp: App {
         WindowGroup {
             ContentView()
                 .tint(.sleekAccent)
+                .preferredColorScheme(.dark)
                 .environment(Clerk.shared)
         }
     }
