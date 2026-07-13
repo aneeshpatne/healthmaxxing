@@ -147,20 +147,6 @@ struct FatTab: View {
             )
             }
             
-            if let section = payload?.fat["fat_ratio_trend"],
-               let currentRatio = section.nestedNumber("visceral_vs_subcutaneous") {
-            VisceralSubcRatioTrendCard(
-                currentRatio: currentRatio,
-                statusText: section.title ?? section.displayTitle,
-                statusColor: .goodGreen,
-                statusIcon: "checkmark.circle.fill",
-                remark: section.remark,
-                comment: section.comment,
-                data: section.trendPoints(preferredKeys: ["visceral_vs_subcutaneous", "visceralSubcutaneousRatio", "ratio"])
-                    .map { VisceralSubcRatioPoint(date: $0.date, value: $0.value) }
-            )
-            }
-            
             if let section = payload?.fat["visceral_trend"], let currentMass = section.numberValue {
             VisceralFatMassTrendCard(
                 currentMass: currentMass,
@@ -198,17 +184,17 @@ struct FatTab: View {
             )
             }
             
-            if let section = payload?.fat["fat_ratio"], let value = section.numberValue {
+            if let section = payload?.fat["fat_ratio_trend"], let value = section.numberValue {
             FatHistoryCard(
                 value: value,
                 comment: section.comment,
                 remark: section.remark,
-                data: section.trendPoints(preferredKeys: ["body_fat_pct", "bodyFatPct", "fatRatio", "fat_ratio"])
+                data: (section.trends["fatPercent"] ?? [])
                     .map { FatDataPoint(date: $0.date, ratio: $0.value) }
             )
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, FormaSpacing.screenGutter)
         .padding(.vertical, 16)
     }
 }
@@ -236,7 +222,7 @@ struct FatRatioZone {
 }
 
 struct FatRatioCard: View {
-    var value: Double = 24.8
+    let value: Double
     var comment: String? = nil
     var remark: InsightReportRemark? = nil
     
@@ -272,43 +258,16 @@ struct FatRatioCard: View {
             FatRatioCategoryLegend(selectedValue: value)
                 .padding(.top, 4)
             
-            // Horizontal Divider
-            Rectangle()
-                .fill(Color.appSeparator)
-                .frame(height: 1)
-            
-            // Bottom Remark Row
-            HStack(alignment: .top, spacing: 14) {
-                let marker = remark?.marker
-                Image(systemName: marker?.iconName ?? metrics.statusIcon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(marker?.color ?? metrics.statusColor)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill((marker?.color ?? metrics.statusColor).opacity(0.12))
-                    )
-                
-                Text(remark?.text ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Spacer()
+            if let text = remark?.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Divider().overlay(Color.appSeparator)
+                FormaCallout(
+                    text: text,
+                    systemImage: remark?.marker?.iconName ?? metrics.statusIcon,
+                    tint: remark?.marker?.color ?? metrics.statusColor
+                )
             }
-            .padding(.horizontal, 4)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Fat Ratio, \(String(format: "%.1f", value)) percent, \(metrics.statusText.lowercased()), \(metrics.verdictText.lowercased()).")
     }
@@ -457,7 +416,7 @@ struct FatDataPoint: Identifiable {
 }
 
 struct FatHistoryCard: View {
-    var value: Double = 24.8
+    let value: Double
     var comment: String? = nil
     var remark: InsightReportRemark? = nil
     var reportData: [FatDataPoint]?
@@ -466,7 +425,7 @@ struct FatHistoryCard: View {
         FatRatioMetrics(value: value)
     }
     
-    init(value: Double = 24.8, comment: String? = nil, remark: InsightReportRemark? = nil, data: [FatDataPoint]? = nil) {
+    init(value: Double, comment: String? = nil, remark: InsightReportRemark? = nil, data: [FatDataPoint]? = nil) {
         self.value = value
         self.comment = comment
         self.remark = remark
@@ -477,18 +436,10 @@ struct FatHistoryCard: View {
         reportData ?? []
     }
 
-    private var yDomain: ClosedRange<Double> {
-        let values = data.map { $0.ratio }
-        guard let minVal = values.min(), let maxVal = values.max() else {
-            return 24.0...26.5
-        }
-        if minVal == maxVal {
-            return (minVal - 1)...(maxVal + 1)
-        }
-        let padding = (maxVal - minVal) * 0.15
-        return (minVal - padding)...(maxVal + padding)
+    private var chartData: [FatDataPoint] {
+        data.sorted { $0.date < $1.date }
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
@@ -510,101 +461,23 @@ struct FatHistoryCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             
-            // Swift Chart
-            Chart {
-                ForEach(data) { point in
-                    AreaMark(
-                        x: .value("Date", point.date, unit: .day),
-                        yStart: .value("Baseline", yDomain.lowerBound),
-                        yEnd: .value("Ratio", point.ratio)
-                    )
-                    .foregroundStyle(FormaChartStyle.areaGradient(Color.goodGreen))
-                    .interpolationMethod(.monotone)
-
-                    LineMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("Ratio", point.ratio)
-                    )
-                    .foregroundStyle(Color.goodGreen)
-                    .interpolationMethod(.monotone)
-                    .lineStyle(FormaChartStyle.lineStyle)
-                    
-                    if point.id == data.last?.id {
-                        PointMark(
-                            x: .value("Date", point.date, unit: .day),
-                            y: .value("Ratio", point.ratio)
-                        )
-                        .foregroundStyle(Color.goodGreen)
-                        .symbol {
-                            Circle()
-                                .fill(Color.goodGreen)
-                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
-                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
-                                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
-                        }
-                    }
-                }
-            }
-            .chartYScale(domain: yDomain)
-            .chartXAxis(.hidden)
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
-                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
-                    AxisValueLabel()
-                        .font(.caption2)
-                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
-                }
-            }
-            .frame(height: 180)
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.appTertiaryBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            FormaTimeSeriesChart(
+                points: chartData.map {
+                    FormaChartPoint(date: $0.date, value: $0.ratio, metric: "Body fat", color: .formaCoral)
+                },
+                unit: "%"
             )
             
-            // Divider
-            Rectangle()
-                .fill(Color.appSeparator)
-                .frame(height: 1)
-                .padding(.horizontal, 4)
-            
-            // Bottom Remark Row
-            HStack(alignment: .top, spacing: 14) {
-                let marker = remark?.marker
-                Image(systemName: marker?.iconName ?? metrics.statusIcon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(marker?.color ?? metrics.statusColor)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill((marker?.color ?? metrics.statusColor).opacity(0.12))
-                    )
-                
-                Text(remark?.text ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Spacer()
+            if let text = remark?.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Divider().overlay(Color.appSeparator)
+                FormaCallout(
+                    text: text,
+                    systemImage: remark?.marker?.iconName ?? metrics.statusIcon,
+                    tint: remark?.marker?.color ?? metrics.statusColor
+                )
             }
-            .padding(.horizontal, 4)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Fat Ratio, \(String(format: "%.1f", value)) percent, \(metrics.statusText.lowercased()), \(metrics.verdictText.lowercased()).")
     }
@@ -755,45 +628,21 @@ struct VisceralSubcutaneousCard: View {
             .padding(.vertical, 12)
             .padding(.horizontal, 8)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color.innerPanelBackground)
             )
             
-            // Bottom Remark Row
-            HStack(alignment: .top, spacing: 14) {
-                let marker = remark?.marker
-                Image(systemName: marker?.iconName ?? "info.circle")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(marker?.color ?? Color.subcutaneousLightTeal)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill((marker?.color ?? Color.subcutaneousLightTeal).opacity(0.12))
-                    )
-                
-                Text(remark?.text ?? comment ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Spacer()
+            if let text = remark?.text ?? comment,
+               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                FormaCallout(
+                    text: text,
+                    systemImage: remark?.marker?.iconName ?? "info.circle",
+                    tint: remark?.marker?.color ?? .formaCyan
+                )
+                .padding(.top, FormaSpacing.xxs)
             }
-            .padding(.horizontal, 2)
-            .padding(.top, 4)
-            .padding(.horizontal, 2)
-            .padding(.top, 4)
         }
-        .padding(.vertical, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 10, x: 0, y: 3)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
+        .formaSurface(.card, padding: FormaSpacing.md)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Visceral fat \(String(format: "%.1f", visceralFat)) kilograms, \(visceralPercentageText). Subcutaneous fat \(String(format: "%.1f", subcutaneousFat)) kilograms, \(subcutaneousPercentageText). Verdict: \(verdict). Remark: \((remark?.text ?? "").replacingOccurrences(of: "\n", with: " ")).")
     }
@@ -824,6 +673,10 @@ struct FatMassTrendCard: View {
 
     var data: [FatMassPoint] {
         reportData ?? []
+    }
+
+    private var chartData: [FatMassPoint] {
+        data.sorted { $0.date < $1.date }
     }
 
     private var yDomain: ClosedRange<Double> {
@@ -860,102 +713,23 @@ struct FatMassTrendCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             
-            // Swift Chart
-            Chart {
-                ForEach(data) { point in
-                    AreaMark(
-                        x: .value("Date", point.date, unit: .day),
-                        yStart: .value("Baseline", yDomain.lowerBound),
-                        yEnd: .value("Mass", point.value)
-                    )
-                    .foregroundStyle(FormaChartStyle.areaGradient(Color.extremityRed))
-                    .interpolationMethod(.monotone)
-
-                    LineMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("Mass", point.value)
-                    )
-                    .foregroundStyle(Color.extremityRed)
-                    .interpolationMethod(.monotone)
-                    .lineStyle(FormaChartStyle.lineStyle)
-                    
-                    if point.id == data.last?.id {
-                        PointMark(
-                            x: .value("Date", point.date, unit: .day),
-                            y: .value("Mass", point.value)
-                        )
-                        .foregroundStyle(Color.extremityRed)
-                        .symbol {
-                            Circle()
-                                .fill(Color.extremityRed)
-                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
-                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
-                                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
-                        }
-                    }
-                }
-            }
-            .chartYScale(domain: yDomain)
-            .chartXAxis(.hidden)
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
-                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
-                    AxisValueLabel()
-                        .font(.caption2)
-                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
-                }
-            }
-            .frame(height: 180)
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.appTertiaryBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            FormaTimeSeriesChart(
+                points: chartData.map {
+                    FormaChartPoint(date: $0.date, value: $0.value, metric: "Fat mass", color: .formaCoral)
+                },
+                unit: "kg"
             )
             
-            // Divider
-            Rectangle()
-                .fill(Color.appSeparator)
-                .frame(height: 1)
-                .padding(.horizontal, 4)
-            
-            // Bottom Remark Row
-            HStack(alignment: .top, spacing: 14) {
-                let marker = remark?.marker
-                Image(systemName: marker?.iconName ?? "exclamationmark.triangle.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(marker?.color ?? Color.extremityRed)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill((marker?.color ?? Color.extremityRed).opacity(0.12))
-                    )
-                
-                Text(remark?.text ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Spacer()
+            if let text = remark?.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Divider().overlay(Color.appSeparator)
+                FormaCallout(
+                    text: text,
+                    systemImage: remark?.marker?.iconName ?? "chart.line.downtrend.xyaxis",
+                    tint: remark?.marker?.color ?? .formaCoral
+                )
             }
-            .padding(.horizontal, 4)
-            .padding(.horizontal, 4)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Fat mass history over past 4 weeks, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \((remark?.text ?? "").replacingOccurrences(of: "\n", with: " ")).")
     }
@@ -977,6 +751,10 @@ struct VisceralSubcRatioTrendCard: View {
     let remark: InsightReportRemark?
     let comment: String?
     let data: [VisceralSubcRatioPoint]
+
+    private var chartData: [VisceralSubcRatioPoint] {
+        data.sorted { $0.date < $1.date }
+    }
 
     private var yDomain: ClosedRange<Double> {
         let values = data.map { $0.value }
@@ -1012,101 +790,22 @@ struct VisceralSubcRatioTrendCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             
-            // Swift Chart
-            Chart {
-                ForEach(data) { point in
-                    AreaMark(
-                        x: .value("Date", point.date, unit: .day),
-                        yStart: .value("Baseline", yDomain.lowerBound),
-                        yEnd: .value("Ratio", point.value)
-                    )
-                    .foregroundStyle(FormaChartStyle.areaGradient(Color.visceralDarkTeal))
-                    .interpolationMethod(.monotone)
-
-                    LineMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("Ratio", point.value)
-                    )
-                    .foregroundStyle(Color.visceralDarkTeal)
-                    .interpolationMethod(.monotone)
-                    .lineStyle(FormaChartStyle.lineStyle)
-                    
-                    if point.id == data.last?.id {
-                        PointMark(
-                            x: .value("Date", point.date, unit: .day),
-                            y: .value("Ratio", point.value)
-                        )
-                        .foregroundStyle(Color.visceralDarkTeal)
-                        .symbol {
-                            Circle()
-                                .fill(Color.visceralDarkTeal)
-                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
-                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
-                                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
-                        }
-                    }
+            FormaTimeSeriesChart(
+                points: chartData.map {
+                    FormaChartPoint(date: $0.date, value: $0.value, metric: "Visceral ratio", color: .formaAmber)
                 }
-            }
-            .chartYScale(domain: yDomain)
-            .chartXAxis(.hidden)
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
-                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
-                    AxisValueLabel()
-                        .font(.caption2)
-                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
-                }
-            }
-            .frame(height: 180)
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.appTertiaryBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.appSeparator, lineWidth: 0.5)
             )
             
-            // Divider
-            Rectangle()
-                .fill(Color.appSeparator)
-                .frame(height: 1)
-                .padding(.horizontal, 4)
-            
-            // Bottom Remark Row
-            HStack(alignment: .top, spacing: 14) {
-                let marker = remark?.marker
-                Image(systemName: marker?.iconName ?? statusIcon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(marker?.color ?? statusColor)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill((marker?.color ?? statusColor).opacity(0.12))
-                    )
-                
-                Text(remark?.text ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Spacer()
+            if let text = remark?.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Divider().overlay(Color.appSeparator)
+                FormaCallout(
+                    text: text,
+                    systemImage: remark?.marker?.iconName ?? statusIcon,
+                    tint: remark?.marker?.color ?? statusColor
+                )
             }
-            .padding(.horizontal, 4)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Visceral to subcutaneous ratio history, ending at \(String(format: "%.2f", currentRatio)). Current status is \(statusText). Remark: \(remark?.text ?? "").")
     }
@@ -1128,6 +827,10 @@ struct SubcFatMassTrendCard: View {
     let remark: InsightReportRemark?
     let comment: String?
     let data: [SubcFatMassPoint]
+
+    private var chartData: [SubcFatMassPoint] {
+        data.sorted { $0.date < $1.date }
+    }
 
     private var yDomain: ClosedRange<Double> {
         let values = data.map { $0.value }
@@ -1163,101 +866,23 @@ struct SubcFatMassTrendCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             
-            // Swift Chart
-            Chart {
-                ForEach(data) { point in
-                    AreaMark(
-                        x: .value("Date", point.date, unit: .day),
-                        yStart: .value("Baseline", yDomain.lowerBound),
-                        yEnd: .value("Mass", point.value)
-                    )
-                    .foregroundStyle(FormaChartStyle.areaGradient(Color.subcutaneousLightTeal))
-                    .interpolationMethod(.monotone)
-
-                    LineMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("Mass", point.value)
-                    )
-                    .foregroundStyle(Color.subcutaneousLightTeal)
-                    .interpolationMethod(.monotone)
-                    .lineStyle(FormaChartStyle.lineStyle)
-                    
-                    if point.id == data.last?.id {
-                        PointMark(
-                            x: .value("Date", point.date, unit: .day),
-                            y: .value("Mass", point.value)
-                        )
-                        .foregroundStyle(Color.subcutaneousLightTeal)
-                        .symbol {
-                            Circle()
-                                .fill(Color.subcutaneousLightTeal)
-                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
-                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
-                                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
-                        }
-                    }
-                }
-            }
-            .chartYScale(domain: yDomain)
-            .chartXAxis(.hidden)
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
-                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
-                    AxisValueLabel()
-                        .font(.caption2)
-                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
-                }
-            }
-            .frame(height: 180)
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.appTertiaryBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            FormaTimeSeriesChart(
+                points: chartData.map {
+                    FormaChartPoint(date: $0.date, value: $0.value, metric: "Subcutaneous fat", color: .formaCyan)
+                },
+                unit: "kg"
             )
             
-            // Divider
-            Rectangle()
-                .fill(Color.appSeparator)
-                .frame(height: 1)
-                .padding(.horizontal, 4)
-            
-            // Bottom Remark Row
-            HStack(alignment: .top, spacing: 14) {
-                let marker = remark?.marker
-                Image(systemName: marker?.iconName ?? statusIcon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(marker?.color ?? statusColor)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill((marker?.color ?? statusColor).opacity(0.12))
-                    )
-                
-                Text(remark?.text ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Spacer()
+            if let text = remark?.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Divider().overlay(Color.appSeparator)
+                FormaCallout(
+                    text: text,
+                    systemImage: remark?.marker?.iconName ?? statusIcon,
+                    tint: remark?.marker?.color ?? statusColor
+                )
             }
-            .padding(.horizontal, 4)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Subcutaneous fat mass history, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \(remark?.text ?? "").")
     }
@@ -1279,6 +904,10 @@ struct VisceralFatMassTrendCard: View {
     let remark: InsightReportRemark?
     let comment: String?
     let data: [VisceralFatMassPoint]
+
+    private var chartData: [VisceralFatMassPoint] {
+        data.sorted { $0.date < $1.date }
+    }
 
     private var yDomain: ClosedRange<Double> {
         let values = data.map { $0.value }
@@ -1314,101 +943,23 @@ struct VisceralFatMassTrendCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             
-            // Swift Chart
-            Chart {
-                ForEach(data) { point in
-                    AreaMark(
-                        x: .value("Date", point.date, unit: .day),
-                        yStart: .value("Baseline", yDomain.lowerBound),
-                        yEnd: .value("Mass", point.value)
-                    )
-                    .foregroundStyle(FormaChartStyle.areaGradient(Color.visceralDarkTeal))
-                    .interpolationMethod(.monotone)
-
-                    LineMark(
-                        x: .value("Date", point.date, unit: .day),
-                        y: .value("Mass", point.value)
-                    )
-                    .foregroundStyle(Color.visceralDarkTeal)
-                    .interpolationMethod(.monotone)
-                    .lineStyle(FormaChartStyle.lineStyle)
-                    
-                    if point.id == data.last?.id {
-                        PointMark(
-                            x: .value("Date", point.date, unit: .day),
-                            y: .value("Mass", point.value)
-                        )
-                        .foregroundStyle(Color.visceralDarkTeal)
-                        .symbol {
-                            Circle()
-                                .fill(Color.visceralDarkTeal)
-                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
-                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
-                                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
-                        }
-                    }
-                }
-            }
-            .chartYScale(domain: yDomain)
-            .chartXAxis(.hidden)
-            .chartYAxis {
-                AxisMarks(position: .leading) { value in
-                    AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
-                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
-                    AxisValueLabel()
-                        .font(.caption2)
-                        .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
-                }
-            }
-            .frame(height: 180)
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.appTertiaryBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            FormaTimeSeriesChart(
+                points: chartData.map {
+                    FormaChartPoint(date: $0.date, value: $0.value, metric: "Visceral fat", color: .formaAmber)
+                },
+                unit: "kg"
             )
             
-            // Divider
-            Rectangle()
-                .fill(Color.appSeparator)
-                .frame(height: 1)
-                .padding(.horizontal, 4)
-            
-            // Bottom Remark Row
-            HStack(alignment: .top, spacing: 14) {
-                let marker = remark?.marker
-                Image(systemName: marker?.iconName ?? statusIcon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(marker?.color ?? statusColor)
-                    .frame(width: 36, height: 36)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill((marker?.color ?? statusColor).opacity(0.12))
-                    )
-                
-                Text(remark?.text ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                
-                Spacer()
+            if let text = remark?.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Divider().overlay(Color.appSeparator)
+                FormaCallout(
+                    text: text,
+                    systemImage: remark?.marker?.iconName ?? statusIcon,
+                    tint: remark?.marker?.color ?? statusColor
+                )
             }
-            .padding(.horizontal, 4)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 4)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Visceral fat mass history, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \(remark?.text ?? "").")
     }
