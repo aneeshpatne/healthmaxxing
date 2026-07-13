@@ -5,7 +5,7 @@ struct MuscleTab: View {
     let payload: InsightReportPayload?
 
     private var sections: [InsightReportMetricSection] {
-        ["muscle_mass", "bone_mass_trend", "muscle_mass_trend", "skeletal_muscle_mass_trend"]
+        ["muscle_mass", "bone_mass_trend", "muscle_ratio_trend", "skeletal_muscle_mass_trend"]
             .compactMap { payload?.muscle[$0] }
     }
 
@@ -19,44 +19,17 @@ struct MuscleTab: View {
                 }
             }
         }
-        .padding(.horizontal, 0)
+        .padding(.horizontal, FormaSpacing.screenGutter)
         .padding(.vertical, 16)
     }
 }
 
 private struct MuscleReportCard: View {
     let section: InsightReportMetricSection
-    @State private var selectedDate: Date?
-
-    private func yDomain(for points: [InsightReportTrendPoint]) -> ClosedRange<Double> {
-        let values = points.map { $0.value }
-        guard let minVal = values.min(), let maxVal = values.max() else {
-            return 0...100
-        }
-        if minVal == maxVal {
-            return (minVal - 1.5)...(maxVal + 1.5)
-        }
-        return (minVal - 1.5)...(maxVal + 1.5)
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Header Row
-            HStack(spacing: 10) {
-                Image(systemName: "figure.strengthtraining.traditional")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.sleekAccent)
-                    .frame(width: 26, height: 26)
-                    .background(Color.sleekAccent.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-                Text(section.displayTitle)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.6)
-
-                Spacer()
-
+            FormaCardHeader(section.displayTitle) {
                 if let value = section.numberValue {
                     Text(String(format: "%.1f", value))
                         .font(.system(size: 20, weight: .bold, design: .rounded))
@@ -83,84 +56,18 @@ private struct MuscleReportCard: View {
 
             // Swift Chart Plot
             if let trendPoints = section.trends.first?.value, !trendPoints.isEmpty {
-                let chartDomain = yDomain(for: trendPoints)
+                let chartPoints = trendPoints.sorted { $0.date < $1.date }
 
-                Chart {
-                    ForEach(trendPoints, id: \.createdAt) { point in
-                        AreaMark(
-                            x: .value("Date", point.date),
-                            yStart: .value("Baseline", chartDomain.lowerBound),
-                            yEnd: .value("Value", point.value)
+                FormaTimeSeriesChart(
+                    points: chartPoints.map {
+                        FormaChartPoint(
+                            date: $0.date,
+                            value: $0.value,
+                            metric: section.displayTitle,
+                            color: FormaChartMetric.infer(from: section.displayTitle).color
                         )
-                        .foregroundStyle(FormaChartStyle.areaGradient(Color.sleekAccent))
-                        .interpolationMethod(.monotone)
-
-                        LineMark(
-                            x: .value("Date", point.date),
-                            y: .value("Value", point.value)
-                        )
-                        .foregroundStyle(Color.sleekAccent)
-                        .interpolationMethod(.monotone)
-                        .lineStyle(FormaChartStyle.lineStyle)
                     }
-                    
-                    if let lastPoint = trendPoints.last {
-                        PointMark(
-                            x: .value("Date", lastPoint.date),
-                            y: .value("Value", lastPoint.value)
-                        )
-                        .foregroundStyle(Color.sleekAccent)
-                        .symbol {
-                            Circle()
-                                .fill(Color.sleekAccent)
-                                .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
-                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
-                                .shadow(color: .black.opacity(0.12), radius: 2, x: 0, y: 1)
-                        }
-                    }
-                }
-                .chartXSelection(value: $selectedDate)
-                .chartYScale(domain: chartDomain)
-                .chartXAxis(.hidden)
-                .chartYAxis {
-                    AxisMarks(position: .leading) { _ in
-                        AxisGridLine(stroke: FormaChartStyle.gridLineStyle)
-                            .foregroundStyle(Color.secondary.opacity(FormaChartStyle.gridOpacity))
-                        AxisValueLabel()
-                            .font(.caption2)
-                            .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
-                    }
-                }
-                .frame(height: 160)
-                .padding(16)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.appTertiaryBackground)
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.appSeparator, lineWidth: 0.5)
-                )
-
-                if let selectedDate {
-                    let selectedPoints = trendPoints.filter {
-                        Calendar.current.isDate($0.date, inSameDayAs: selectedDate)
-                    }
-                    if !selectedPoints.isEmpty {
-                        HStack(alignment: .top, spacing: 12) {
-                            Text(selectedDate.formatted(.dateTime.month(.abbreviated).day()))
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.primary)
-
-                            Text(selectedPoints.map { String(format: "%.1f", $0.value) }.joined(separator: " · "))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            Spacer()
-                        }
-                        .padding(.top, 2)
-                    }
-                }
             }
 
             // Bottom Remark Row
@@ -170,25 +77,11 @@ private struct MuscleReportCard: View {
                     .frame(height: 1)
                     .padding(.horizontal, 4)
                 
-                HStack(alignment: .top, spacing: 14) {
-                    let marker = remark.marker
-                    Image(systemName: marker?.iconName ?? "sparkle")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(marker?.color ?? Color.sleekAccent)
-                        .frame(width: 36, height: 36)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill((marker?.color ?? Color.sleekAccent).opacity(0.12))
-                        )
-                    
-                    Text(remark.text ?? "")
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                        .lineSpacing(3)
-                        .fixedSize(horizontal: false, vertical: true)
-                    
-                    Spacer()
-                }
+                FormaCallout(
+                    text: remark.text ?? "",
+                    systemImage: remark.marker?.iconName ?? "sparkle",
+                    tint: remark.marker?.color ?? Color.sleekAccent
+                )
                 .padding(.horizontal, 4)
             }
         }
