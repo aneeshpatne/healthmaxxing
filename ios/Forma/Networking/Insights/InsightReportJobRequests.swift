@@ -109,7 +109,7 @@ struct GetInsightReportResponse: Decodable, Equatable {
     let report: InsightReport
 }
 
-struct InsightReport: Decodable, Equatable {
+struct InsightReport: Codable, Equatable {
     let reportId: UUID
     let profileId: UUID
     let generationStatus: String
