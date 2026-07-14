@@ -27,7 +27,10 @@ enum FormaRadius {
 }
 
 enum FormaTypography {
-    static let wordmark = Font.system(size: 20, weight: .bold, design: .default)
+    static func wordmark(size: CGFloat) -> Font {
+        .system(size: size, weight: .medium, design: .default)
+    }
+
     static let eyebrow = Font.caption.weight(.bold)
     static let cardTitle = Font.headline.weight(.semibold)
     static let body = Font.subheadline
