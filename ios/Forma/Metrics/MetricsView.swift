@@ -15,7 +15,7 @@ struct MetricsView: View {
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            GlassTabBar(selectedTab: $selectedTab)
+            MetricsTabBar(selectedTab: $selectedTab)
                 .padding(.horizontal, FormaSpacing.screenGutter)
                 .padding(.bottom, FormaSpacing.md)
 
@@ -149,48 +149,66 @@ enum MetricsTab: String, CaseIterable {
     }
 }
 
-struct GlassTabBar: View {
+struct MetricsTabBar: View {
     @Binding var selectedTab: MetricsTab
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selectionNamespace
 
     var body: some View {
-        GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
-                ForEach(MetricsTab.allCases, id: \.self) { tab in
-                    Button {
-                        let update = {
-                            selectedTab = tab
-                        }
+        HStack(spacing: 0) {
+            ForEach(MetricsTab.allCases.indices, id: \.self) { index in
+                let tab = MetricsTab.allCases[index]
 
-                        if reduceMotion {
+                Button {
+                    let update = {
+                        selectedTab = tab
+                    }
+
+                    if reduceMotion {
+                        update()
+                    } else {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                             update()
-                        } else {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 1.0)) {
-                                update()
-                            }
                         }
-                    } label: {
+                    }
+                } label: {
+                    VStack(spacing: 7) {
                         Text(tab.title)
                             .font(.subheadline.weight(selectedTab == tab ? .semibold : .medium))
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
-                            .frame(minWidth: 58)
-                            .frame(minHeight: 48)
-                            .padding(.horizontal, 8)
                             .foregroundStyle(selectedTab == tab ? .primary : .secondary)
+
+                        ZStack {
+                            Capsule()
+                                .fill(.clear)
+                                .frame(height: 2)
+
+                            if selectedTab == tab {
+                                Capsule()
+                                    .fill(Color.sleekAccent)
+                                    .frame(width: 24, height: 2)
+                                    .matchedGeometryEffect(id: "metrics-selection", in: selectionNamespace)
+                            }
+                        }
                     }
+                    .padding(.horizontal, FormaSpacing.xxs)
+                    .frame(minWidth: 44, minHeight: 48)
                     .contentShape(Rectangle())
-                    .buttonStyle(MetricTabButtonStyle())
-                    .accessibilityValue(selectedTab == tab ? "Selected" : "")
-                    .glassEffect(
-                        selectedTab == tab
-                            ? .regular.tint(.accentColor.opacity(0.3)).interactive()
-                            : .regular
-                    )
+                }
+                .buttonStyle(MetricTabButtonStyle())
+                .accessibilityValue(selectedTab == tab ? "Selected" : "")
+
+                if index < MetricsTab.allCases.count - 1 {
+                    Spacer(minLength: FormaSpacing.xxs)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+        }
+        .frame(maxWidth: .infinity)
+        .background(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.appSeparator)
+                .frame(height: 0.5)
         }
     }
 }
