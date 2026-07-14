@@ -10,7 +10,7 @@ import SwiftUI
 struct MetricsView: View {
     @Binding var selectedTab: MetricsTab
     @Binding var isAtTop: Bool
-    @StateObject private var reportStore = MetricsReportStore()
+    @ObservedObject var reportStore: MetricsReportStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -29,7 +29,7 @@ struct MetricsView: View {
                 } else if let payload = reportStore.payload {
                     switch selectedTab {
                     case .insights:
-                        InsightsTab()
+                        InsightsTab(reportStore: reportStore)
                     case .performance:
                         PerformanceTab(payload: payload)
                     case .fat:
@@ -54,8 +54,8 @@ struct MetricsView: View {
                 }
             }
         }
-        .task {
-            await reportStore.loadAndPollReport()
+        .refreshable {
+            await reportStore.refreshReport()
         }
         .onScrollGeometryChange(for: CGFloat.self) { geometry in
             geometry.contentOffset.y + geometry.contentInsets.top
@@ -85,15 +85,14 @@ struct MetricsReportStatusScreen: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            ZStack {
-                Circle()
-                    .fill(tint.opacity(0.12))
-                    .frame(width: 64, height: 64)
+            if isLoading {
+                MetricsReportLoadingIndicator(tint: tint)
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(tint.opacity(0.12))
+                        .frame(width: 64, height: 64)
 
-                if isLoading {
-                    ProgressView()
-                        .controlSize(.large)
-                } else {
                     Image(systemName: systemImage)
                         .font(.system(size: 24, weight: .semibold))
                         .foregroundStyle(tint)
@@ -115,6 +114,106 @@ struct MetricsReportStatusScreen: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
         .padding(.vertical, 80)
+    }
+}
+
+private struct MetricsReportLoadingIndicator: View {
+    let tint: Color
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
+            let elapsed = context.date.timeIntervalSinceReferenceDate
+            let progress = reduceMotion ? 0.1 : elapsed.truncatingRemainder(dividingBy: 3.2) / 3.2
+            let breathe = reduceMotion ? 1.0 : 0.985 + (0.015 * sin(elapsed * .pi))
+
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [tint.opacity(0.18), tint.opacity(0.055)],
+                            center: .center,
+                            startRadius: 2,
+                            endRadius: 48
+                        )
+                    )
+
+                Circle()
+                    .stroke(tint.opacity(0.14), lineWidth: 10)
+                    .blur(radius: 8)
+                    .padding(8)
+
+                Circle()
+                    .stroke(
+                        AngularGradient(
+                            colors: [Color.appSeparator, tint.opacity(0.22), Color.appSeparator],
+                            center: .center
+                        ),
+                        lineWidth: 1
+                    )
+                    .padding(4)
+
+                Circle()
+                    .trim(from: 0.03, to: 0.27)
+                    .stroke(
+                        AngularGradient(
+                            colors: [tint.opacity(0.12), tint, Color.formaCyan, tint.opacity(0.12)],
+                            center: .center
+                        ),
+                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
+                    )
+                    .padding(4)
+                    .rotationEffect(.degrees(progress * 360))
+
+                Circle()
+                    .trim(from: 0.54, to: 0.72)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.formaCyan.opacity(0.18), Color.formaCyan.opacity(0.7)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        style: StrokeStyle(lineWidth: 2.25, lineCap: .round)
+                    )
+                    .padding(14)
+                    .rotationEffect(.degrees(-progress * 220))
+
+                ForEach(0..<3, id: \.self) { index in
+                    Circle()
+                        .fill(index == 0 ? tint : Color.formaCyan.opacity(0.7))
+                        .frame(width: index == 0 ? 5 : 3.5, height: index == 0 ? 5 : 3.5)
+                        .shadow(color: tint.opacity(0.7), radius: 4)
+                        .offset(y: -42)
+                        .rotationEffect(.degrees((progress * 360) + (Double(index) * 120)))
+                }
+
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+
+                    Circle()
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.2), tint.opacity(0.16)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 0.75
+                        )
+
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 20, weight: .medium))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(tint)
+                }
+                .frame(width: 48, height: 48)
+                .shadow(color: Color.black.opacity(0.22), radius: 10, y: 5)
+                .scaleEffect(breathe)
+            }
+        }
+        .frame(width: 96, height: 96)
+        .accessibilityHidden(true)
     }
 }
 
@@ -349,7 +448,17 @@ extension View {
 #Preview {
     MetricsView(
         selectedTab: .constant(.insights),
-        isAtTop: .constant(true)
+        isAtTop: .constant(true),
+        reportStore: MetricsReportStore()
     )
         .background(Color.appBackground)
+}
+
+#Preview("Report loading") {
+    MetricsReportStatusScreen(
+        title: "Preparing report",
+        message: "Waiting for report generation.",
+        isLoading: true
+    )
+    .background(FormaBackground())
 }
