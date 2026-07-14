@@ -444,12 +444,7 @@ private struct RecordCircle: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                Circle()
-                    .fill(backgroundFill)
-                    .overlay {
-                        Circle()
-                            .fill(highlightGradient)
-                    }
+                circleBackground
                     .shadow(color: shadowColor, radius: 24, x: 0, y: 14)
 
                 content
@@ -474,11 +469,44 @@ private struct RecordCircle: View {
     }
 
     @ViewBuilder
+    private var circleBackground: some View {
+        switch state {
+        case .ready:
+            AnimatedRecordPalette(diameter: diameter)
+                .overlay {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [.black.opacity(0.34), .clear],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: diameter * 0.42
+                            )
+                        )
+                }
+                .overlay {
+                    Circle()
+                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.75)
+                }
+
+        case .saved, .recordingFailed, .submissionFailed, .connecting, .weight, .impedance, .heartRate:
+            Circle()
+                .fill(backgroundFill)
+                .overlay {
+                    Circle()
+                        .fill(highlightGradient)
+                }
+        }
+    }
+
+    @ViewBuilder
     private var content: some View {
         switch state {
         case .ready:
             Text("Record")
                 .font(.title2.weight(.semibold))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.38), radius: 8, y: 2)
 
         case .connecting(let label):
             VStack(spacing: FormaSpacing.md) {
@@ -649,6 +677,147 @@ private struct RecordCircle: View {
     }
 }
 
+private struct AnimatedRecordPalette: View {
+    let diameter: CGFloat
+    var reduceMotionOverride: Bool? = nil
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let cycleDuration: TimeInterval = 10
+    private static let reducedMotionPhase = Double.pi * 0.38
+    private static let fields: [RecordColorField] = [
+        RecordColorField(
+            color: Color(red: 1.00, green: 0.42, blue: 0.38),
+            center: CGPoint(x: 0.17, y: 0.18),
+            size: CGSize(width: 0.94, height: 0.74),
+            travel: CGVector(dx: 0.10, dy: 0.08),
+            phaseOffset: 0.15,
+            xFrequency: 1,
+            yFrequency: 2,
+            scaleFrequency: 1
+        ),
+        RecordColorField(
+            color: Color(red: 1.00, green: 0.54, blue: 0.16),
+            center: CGPoint(x: 0.80, y: 0.16),
+            size: CGSize(width: 0.82, height: 0.76),
+            travel: CGVector(dx: 0.09, dy: 0.10),
+            phaseOffset: 1.20,
+            xFrequency: 2,
+            yFrequency: 1,
+            scaleFrequency: 2
+        ),
+        RecordColorField(
+            color: Color(red: 0.14, green: 0.33, blue: 0.90),
+            center: CGPoint(x: 0.14, y: 0.72),
+            size: CGSize(width: 0.92, height: 0.90),
+            travel: CGVector(dx: 0.11, dy: 0.08),
+            phaseOffset: 2.30,
+            xFrequency: 1,
+            yFrequency: 2,
+            scaleFrequency: 1
+        ),
+        RecordColorField(
+            color: Color(red: 0.49, green: 0.23, blue: 0.93),
+            center: CGPoint(x: 0.78, y: 0.66),
+            size: CGSize(width: 0.90, height: 0.84),
+            travel: CGVector(dx: 0.10, dy: 0.09),
+            phaseOffset: 3.45,
+            xFrequency: 2,
+            yFrequency: 1,
+            scaleFrequency: 2
+        ),
+        RecordColorField(
+            color: Color(red: 1.00, green: 0.91, blue: 0.60),
+            center: CGPoint(x: 0.52, y: 0.46),
+            size: CGSize(width: 0.72, height: 0.66),
+            travel: CGVector(dx: 0.13, dy: 0.11),
+            phaseOffset: 4.55,
+            xFrequency: 1,
+            yFrequency: 2,
+            scaleFrequency: 1
+        ),
+        RecordColorField(
+            color: Color(red: 0.27, green: 0.75, blue: 0.66),
+            center: CGPoint(x: 0.52, y: 0.96),
+            size: CGSize(width: 1.08, height: 0.74),
+            travel: CGVector(dx: 0.08, dy: 0.07),
+            phaseOffset: 5.50,
+            xFrequency: 2,
+            yFrequency: 1,
+            scaleFrequency: 2
+        )
+    ]
+
+    var body: some View {
+        Group {
+            if reduceMotionOverride ?? reduceMotion {
+                palette(phase: Self.reducedMotionPhase)
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                    palette(phase: phase(for: context.date))
+                }
+            }
+        }
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+    }
+
+    private func palette(phase: Double) -> some View {
+        Canvas(opaque: true, colorMode: .nonLinear, rendersAsynchronously: true) { context, size in
+            context.fill(
+                Path(CGRect(origin: .zero, size: size)),
+                with: .color(Color(red: 0.27, green: 0.75, blue: 0.66))
+            )
+
+            context.drawLayer { layer in
+                layer.addFilter(.blur(radius: size.width * 0.14))
+
+                for field in Self.fields {
+                    let scale = 1 + (0.09 * sin((phase * field.scaleFrequency) + field.phaseOffset))
+                    let width = size.width * field.size.width * scale
+                    let height = size.height * field.size.height * scale
+                    let center = CGPoint(
+                        x: size.width * (
+                            field.center.x
+                                + (field.travel.dx * sin((phase * field.xFrequency) + field.phaseOffset))
+                        ),
+                        y: size.height * (
+                            field.center.y
+                                + (field.travel.dy * cos((phase * field.yFrequency) + field.phaseOffset))
+                        )
+                    )
+                    let rect = CGRect(
+                        x: center.x - (width / 2),
+                        y: center.y - (height / 2),
+                        width: width,
+                        height: height
+                    )
+
+                    layer.fill(Path(ellipseIn: rect), with: .color(field.color))
+                }
+            }
+        }
+        .frame(width: diameter, height: diameter)
+    }
+
+    private func phase(for date: Date) -> Double {
+        let elapsed = date.timeIntervalSinceReferenceDate
+            .truncatingRemainder(dividingBy: Self.cycleDuration)
+        return (elapsed / Self.cycleDuration) * (2 * Double.pi)
+    }
+}
+
+private struct RecordColorField {
+    let color: Color
+    let center: CGPoint
+    let size: CGSize
+    let travel: CGVector
+    let phaseOffset: Double
+    let xFrequency: Double
+    let yFrequency: Double
+    let scaleFrequency: Double
+}
+
 private struct OrbitingRecordRing: View {
     let diameter: CGFloat
 
@@ -705,6 +874,18 @@ private struct RecordCircleButtonStyle: ButtonStyle {
 
 #Preview("Record") {
     RecordCircle(state: .ready, diameter: 240, isEnabled: true, showsActivityRing: false, action: {})
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(FormaBackground())
+}
+
+#Preview("Record — Reduce Motion") {
+    AnimatedRecordPalette(diameter: 240, reduceMotionOverride: true)
+        .overlay {
+            Text("Record")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.38), radius: 8, y: 2)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FormaBackground())
 }
