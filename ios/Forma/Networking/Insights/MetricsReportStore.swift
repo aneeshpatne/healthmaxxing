@@ -18,6 +18,8 @@ final class MetricsReportStore: ObservableObject {
     @Published private(set) var statusMessage = "Checking for the latest report."
 
     private let apiClient = APIClient()
+    private var cachedProfileId: UUID?
+    private var hasCachedSnapshot = false
 
     var payload: InsightReportPayload? {
         InsightReportPayload(data: completedReport?.data)
@@ -28,11 +30,33 @@ final class MetricsReportStore: ObservableObject {
     }
 
     func loadAndPollReport() async {
-        guard !isLoading else { return }
+        await loadAndPollReport(ignoringCache: false)
+    }
+
+    func refreshReport() async {
+        await loadAndPollReport(ignoringCache: true)
+    }
+
+    private func loadAndPollReport(ignoringCache: Bool) async {
         guard let profileId = PrimaryProfileStore.primaryProfileId else {
             errorMessage = "Create or select a primary profile to load reports."
             return
         }
+
+        if cachedProfileId != profileId {
+            clearCachedSnapshot()
+            restoreCachedReport(for: profileId)
+        }
+
+        let queuedJobIds = InsightReportJobStore.jobIds(for: profileId)
+        if !ignoringCache,
+           hasCachedSnapshot,
+           cachedProfileId == profileId,
+           queuedJobIds.isEmpty {
+            return
+        }
+
+        guard !isLoading else { return }
 
         isLoading = true
         errorMessage = nil
@@ -45,8 +69,7 @@ final class MetricsReportStore: ObservableObject {
         do {
             let activeResponse = try await apiClient.send(GetActiveInsightJobsRequest(profileId: profileId))
             let serverJobs = activeResponse.jobs ?? []
-            let storedJobIds = InsightReportJobStore.jobIds(for: profileId)
-            let jobIdToPoll = serverJobs.sorted { $0.createdAt > $1.createdAt }.first?.jobId ?? storedJobIds.first
+            let jobIdToPoll = serverJobs.sorted { $0.createdAt > $1.createdAt }.first?.jobId ?? queuedJobIds.first
 
             activeJob = serverJobs.first(where: { $0.jobId == jobIdToPoll }) ?? serverJobs.first
 
@@ -61,6 +84,7 @@ final class MetricsReportStore: ObservableObject {
             guard let latestReport else {
                 completedReport = nil
                 statusMessage = "No completed reports yet."
+                cacheSnapshot(for: profileId)
                 return
             }
 
@@ -68,6 +92,7 @@ final class MetricsReportStore: ObservableObject {
             let reportResponse = try await apiClient.send(GetInsightReportRequest(profileId: profileId, insightId: latestReport.reportId))
             completedReport = reportResponse.report
             statusMessage = "Latest report ready."
+            cacheSnapshot(for: profileId)
         } catch APIError.missingAuthToken {
             errorMessage = "Missing auth token."
         } catch APIError.serverError(let statusCode, _) {
@@ -116,6 +141,7 @@ final class MetricsReportStore: ObservableObject {
                 completedReport = response.report
                 statusMessage = "Report completed."
                 errorMessage = nil
+                cacheSnapshot(for: profileId)
                 return
             case "failed":
                 InsightReportJobStore.remove(jobId, for: profileId)
@@ -141,5 +167,74 @@ final class MetricsReportStore: ObservableObject {
                 return
             }
         }
+    }
+
+    private func cacheSnapshot(for profileId: UUID) {
+        cachedProfileId = profileId
+        hasCachedSnapshot = true
+
+        if let completedReport {
+            InsightReportCacheStore.save(completedReport, for: profileId)
+        } else {
+            InsightReportCacheStore.remove(for: profileId)
+        }
+    }
+
+    private func restoreCachedReport(for profileId: UUID) {
+        cachedProfileId = profileId
+        guard let report = InsightReportCacheStore.load(for: profileId) else { return }
+
+        completedReport = report
+        hasCachedSnapshot = true
+        statusMessage = "Latest report ready."
+    }
+
+    private func clearCachedSnapshot() {
+        cachedProfileId = nil
+        hasCachedSnapshot = false
+        completedReport = nil
+        activeJob = nil
+        latestReport = nil
+        errorMessage = nil
+        statusMessage = "Checking for the latest report."
+    }
+}
+
+private enum InsightReportCacheStore {
+    private static let directoryName = "InsightReports"
+
+    static func load(for profileId: UUID) -> InsightReport? {
+        guard let data = try? Data(contentsOf: fileURL(for: profileId)) else { return nil }
+        return try? JSONDecoder().decode(InsightReport.self, from: data)
+    }
+
+    static func save(_ report: InsightReport, for profileId: UUID) {
+        guard let data = try? JSONEncoder().encode(report) else { return }
+        let fileURL = fileURL(for: profileId)
+
+        do {
+            try FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+        } catch {
+            return
+        }
+    }
+
+    static func remove(for profileId: UUID) {
+        try? FileManager.default.removeItem(at: fileURL(for: profileId))
+    }
+
+    private static func fileURL(for profileId: UUID) -> URL {
+        let applicationSupportURL = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        )[0]
+
+        return applicationSupportURL
+            .appendingPathComponent(directoryName, isDirectory: true)
+            .appendingPathComponent("\(profileId.uuidString).json", isDirectory: false)
     }
 }
