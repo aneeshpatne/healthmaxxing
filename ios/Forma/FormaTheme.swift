@@ -61,8 +61,8 @@ extension Color {
 
     static let appChartBackground = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.018, green: 0.025, blue: 0.022, alpha: 1)
-            : UIColor(red: 0.885, green: 0.900, blue: 0.890, alpha: 1)
+            ? UIColor(red: 0.050, green: 0.062, blue: 0.056, alpha: 1)
+            : UIColor(red: 0.935, green: 0.942, blue: 0.937, alpha: 1)
     })
 
     static let appSeparator = Color(uiColor: UIColor { traits in
