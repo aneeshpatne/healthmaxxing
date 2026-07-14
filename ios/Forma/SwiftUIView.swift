@@ -17,34 +17,75 @@ enum AppTab {
 struct SwiftUIView: View {
     @State private var activeTab: AppTab = .metrics
     @State private var selectedMetricsTab: MetricsTab = .insights
+    @State private var isMetricsAtTop = true
+    @StateObject private var reportStore = MetricsReportStore()
 
     var body: some View {
-        TabView(selection: $activeTab) {
-            Tab("Metrics", systemImage: "chart.xyaxis.line", value: .metrics) {
-                MetricsView(selectedTab: $selectedMetricsTab)
-                    .safeAreaPadding(.top, headerHeight + glassTabBarHeight)
-                    .ignoresSafeArea(.container, edges: .top)
-            }
+        NavigationStack {
+            TabView(selection: $activeTab) {
+                Tab("Metrics", systemImage: "chart.xyaxis.line", value: .metrics) {
+                    MetricsView(
+                        selectedTab: $selectedMetricsTab,
+                        isAtTop: $isMetricsAtTop,
+                        reportStore: reportStore
+                    )
+                }
 
-            Tab("Workouts", systemImage: "figure.strengthtraining.traditional", value: .workouts) {
-                WorkoutsView()
-                    .ignoresSafeArea(.container, edges: .top)
-            }
+                Tab("Workouts", systemImage: "figure.strengthtraining.traditional", value: .workouts) {
+                    WorkoutsView()
+                }
 
-            Tab("Record", systemImage: "record.circle", value: .record) {
-                RecordView()
-                    .ignoresSafeArea(.container, edges: .top)
-            }
+                Tab("Record", systemImage: "record.circle", value: .record) {
+                    RecordView()
+                }
 
-            Tab("Vitals", systemImage: "heart.text.square", value: .vitals) {
-                VitalsView()
-                    .ignoresSafeArea(.container, edges: .top)
+                Tab("Vitals", systemImage: "heart.text.square", value: .vitals) {
+                    VitalsView()
+                }
+            }
+            .tabBarMinimizeBehavior(.onScrollDown)
+            .background(FormaBackground())
+            .overlay(alignment: .top) {
+                HStack {
+                    if activeTab != .metrics || isMetricsAtTop {
+                        FormaBrandLockup(variant: .header, wordmarkColor: .white)
+                            .transition(.opacity.combined(with: .offset(y: -4)))
+                    }
+
+                    Spacer(minLength: 0)
+
+                    FloatingSettingsButton()
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, FormaSpacing.screenGutter)
+                .safeAreaPadding(.top, FormaSpacing.xs)
+                .animation(.easeOut(duration: 0.22), value: activeTab != .metrics || isMetricsAtTop)
+            }
+            .task(id: activeTab) {
+                guard activeTab == .metrics else { return }
+                await reportStore.loadAndPollReport()
             }
         }
-        .tabBarMinimizeBehavior(.onScrollDown)
-        .overlay(alignment: .top) {
-            FormaHeader(activeTab: $activeTab, selectedMetricsTab: $selectedMetricsTab)
+    }
+}
+
+enum FormaLayout {
+    static let floatingSettingsClearance: CGFloat = 60
+}
+
+struct FloatingSettingsButton: View {
+    var body: some View {
+        NavigationLink {
+            Settings()
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Color.primary)
         }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .frame(width: 44, height: 44)
+        .accessibilityLabel("Settings")
     }
 }
 
