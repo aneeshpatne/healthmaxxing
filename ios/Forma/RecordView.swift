@@ -6,193 +6,376 @@
 //
 
 import SwiftUI
+import UIKit
+
+enum RecordMetricStage: Int, Equatable {
+    case weight
+    case impedance
+    case heartRate
+}
+
+enum RecordMetricProgression {
+    static func nextStage(
+        after currentStage: RecordMetricStage?,
+        measurement: ScaleMeasurement
+    ) -> RecordMetricStage? {
+        switch currentStage {
+        case nil:
+            return measurement.weightKg == nil ? nil : .weight
+        case .weight:
+            return measurement.impedanceOhms == nil ? nil : .impedance
+        case .impedance:
+            return measurement.heartRate == nil ? nil : .heartRate
+        case .heartRate:
+            return nil
+        }
+    }
+}
+
+enum RecordCircleState: Equatable {
+    case ready
+    case connecting(String)
+    case weight(Float)
+    case impedance(Float)
+    case heartRate(Int, isSubmitting: Bool)
+    case saved
+    case recordingFailed(String)
+    case submissionFailed(String)
+
+    var isActionable: Bool {
+        switch self {
+        case .ready, .connecting, .weight, .impedance, .saved, .recordingFailed, .submissionFailed:
+            return true
+        case .heartRate(_, let isSubmitting):
+            return !isSubmitting
+        }
+    }
+}
+
+private enum RecordOutcome: Equatable {
+    case saved
+    case recordingFailed(String)
+    case submissionFailed(String)
+}
+
+@MainActor
+protocol IdleTimerControlling: AnyObject {
+    var isIdleTimerDisabled: Bool { get set }
+}
+
+extension UIApplication: IdleTimerControlling {}
+
+@MainActor
+final class IdleTimerLease {
+    private weak var controller: (any IdleTimerControlling)?
+    private let previousValue: Bool
+    private var isReleased = false
+
+    convenience init() {
+        self.init(controller: UIApplication.shared)
+    }
+
+    init(controller: any IdleTimerControlling) {
+        self.controller = controller
+        previousValue = controller.isIdleTimerDisabled
+        controller.isIdleTimerDisabled = true
+    }
+
+    func release() {
+        guard !isReleased else { return }
+        controller?.isIdleTimerDisabled = previousValue
+        isReleased = true
+    }
+
+    deinit {
+        MainActor.assumeIsolated {
+            release()
+        }
+    }
+}
 
 struct RecordView: View {
+    private static let minimumMetricDisplayDuration = Duration.milliseconds(800)
+
     @StateObject private var scaleManager = ScaleBLEManager()
 
     @State private var isSubmittingMeasurement = false
-    @State private var submissionStatus: String?
-    @State private var submissionError: String?
-    @State private var latestReportJobId: UUID?
     @State private var submittedMeasurement: ScaleMeasurement?
+    @State private var outcome: RecordOutcome?
+    @State private var displayedMetricStage: RecordMetricStage?
+    @State private var metricStageStartedAt = ContinuousClock.now
+    @State private var canRevealSubmissionOutcome = false
+    @State private var metricAdvanceTask: Task<Void, Never>?
+    @State private var outcomeRevealTask: Task<Void, Never>?
+    @State private var idleTimerLease: IdleTimerLease?
 
     private let apiClient = APIClient()
+    private let clock = ContinuousClock()
 
-    fileprivate enum MainButtonState {
-        case ready
-        case reading
-        case submitting
-        case queued
-        case failed
+    var body: some View {
+        GeometryReader { proxy in
+            let availableDimension = min(proxy.size.width - (FormaSpacing.screenGutter * 2), proxy.size.height - 40)
+            let diameter = min(240, max(180, availableDimension))
+
+            ZStack {
+                FormaBackground()
+
+                RecordCircle(
+                    state: circleState,
+                    diameter: diameter,
+                    isEnabled: circleIsEnabled,
+                    showsActivityRing: scaleManager.isReading,
+                    action: handleCircleAction
+                )
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, FormaLayout.floatingSettingsClearance)
+        }
+        .onChange(of: scaleManager.isReading, initial: true) { _, isReading in
+            updateIdleTimer(isReading: isReading)
+        }
+        .onChange(of: scaleManager.latestMeasurement) { _, measurement in
+            handleMeasurementUpdate(measurement)
+        }
+        .onChange(of: scaleManager.state) { _, state in
+            handleScaleStateChange(state)
+        }
+        .onDisappear {
+            if !scaleManager.isReading {
+                releaseIdleTimerLease()
+            }
+        }
     }
 
-    private var currentButtonState: MainButtonState {
-        if isSubmittingMeasurement {
-            return .submitting
+    private var circleState: RecordCircleState {
+        if let outcome {
+            switch outcome {
+            case .saved where canRevealSubmissionOutcome:
+                return .saved
+            case .submissionFailed(let message) where canRevealSubmissionOutcome:
+                return .submissionFailed(message)
+            case .recordingFailed(let message):
+                return .recordingFailed(message)
+            case .saved, .submissionFailed:
+                break
+            }
+        }
+
+        switch displayedMetricStage {
+        case .weight:
+            if let weight = scaleManager.latestMeasurement.weightKg {
+                return .weight(weight)
+            }
+        case .impedance:
+            if let impedance = scaleManager.latestMeasurement.impedanceOhms {
+                return .impedance(impedance)
+            }
+        case .heartRate:
+            if let heartRate = scaleManager.latestMeasurement.heartRate {
+                let isWaitingForResult = isSubmittingMeasurement || outcome != nil
+                return .heartRate(heartRate, isSubmitting: isWaitingForResult)
+            }
+        case nil:
+            break
         }
 
         if scaleManager.isReading {
-            return .reading
-        }
-
-        if submissionError != nil {
-            return .failed
-        }
-
-        if case .failed = scaleManager.state {
-            return .failed
-        }
-
-        if let submitted = submittedMeasurement, submitted == scaleManager.latestMeasurement {
-            return .queued
-        }
-
-        if scaleManager.state == .finished && submissionStatus != nil && submissionError == nil {
-            return .queued
+            return .connecting(connectionLabel)
         }
 
         return .ready
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: FormaSpacing.sectionGap) {
-                LiveMeasurementHero(
-                    state: scaleManager.state,
-                    measurement: scaleManager.latestMeasurement,
-                    submissionState: currentButtonState,
-                    errorMessage: activeErrorMessage
-                )
-
-                if let submissionStatus, currentButtonState == .queued {
-                    Label(submissionStatus, systemImage: "checkmark.circle.fill")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, FormaSpacing.xxs)
-                }
-            }
-            .padding(.horizontal, FormaSpacing.screenGutter)
-            .padding(.vertical, FormaSpacing.md)
-            .padding(.bottom, 92)
+    private var connectionLabel: String {
+        switch scaleManager.state {
+        case .idle:
+            return "Starting"
+        case .waitingForBluetooth:
+            return "Bluetooth"
+        case .scanning:
+            return "Searching"
+        case .connecting:
+            return "Connecting"
+        case .discoveringServices:
+            return "Preparing"
+        case .listening:
+            return "Reading"
+        case .finished:
+            return "Complete"
+        case .failed:
+            return "Try Again"
         }
-        .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
-        .background(FormaBackground())
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            MeasurementActionBar(
-                state: currentButtonState,
-                readingStatusLabel: scaleManager.state.label,
-                action: handleMainButtonAction
-            )
-        }
-        .onChange(of: scaleManager.state) { _, state in
-            guard state == .finished else { return }
+    }
 
+    private var circleIsEnabled: Bool {
+        switch circleState {
+        case .ready, .saved, .recordingFailed, .submissionFailed:
+            return true
+        case .connecting, .weight, .impedance, .heartRate:
+            return scaleManager.isReading
+        }
+    }
+
+    private func handleCircleAction() {
+        switch circleState {
+        case .ready, .recordingFailed:
+            startNewReading()
+
+        case .saved:
+            resetToReady()
+
+        case .submissionFailed:
             Task {
                 await submitLatestMeasurement()
             }
+
+        case .connecting, .weight, .impedance, .heartRate:
+            guard scaleManager.isReading else { return }
+            cancelReading()
         }
     }
 
-    private var activeErrorMessage: String? {
-        if let submissionError {
-            return submissionError
-        }
-        if case .failed(let message) = scaleManager.state {
-            return message
-        }
-        return nil
+    private func startNewReading() {
+        resetPresentation()
+        submittedMeasurement = nil
+        scaleManager.startReading()
     }
 
-    private func handleMainButtonAction() {
-        switch currentButtonState {
-        case .ready:
-            submissionError = nil
-            submissionStatus = nil
-            submittedMeasurement = nil
-            scaleManager.startReading()
+    private func resetToReady() {
+        resetPresentation()
+        submittedMeasurement = nil
+    }
 
-        case .reading:
-            scaleManager.stopReading()
+    private func cancelReading() {
+        scaleManager.stopReading()
+        resetPresentation()
+        submittedMeasurement = nil
+    }
 
-        case .failed:
-            submissionError = nil
-            if scaleManager.latestMeasurement.isFinal && canSubmitMeasurement(scaleManager.latestMeasurement) && submittedMeasurement != scaleManager.latestMeasurement {
-                Task {
-                    await submitLatestMeasurement()
-                }
-            } else {
-                submittedMeasurement = nil
-                scaleManager.startReading()
+    private func resetPresentation() {
+        metricAdvanceTask?.cancel()
+        metricAdvanceTask = nil
+        outcomeRevealTask?.cancel()
+        outcomeRevealTask = nil
+        outcome = nil
+        displayedMetricStage = nil
+        canRevealSubmissionOutcome = false
+        isSubmittingMeasurement = false
+    }
+
+    private func handleMeasurementUpdate(_ measurement: ScaleMeasurement) {
+        if displayedMetricStage == nil, measurement.weightKg != nil {
+            showMetricStage(.weight)
+        }
+
+        scheduleNextMetricStageIfNeeded()
+    }
+
+    private func handleScaleStateChange(_ state: ScaleConnectionState) {
+        switch state {
+        case .finished:
+            Task {
+                await submitLatestMeasurement()
             }
 
-        case .submitting, .queued:
+        case .failed(let message):
+            outcome = .recordingFailed(message)
+
+        case .idle, .waitingForBluetooth, .scanning, .connecting, .discoveringServices, .listening:
             break
         }
     }
 
-    private func canSubmitMeasurement(_ measurement: ScaleMeasurement) -> Bool {
-        measurement.weightKg != nil && measurement.heartRate != nil && measurement.impedanceOhms != nil
+    private func showMetricStage(_ stage: RecordMetricStage) {
+        displayedMetricStage = stage
+        metricStageStartedAt = clock.now
+
+        if stage == .heartRate {
+            scheduleSubmissionOutcomeReveal()
+        } else {
+            scheduleNextMetricStageIfNeeded()
+        }
+    }
+
+    private func scheduleNextMetricStageIfNeeded() {
+        guard let nextStage = nextAvailableMetricStage else { return }
+
+        metricAdvanceTask?.cancel()
+        let elapsed = metricStageStartedAt.duration(to: clock.now)
+        let delay = max(.zero, Self.minimumMetricDisplayDuration - elapsed)
+
+        metricAdvanceTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+            metricAdvanceTask = nil
+
+            guard nextStageIsStillAvailable(nextStage) else { return }
+            showMetricStage(nextStage)
+        }
+    }
+
+    private var nextAvailableMetricStage: RecordMetricStage? {
+        RecordMetricProgression.nextStage(
+            after: displayedMetricStage,
+            measurement: scaleManager.latestMeasurement
+        )
+    }
+
+    private func nextStageIsStillAvailable(_ stage: RecordMetricStage) -> Bool {
+        switch stage {
+        case .weight:
+            return scaleManager.latestMeasurement.weightKg != nil
+        case .impedance:
+            return scaleManager.latestMeasurement.impedanceOhms != nil
+        case .heartRate:
+            return scaleManager.latestMeasurement.heartRate != nil
+        }
+    }
+
+    private func scheduleSubmissionOutcomeReveal() {
+        outcomeRevealTask?.cancel()
+        canRevealSubmissionOutcome = false
+
+        outcomeRevealTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: Self.minimumMetricDisplayDuration)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+            canRevealSubmissionOutcome = true
+            outcomeRevealTask = nil
+        }
     }
 
     @MainActor
     private func submitLatestMeasurement() async {
         let measurement = scaleManager.latestMeasurement
 
-        guard submittedMeasurement != measurement else {
-            return
-        }
-
-        guard !isSubmittingMeasurement else {
+        guard submittedMeasurement != measurement, !isSubmittingMeasurement else {
             return
         }
 
         guard let profileId = PrimaryProfileStore.primaryProfileId else {
-            submissionStatus = nil
-            submissionError = "Create or select a primary profile before saving measurements."
+            outcome = .submissionFailed("Create or select a primary profile before saving measurements.")
             return
         }
 
         guard let weight = measurement.weightKg,
-              let heartbeat = measurement.heartRate,
+              let heartRate = measurement.heartRate,
               let impedance = measurement.impedanceOhms else {
-            submissionStatus = nil
-            submissionError = "A complete scale reading is required before saving."
-            return
-        }
-
-        await submitMeasurement(
-            weight: Double(weight),
-            heartbeat: heartbeat,
-            impedance: Double(impedance),
-            successStatusPrefix: "Report"
-        ) {
-            submittedMeasurement = measurement
-        }
-    }
-
-    @MainActor
-    private func submitMeasurement(
-        weight: Double,
-        heartbeat: Int,
-        impedance: Double,
-        successStatusPrefix: String,
-        afterSuccess: (() -> Void)? = nil
-    ) async {
-        guard !isSubmittingMeasurement else {
-            return
-        }
-
-        guard let profileId = PrimaryProfileStore.primaryProfileId else {
-            submissionStatus = nil
-            submissionError = "Create or select a primary profile before saving measurements."
+            outcome = .recordingFailed("A complete scale reading is required before saving.")
             return
         }
 
         isSubmittingMeasurement = true
-        submissionStatus = "Saving measurement"
-        submissionError = nil
-        latestReportJobId = nil
+        outcome = nil
 
         defer {
             isSubmittingMeasurement = false
@@ -201,30 +384,41 @@ struct RecordView: View {
         do {
             let body = AddMeasurementBody(
                 profileId: profileId,
-                weight: weight,
-                heartbeat: heartbeat,
-                impedance: impedance
+                weight: Double(weight),
+                heartbeat: heartRate,
+                impedance: Double(impedance)
             )
 
             let response = try await apiClient.send(AddMeasurementRequest(body: body))
-            afterSuccess?()
-            latestReportJobId = response.jobId
+            submittedMeasurement = measurement
             InsightReportJobStore.add(response.jobId, for: profileId)
-            submissionStatus = "\(successStatusPrefix) \(response.reportStatus)"
+            outcome = .saved
         } catch APIError.missingAuthToken {
-            submissionError = "Missing auth token."
-            submissionStatus = nil
+            outcome = .submissionFailed("Missing auth token.")
         } catch APIError.serverError(let statusCode, let responseBody) {
-            submissionError = Self.serverErrorMessage(statusCode: statusCode, responseBody: responseBody)
-            submissionStatus = nil
+            outcome = .submissionFailed(Self.serverErrorMessage(statusCode: statusCode, responseBody: responseBody))
         } catch {
             if (error as? URLError)?.code == .cancelled || error is CancellationError {
                 return
             }
 
-            submissionError = "Failed to save measurement."
-            submissionStatus = nil
+            outcome = .submissionFailed("Failed to save measurement.")
         }
+    }
+
+    private func updateIdleTimer(isReading: Bool) {
+        if isReading {
+            if idleTimerLease == nil {
+                idleTimerLease = IdleTimerLease()
+            }
+        } else {
+            releaseIdleTimerLease()
+        }
+    }
+
+    private func releaseIdleTimerLease() {
+        idleTimerLease?.release()
+        idleTimerLease = nil
     }
 
     private static func serverErrorMessage(statusCode: Int, responseBody: String?) -> String {
@@ -238,756 +432,297 @@ struct RecordView: View {
     }
 }
 
-// MARK: - Live measurement presentation
-
-private struct LiveMeasurementHero: View {
-    let state: ScaleConnectionState
-    let measurement: ScaleMeasurement
-    let submissionState: RecordView.MainButtonState
-    let errorMessage: String?
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var accent: Color {
-        switch submissionState {
-        case .queued: .green
-        case .failed: .red
-        case .reading: .formaTeal
-        case .ready, .submitting: .sleekAccent
-        }
-    }
-
-    private var stateTitle: String {
-        switch submissionState {
-        case .ready: "Ready to measure"
-        case .reading: state.label
-        case .submitting: "Saving measurement"
-        case .queued: "Measurement saved"
-        case .failed: "Measurement interrupted"
-        }
-    }
-
-    private var instruction: String {
-        switch submissionState {
-        case .ready: "Step onto your Forma scale and remain still while the reading settles."
-        case .reading: "Stay balanced. Your live measurements will appear as the scale sends them."
-        case .submitting: "Your reading is complete and is being added to your profile."
-        case .queued: "Your latest reading is ready for the next report."
-        case .failed: errorMessage ?? "Check Bluetooth and try the measurement again."
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: FormaSpacing.xl) {
-            HStack(spacing: FormaSpacing.sm) {
-                ZStack {
-                    Circle()
-                        .fill(accent.opacity(0.12))
-                        .frame(width: 44, height: 44)
-
-                    Image(systemName: statusIcon)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(accent)
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("FORMA SCALE")
-                        .font(FormaTypography.eyebrow)
-                        .tracking(0.6)
-                        .foregroundStyle(.tertiary)
-
-                    HStack(spacing: FormaSpacing.xs) {
-                        LiveStatusDot(color: accent, isActive: submissionState == .reading)
-                        Text(stateTitle)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer(minLength: 0)
-
-                Text(connectionLabel)
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(accent)
-                    .padding(.horizontal, 9)
-                    .frame(height: 26)
-                    .background(accent.opacity(0.10), in: Capsule())
-            }
-
-            VStack(spacing: FormaSpacing.xs) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(measurement.weightKg.map { String(format: "%.1f", $0) } ?? "—")
-                        .font(FormaTypography.heroMetric)
-                        .contentTransition(.numericText())
-                        .foregroundStyle(.primary)
-                        .minimumScaleFactor(0.72)
-
-                    Text("kg")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-
-                Text(instruction)
-                    .font(FormaTypography.body)
-                    .foregroundStyle(errorMessage == nil ? Color.secondary : Color.red)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 290)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, FormaSpacing.xs)
-
-            HStack(spacing: FormaSpacing.sm) {
-                SupportingMeasurement(
-                    title: "Heart rate",
-                    value: measurement.heartRate.map(String.init) ?? "—",
-                    unit: "bpm",
-                    systemImage: "heart.fill",
-                    tint: .formaCoral
-                )
-
-                SupportingMeasurement(
-                    title: "Impedance",
-                    value: measurement.impedanceOhms.map { String(format: "%.0f", $0) } ?? "—",
-                    unit: "Ω",
-                    systemImage: "waveform.path.ecg",
-                    tint: .formaCyan
-                )
-            }
-        }
-        .padding(FormaSpacing.xl)
-        .background {
-            RoundedRectangle(cornerRadius: FormaRadius.hero, style: .continuous)
-                .fill(Color.appSecondaryBackground)
-                .overlay {
-                    RadialGradient(
-                        colors: [accent.opacity(0.13), .clear],
-                        center: .topTrailing,
-                        startRadius: 0,
-                        endRadius: 260
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: FormaRadius.hero, style: .continuous))
-                }
-                .shadow(color: Color.cardShadow, radius: 20, x: 0, y: 10)
-                .shadow(color: Color.contactShadow, radius: 3, x: 0, y: 1)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: FormaRadius.hero, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(colors: [Color.appSurfaceHighlight, accent.opacity(0.12)], startPoint: .top, endPoint: .bottom),
-                    lineWidth: 0.5
-                )
-        }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.24), value: submissionState)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var statusIcon: String {
-        switch submissionState {
-        case .ready: "scalemass.fill"
-        case .reading: "antenna.radiowaves.left.and.right"
-        case .submitting: "arrow.up.doc.fill"
-        case .queued: "checkmark.circle.fill"
-        case .failed: "exclamationmark.triangle.fill"
-        }
-    }
-
-    private var connectionLabel: String {
-        switch submissionState {
-        case .ready: "BLE READY"
-        case .reading: "LIVE"
-        case .submitting: "SAVING"
-        case .queued: "SAVED"
-        case .failed: "RETRY"
-        }
-    }
-}
-
-private struct SupportingMeasurement: View {
-    let title: String
-    let value: String
-    let unit: String
-    let systemImage: String
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: FormaSpacing.sm) {
-            HStack {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(tint)
-                Spacer(minLength: 0)
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(value)
-                    .font(.system(size: 25, weight: .semibold, design: .rounded))
-                    .contentTransition(.numericText())
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text(unit)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .formaSurface(.inset, padding: FormaSpacing.md)
-    }
-}
-
-private struct LiveStatusDot: View {
-    let color: Color
-    let isActive: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulse = false
-
-    var body: some View {
-        ZStack {
-            if isActive && !reduceMotion {
-                Circle()
-                    .fill(color.opacity(0.28))
-                    .frame(width: 8, height: 8)
-                    .scaleEffect(pulse ? 2 : 1)
-                    .opacity(pulse ? 0 : 0.8)
-            }
-            Circle().fill(color).frame(width: 7, height: 7)
-        }
-        .frame(width: 12, height: 12)
-        .onAppear {
-            guard isActive, !reduceMotion else { return }
-            withAnimation(.easeOut(duration: 1.2).repeatForever(autoreverses: false)) {
-                pulse = true
-            }
-        }
-    }
-}
-
-private struct MeasurementActionBar: View {
-    let state: RecordView.MainButtonState
-    let readingStatusLabel: String
+private struct RecordCircle: View {
+    let state: RecordCircleState
+    let diameter: CGFloat
+    let isEnabled: Bool
+    let showsActivityRing: Bool
     let action: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        Group {
-            if #available(iOS 26.0, *) {
-                nativeAction
-            } else {
-                fallbackAction
-            }
-        }
-        .padding(.horizontal, FormaSpacing.screenGutter)
-        .padding(.top, FormaSpacing.sm)
-        .padding(.bottom, FormaSpacing.xs)
-        .background {
-            LinearGradient(
-                colors: [.clear, Color.appBackground.opacity(0.94)],
-                startPoint: .top,
-                endPoint: .center
-            )
-            .ignoresSafeArea()
-        }
-    }
-
-    @available(iOS 26.0, *)
-    @ViewBuilder
-    private var nativeAction: some View {
-        switch state {
-        case .queued:
-            statusContent(title: "Measurement saved", systemImage: "checkmark.circle.fill", tint: .green)
-                .glassEffect(.regular, in: .rect(cornerRadius: FormaRadius.action))
-
-        case .submitting:
-            statusContent(title: "Saving measurement", showsProgress: true)
-                .glassEffect(.regular, in: .rect(cornerRadius: FormaRadius.action))
-
-        case .reading:
-            Button(action: action) {
-                actionLabel(title: "Stop measurement", systemImage: "stop.fill")
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.roundedRectangle(radius: FormaRadius.action))
-            .tint(.red.opacity(0.18))
-            .foregroundStyle(.red)
-            .accessibilityHint(readingStatusLabel)
-
-        case .ready, .failed:
-            Button(action: action) {
-                actionLabel(title: buttonTitle, systemImage: buttonIcon)
-                    .foregroundStyle(Color.actionForeground)
-            }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.roundedRectangle(radius: FormaRadius.action))
-            .tint(.actionInk)
-        }
-    }
-
-    @ViewBuilder
-    private var fallbackAction: some View {
-        switch state {
-        case .queued:
-            statusContent(title: "Measurement saved", systemImage: "checkmark.circle.fill", tint: .green)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: FormaRadius.action, style: .continuous))
-
-        case .submitting:
-            statusContent(title: "Saving measurement", showsProgress: true)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: FormaRadius.action, style: .continuous))
-
-        case .reading:
-            Button(action: action) {
-                actionLabel(title: "Stop measurement", systemImage: "stop.fill")
-                    .foregroundStyle(.red)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: FormaRadius.action, style: .continuous))
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(backgroundFill)
                     .overlay {
-                        RoundedRectangle(cornerRadius: FormaRadius.action, style: .continuous)
-                            .stroke(Color.red.opacity(0.18), lineWidth: 0.5)
+                        Circle()
+                            .fill(highlightGradient)
                     }
-            }
-            .buttonStyle(QuietActionButtonStyle())
+                    .shadow(color: shadowColor, radius: 24, x: 0, y: 14)
 
-        case .ready, .failed:
-            Button(action: action) {
-                actionLabel(title: buttonTitle, systemImage: buttonIcon)
-                    .foregroundStyle(Color.actionForeground)
-                    .background(Color.actionInk, in: RoundedRectangle(cornerRadius: FormaRadius.action, style: .continuous))
-                    .overlay(alignment: .top) {
-                        RoundedRectangle(cornerRadius: FormaRadius.action, style: .continuous)
-                            .stroke(Color.white.opacity(0.14), lineWidth: 0.5)
-                    }
-                    .shadow(color: Color.contactShadow, radius: 8, y: 4)
+                content
+                    .padding(FormaSpacing.xl)
             }
-            .buttonStyle(QuietActionButtonStyle())
+            .frame(width: diameter, height: diameter)
+            .contentShape(Circle())
+            .overlay {
+                if showsActivityRing {
+                    OrbitingRecordRing(diameter: diameter + 18)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+            }
+        }
+        .buttonStyle(RecordCircleButtonStyle(isEnabled: isEnabled))
+        .disabled(!isEnabled)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(accessibilityValue)
+        .accessibilityHint(accessibilityHint)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: state)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch state {
+        case .ready:
+            Text("Record")
+                .font(.title2.weight(.semibold))
+
+        case .connecting(let label):
+            VStack(spacing: FormaSpacing.md) {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(Color.formaTeal)
+                Text(label)
+                    .font(.headline.weight(.semibold))
+            }
+
+        case .weight(let value):
+            metricContent(title: "Weight", value: String(format: "%.1f", value), unit: "kg")
+
+        case .impedance(let value):
+            metricContent(title: "Impedance", value: String(format: "%.0f", value), unit: "Ω")
+
+        case .heartRate(let value, let isSubmitting):
+            VStack(spacing: FormaSpacing.sm) {
+                metricContent(title: "Heart Rate", value: String(value), unit: "bpm")
+
+                if isSubmitting {
+                    ProgressView()
+                        .controlSize(.small)
+                        .transition(.opacity)
+                }
+            }
+
+        case .saved:
+            resultContent(title: "Saved", systemImage: "checkmark")
+
+        case .recordingFailed:
+            resultContent(title: "Try Again", systemImage: "exclamationmark")
+
+        case .submissionFailed:
+            resultContent(title: "Retry Save", systemImage: "arrow.clockwise")
         }
     }
 
-    private func actionLabel(title: String, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
-            .font(.headline.weight(.semibold))
-            .frame(maxWidth: .infinity, minHeight: 56)
-            .padding(.horizontal, FormaSpacing.md)
-            .contentShape(RoundedRectangle(cornerRadius: FormaRadius.action, style: .continuous))
+    private func metricContent(title: String, value: String, unit: String) -> some View {
+        VStack(spacing: FormaSpacing.xs) {
+            Text(title.uppercased())
+                .font(.caption.weight(.bold))
+                .tracking(0.8)
+                .opacity(0.72)
+
+            Text(value)
+                .font(.system(size: 54, weight: .semibold, design: .rounded))
+                .contentTransition(.numericText())
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+
+            Text(unit)
+                .font(.subheadline.weight(.semibold))
+                .opacity(0.72)
+        }
     }
 
-    private func statusContent(
-        title: String,
-        systemImage: String? = nil,
-        tint: Color = .secondary,
-        showsProgress: Bool = false
-    ) -> some View {
-        HStack(spacing: FormaSpacing.sm) {
-            if showsProgress {
-                ProgressView()
-            } else if let systemImage {
-                Image(systemName: systemImage)
-                    .foregroundStyle(tint)
-            }
-
+    private func resultContent(title: String, systemImage: String) -> some View {
+        VStack(spacing: FormaSpacing.sm) {
+            Image(systemName: systemImage)
+                .font(.system(size: 32, weight: .bold))
             Text(title)
-                .font(.headline.weight(.semibold))
-        }
-        .frame(maxWidth: .infinity, minHeight: 56)
-        .padding(.horizontal, FormaSpacing.md)
-    }
-
-    private var buttonTitle: String {
-        switch state {
-        case .ready: "Start measurement"
-        case .reading: "Stop measurement"
-        case .failed: "Try again"
-        case .submitting: "Saving measurement"
-        case .queued: "Measurement saved"
-        }
-    }
-
-    private var buttonIcon: String {
-        switch state {
-        case .ready: "play.fill"
-        case .reading: "stop.fill"
-        case .failed: "arrow.clockwise"
-        case .submitting: "arrow.up.doc.fill"
-        case .queued: "checkmark.circle.fill"
-        }
-    }
-}
-
-// MARK: - Legacy presentation (retained temporarily for source compatibility)
-
-private struct DeviceStatusCard: View {
-    let state: ScaleConnectionState
-    let measurement: ScaleMeasurement
-
-    private var isConnected: Bool {
-        switch state {
-        case .connecting, .discoveringServices, .listening, .finished:
-            return true
-        default:
-            return false
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: iconName)
                 .font(.title3.weight(.semibold))
-                .foregroundStyle(Color.sleekAccent)
-                .frame(width: 36, height: 36)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text("Forma BLE Scale")
-                        .font(.headline.weight(.semibold))
-
-                    HStack(spacing: 4) {
-                        Image(systemName: isConnected ? "bluetooth.fill" : "bluetooth")
-                            .font(.system(size: 10, weight: .bold))
-                        Text(isConnected ? "CONNECTED" : "BLE")
-                            .font(.system(size: 9, weight: .bold))
-                    }
-                    .foregroundStyle(isConnected ? Color.sleekAccent : Color.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(
-                        (isConnected ? Color.sleekAccent : Color.secondary).opacity(0.12),
-                        in: Capsule()
-                    )
-                }
-
-                HStack(spacing: 6) {
-                    PulsingDot(color: statusDotColor)
-
-                    Text(statusText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                if state == .idle {
-                    Text("Keep Bluetooth on and stand still while Forma reads the scale.")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 1)
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Forma BLE Scale")
-        .accessibilityValue(statusText)
-    }
-
-    private var iconName: String {
-        switch state {
-        case .finished:
-            return "checkmark.circle.fill"
-        case .failed:
-            return "exclamationmark.triangle.fill"
-        case .waitingForBluetooth, .scanning, .connecting, .discoveringServices, .listening:
-            return "antenna.radiowaves.left.and.right"
-        case .idle:
-            return "scalemass.fill"
+                .multilineTextAlignment(.center)
         }
     }
 
-    private var statusDotColor: Color {
+    private var backgroundFill: Color {
         switch state {
-        case .finished:
+        case .ready:
+            return .actionInk
+        case .saved:
             return .green
-        case .failed:
+        case .recordingFailed, .submissionFailed:
             return .red
-        case .waitingForBluetooth, .scanning, .connecting, .discoveringServices, .listening:
-            return Color.sleekAccent
-        case .idle:
-            return .green
+        case .connecting, .weight, .impedance, .heartRate:
+            return .appSecondaryBackground
         }
     }
 
-    private var statusText: String {
+    private var highlightGradient: RadialGradient {
+        let color: Color
         switch state {
-        case .failed(let message):
+        case .ready:
+            color = .white.opacity(0.16)
+        case .saved, .recordingFailed, .submissionFailed:
+            color = .white.opacity(0.18)
+        case .connecting, .weight, .impedance, .heartRate:
+            color = .formaTeal.opacity(0.15)
+        }
+
+        return RadialGradient(
+            colors: [color, .clear],
+            center: .topLeading,
+            startRadius: 0,
+            endRadius: diameter
+        )
+    }
+
+    private var shadowColor: Color {
+        switch state {
+        case .saved:
+            return .green.opacity(0.24)
+        case .recordingFailed, .submissionFailed:
+            return .red.opacity(0.24)
+        case .ready:
+            return .actionInk.opacity(0.24)
+        case .connecting, .weight, .impedance, .heartRate:
+            return .cardShadow
+        }
+    }
+
+    private var accessibilityLabel: String {
+        switch state {
+        case .ready:
+            return "Record"
+        case .connecting:
+            return "Connecting to scale"
+        case .weight:
+            return "Weight"
+        case .impedance:
+            return "Impedance"
+        case .heartRate:
+            return "Heart rate"
+        case .saved:
+            return "Measurement saved"
+        case .recordingFailed:
+            return "Measurement failed"
+        case .submissionFailed:
+            return "Submission failed"
+        }
+    }
+
+    private var accessibilityValue: String {
+        switch state {
+        case .ready:
+            return "Ready"
+        case .connecting(let label):
+            return label
+        case .weight(let value):
+            return String(format: "%.1f kilograms", value)
+        case .impedance(let value):
+            return String(format: "%.0f ohms", value)
+        case .heartRate(let value, let isSubmitting):
+            return "\(value) beats per minute\(isSubmitting ? ", submitting" : "")"
+        case .saved:
+            return "Tap to record another measurement"
+        case .recordingFailed(let message), .submissionFailed(let message):
             return message
-        case .finished where measurement.weightKg == nil:
-            return "Reading complete. No weight decoded."
-        case .idle:
-            return "Ready to measure"
-        default:
-            return state.label
+        }
+    }
+
+    private var accessibilityHint: String {
+        switch state {
+        case .ready:
+            return "Starts a new scale reading"
+        case .saved:
+            return "Resets the recorder"
+        case .recordingFailed:
+            return "Starts a new scale reading"
+        case .submissionFailed:
+            return "Retries saving this measurement"
+        case .connecting, .weight, .impedance:
+            return "Tap to cancel this scale reading"
+        case .heartRate(_, let isSubmitting):
+            return isSubmitting ? "Measurement is being saved" : "Tap to cancel this scale reading"
         }
     }
 }
 
-// MARK: - Pulsing Status Dot
+private struct OrbitingRecordRing: View {
+    let diameter: CGFloat
 
-private struct PulsingDot: View {
-    var color: Color = .green
-    @State private var isPulsing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             Circle()
-                .fill(color.opacity(0.35))
-                .frame(width: 12, height: 12)
-                .scaleEffect(isPulsing ? 1.6 : 1.0)
-                .opacity(isPulsing ? 0.0 : 0.8)
-                .onAppear {
-                    withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
-                        isPulsing = true
-                    }
-                }
+                .stroke(Color.formaTeal.opacity(0.12), lineWidth: 3)
 
-            Circle()
-                .fill(color)
-                .frame(width: 7, height: 7)
-        }
-    }
-}
+            if reduceMotion {
+                Circle()
+                    .trim(from: 0, to: 0.24)
+                    .stroke(
+                        Color.formaTeal,
+                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
+                    let revolutionDuration = 1.6
+                    let progress = context.date.timeIntervalSinceReferenceDate
+                        .truncatingRemainder(dividingBy: revolutionDuration) / revolutionDuration
 
-// MARK: - Metric Cards Section
-
-private struct MetricCardsSection: View {
-    let measurement: ScaleMeasurement
-
-    var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 12) {
-                HalfMetricCard(
-                    title: "Weight",
-                    value: measurement.weightKg.map { String(format: "%.1f", $0) } ?? "--.-",
-                    unit: "kg",
-                    systemImage: "scalemass.fill",
-                    accentColor: Color.sleekAccent
-                )
-
-                HalfMetricCard(
-                    title: "Heart Rate",
-                    value: measurement.heartRate.map(String.init) ?? "--",
-                    unit: "bpm",
-                    systemImage: "heart.fill",
-                    accentColor: Color(red: 0.92, green: 0.25, blue: 0.55)
-                )
-            }
-
-            FullBioDataCard(
-                title: "Impedance",
-                value: measurement.impedanceOhms.map { String(format: "%.0f", $0) } ?? "---",
-                unit: "ohms",
-                systemImage: "waveform.path.ecg",
-                accentColor: Color(red: 0.15, green: 0.75, blue: 0.95)
-            )
-        }
-    }
-}
-
-// MARK: - Metric Cards
-
-private struct HalfMetricCard: View {
-    let title: String
-    let value: String
-    let unit: String
-    let systemImage: String
-    let accentColor: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(accentColor)
-                .frame(width: 28, height: 28, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(value)
-                        .font(.system(size: 31, weight: .semibold, design: .rounded))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-
-                    Text(unit)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
+                    Circle()
+                        .trim(from: 0, to: 0.24)
+                        .stroke(
+                            AngularGradient(
+                                colors: [.formaTeal.opacity(0.22), .formaTeal],
+                                center: .center
+                            ),
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees((progress * 360) - 90))
                 }
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 122, alignment: .leading)
-        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 1)
-        )
+        .frame(width: diameter, height: diameter)
+        .accessibilityHidden(true)
     }
 }
 
-private struct FullBioDataCard: View {
-    let title: String
-    let value: String
-    let unit: String
-    let systemImage: String
-    let accentColor: Color
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(accentColor)
-                .frame(width: 30, height: 30)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-                }
-
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(value)
-                        .font(.system(size: 34, weight: .semibold, design: .rounded))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-
-                    Text(unit)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.appSecondaryBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 1)
-        )
-    }
-}
-
-
-private struct QuietActionButtonStyle: ButtonStyle {
+private struct RecordCircleButtonStyle: ButtonStyle {
+    let isEnabled: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
-            .opacity(configuration.isPressed ? 0.94 : 1)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && isEnabled && !reduceMotion ? 0.96 : 1)
+            .opacity(configuration.isPressed && isEnabled ? 0.92 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: configuration.isPressed)
     }
 }
 
-// MARK: - Wave Drawing Utilities
-
-private struct SineWaveChart: View {
-    let color: Color
-
-    var body: some View {
-        ZStack {
-            SineWaveFillShape(amplitude: 10, frequency: 1.8)
-                .fill(
-                    LinearGradient(
-                        colors: [color.opacity(0.22), color.opacity(0.0)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-
-            SineWaveShape(amplitude: 10, frequency: 1.8)
-                .stroke(color.opacity(0.55), lineWidth: 1.5)
-        }
-    }
+#Preview("Record") {
+    RecordCircle(state: .ready, diameter: 240, isEnabled: true, showsActivityRing: false, action: {})
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(FormaBackground())
 }
 
-private struct MeshWaveChart: View {
-    var body: some View {
-        ZStack {
-            SineWaveFillShape(amplitude: 14, frequency: 1.4)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.sleekAccent.opacity(0.2), Color.cyan.opacity(0.0)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-
-            SineWaveShape(amplitude: 14, frequency: 1.4)
-                .stroke(
-                    LinearGradient(
-                        colors: [Color.sleekAccent, Color.cyan],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ),
-                    lineWidth: 2
-                )
-
-            SineWaveShape(amplitude: 8, frequency: 2.6)
-                .stroke(
-                    LinearGradient(
-                        colors: [Color.sleekAccent.opacity(0.55), Color.formaCyan.opacity(0.32)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ),
-                    lineWidth: 1.2
-                )
-        }
+#Preview("Live measurements") {
+    VStack(spacing: FormaSpacing.xl) {
+        RecordCircle(state: .weight(73.5), diameter: 210, isEnabled: true, showsActivityRing: true, action: {})
+        RecordCircle(state: .heartRate(72, isSubmitting: true), diameter: 210, isEnabled: false, showsActivityRing: false, action: {})
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(FormaBackground())
 }
 
-private struct SineWaveShape: Shape {
-    var amplitude: CGFloat = 12
-    var frequency: CGFloat = 2
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let width = rect.width
-        let height = rect.height
-        let midY = height / 2
-
-        path.move(to: CGPoint(x: 0, y: midY))
-
-        for x in stride(from: 0, through: width, by: 2) {
-            let relativeX = x / width
-            let y = midY + sin(relativeX * .pi * frequency * 2) * amplitude
-            path.addLine(to: CGPoint(x: x, y: y))
-        }
-
-        return path
+#Preview("Results") {
+    HStack(spacing: FormaSpacing.md) {
+        RecordCircle(state: .saved, diameter: 170, isEnabled: true, showsActivityRing: false, action: {})
+        RecordCircle(state: .submissionFailed("Failed to save measurement."), diameter: 170, isEnabled: true, showsActivityRing: false, action: {})
     }
-}
-
-private struct SineWaveFillShape: Shape {
-    var amplitude: CGFloat = 12
-    var frequency: CGFloat = 2
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let width = rect.width
-        let height = rect.height
-        let midY = height / 2
-
-        path.move(to: CGPoint(x: 0, y: height))
-        path.addLine(to: CGPoint(x: 0, y: midY))
-
-        for x in stride(from: 0, through: width, by: 2) {
-            let relativeX = x / width
-            let y = midY + sin(relativeX * .pi * frequency * 2) * amplitude
-            path.addLine(to: CGPoint(x: x, y: y))
-        }
-
-        path.addLine(to: CGPoint(x: width, y: height))
-        path.closeSubpath()
-        return path
-    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(FormaBackground())
 }
