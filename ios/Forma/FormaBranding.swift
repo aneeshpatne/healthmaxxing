@@ -42,6 +42,7 @@ enum FormaBrandLockupVariant {
 
 struct FormaBrandLockup: View {
     let variant: FormaBrandLockupVariant
+    var wordmarkColor: Color = .primary
 
     var body: some View {
         HStack(alignment: .center, spacing: variant.spacing) {
@@ -56,7 +57,7 @@ struct FormaBrandLockup: View {
             Text("Forma")
                 .font(FormaTypography.wordmark(size: variant.textSize))
                 .tracking(variant.tracking)
-                .foregroundStyle(.primary)
+                .foregroundStyle(wordmarkColor)
                 .lineLimit(1)
         }
         .fixedSize(horizontal: true, vertical: false)
