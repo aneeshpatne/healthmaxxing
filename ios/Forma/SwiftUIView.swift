@@ -18,6 +18,7 @@ struct SwiftUIView: View {
     @State private var activeTab: AppTab = .metrics
     @State private var selectedMetricsTab: MetricsTab = .insights
     @State private var isMetricsAtTop = true
+    @StateObject private var reportStore = MetricsReportStore()
 
     var body: some View {
         NavigationStack {
@@ -25,7 +26,8 @@ struct SwiftUIView: View {
                 Tab("Metrics", systemImage: "chart.xyaxis.line", value: .metrics) {
                     MetricsView(
                         selectedTab: $selectedMetricsTab,
-                        isAtTop: $isMetricsAtTop
+                        isAtTop: $isMetricsAtTop,
+                        reportStore: reportStore
                     )
                 }
 
@@ -46,7 +48,7 @@ struct SwiftUIView: View {
             .overlay(alignment: .top) {
                 HStack {
                     if activeTab != .metrics || isMetricsAtTop {
-                        FormaBrandLockup(variant: .header)
+                        FormaBrandLockup(variant: .header, wordmarkColor: .white)
                             .transition(.opacity.combined(with: .offset(y: -4)))
                     }
 
@@ -58,6 +60,10 @@ struct SwiftUIView: View {
                 .padding(.horizontal, FormaSpacing.screenGutter)
                 .safeAreaPadding(.top, FormaSpacing.xs)
                 .animation(.easeOut(duration: 0.22), value: activeTab != .metrics || isMetricsAtTop)
+            }
+            .task(id: activeTab) {
+                guard activeTab == .metrics else { return }
+                await reportStore.loadAndPollReport()
             }
         }
     }
