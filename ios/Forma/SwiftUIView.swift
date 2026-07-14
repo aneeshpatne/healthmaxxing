@@ -44,22 +44,20 @@ struct SwiftUIView: View {
             .tabBarMinimizeBehavior(.onScrollDown)
             .background(FormaBackground())
             .overlay(alignment: .top) {
-                GlassEffectContainer(spacing: 12) {
-                    HStack {
-                        if activeTab != .metrics || isMetricsAtTop {
-                            FormaBrandMark()
-                                .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                        }
-
-                        Spacer(minLength: 0)
-
-                        FloatingSettingsButton()
+                HStack {
+                    if activeTab != .metrics || isMetricsAtTop {
+                        FormaBrandLockup(variant: .header)
+                            .transition(.opacity.combined(with: .offset(y: -4)))
                     }
-                    .frame(maxWidth: .infinity)
+
+                    Spacer(minLength: 0)
+
+                    FloatingSettingsButton()
                 }
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, FormaSpacing.screenGutter)
                 .safeAreaPadding(.top, FormaSpacing.xs)
-                .animation(.easeOut(duration: 0.2), value: activeTab != .metrics || isMetricsAtTop)
+                .animation(.easeOut(duration: 0.22), value: activeTab != .metrics || isMetricsAtTop)
             }
         }
     }
@@ -69,26 +67,13 @@ enum FormaLayout {
     static let floatingSettingsClearance: CGFloat = 60
 }
 
-struct FormaBrandMark: View {
-    var body: some View {
-        Text("Forma")
-            .font(FormaTypography.wordmark)
-            .tracking(-0.35)
-            .foregroundStyle(.primary)
-            .padding(.horizontal, FormaSpacing.sm)
-            .frame(height: 44)
-            .glassEffect(.regular, in: Capsule())
-            .accessibilityLabel("Forma")
-    }
-}
-
 struct FloatingSettingsButton: View {
     var body: some View {
         NavigationLink {
             Settings()
         } label: {
-            Image(systemName: "gearshape.fill")
-                .font(.title3)
+            Image(systemName: "gearshape")
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Color.primary)
         }
         .buttonStyle(.glass)

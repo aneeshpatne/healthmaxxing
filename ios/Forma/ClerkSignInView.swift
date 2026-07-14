@@ -17,10 +17,7 @@ struct ClerkSignInView: View {
 
             VStack(alignment: .leading, spacing: FormaSpacing.xxl) {
                 VStack(alignment: .leading, spacing: FormaSpacing.xs) {
-                    Text("Forma")
-                        .font(.system(size: 48, weight: .bold, design: .default))
-                        .tracking(-1.4)
-                        .foregroundStyle(.primary)
+                    FormaBrandLockup(variant: .hero)
 
                     Text("Your body, understood over time.")
                         .font(.title3.weight(.semibold))
