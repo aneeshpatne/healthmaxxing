@@ -485,18 +485,20 @@ export const insights_schema = z.object({
         "One concise coaching sentence explaining what the bone mass trend means.",
       ),
     }),
-    muscle_mass_trend: z.object({
+    muscle_ratio_trend: z.object({
       heading: z
         .string()
-        .describe("Short display heading for muscle mass trend."),
-      title: z.string().describe("Short title interpreting muscle mass trend."),
+        .describe("Short display heading for muscle percentage trend."),
+      title: z
+        .string()
+        .describe("Short title interpreting the muscle percentage trend."),
       comment: z
         .string()
         .describe(
-          "One concise sentence explaining how muscle mass is trending.",
+          "One concise sentence explaining how muscle percentage is trending.",
         ),
       remark: remark_schema.describe(
-        "One concise coaching sentence explaining what the muscle mass trend means.",
+        "One concise coaching sentence explaining what the muscle percentage trend means.",
       ),
     }),
     skeletal_muscle_mass_trend: z.object({
@@ -570,12 +572,12 @@ export function preprocessProfileAiReportPayload({
       fat_ratio: withValueAndTrends(
         fat.fat_ratio,
         fatReport?.metrics.fatPercent ?? null,
-        { fatMassKg: fatReport?.last30Days.fatMassKg ?? [] },
+        { fatPercent: fatReport?.last30Days.fatPercent ?? [] },
       ),
       fat_ratio_trend: withValueAndTrends(
         fat.fat_ratio_trend,
         fatReport?.metrics.fatPercent ?? null,
-        { fatMassKg: fatReport?.last30Days.fatMassKg ?? [] },
+        { fatPercent: fatReport?.last30Days.fatPercent ?? [] },
       ),
       visceral_vs_subcutaneous: withValueAndTrends(
         fat.visceral_vs_subcutaneous,
@@ -614,15 +616,15 @@ export function preprocessProfileAiReportPayload({
       muscle_mass: withValueAndTrends(
         muscle.muscle_mass,
         muscleReport?.metrics.totalMuscleKg ?? null,
-        { muscleRatio: muscleReport?.last30Days.muscleRatio ?? [] },
+        { muscleMassKg: muscleReport?.last30Days.muscleMassKg ?? [] },
       ),
       bone_mass_trend: withValueAndTrends(
         muscle.bone_mass_trend,
         muscleReport?.metrics.boneMassKg ?? null,
         { boneMassKg: muscleReport?.last30Days.boneMassKg ?? [] },
       ),
-      muscle_mass_trend: withValueAndTrends(
-        muscle.muscle_mass_trend,
+      muscle_ratio_trend: withValueAndTrends(
+        muscle.muscle_ratio_trend,
         muscleReport?.metrics.muscleRatio ?? null,
         { muscleRatio: muscleReport?.last30Days.muscleRatio ?? [] },
       ),
