@@ -633,6 +633,7 @@ export type FatReport = {
     subcutaneousFatRatio: number;
   };
   last30Days: {
+    fatPercent: FatReportTrendPoint[];
     fatMassKg: FatReportTrendPoint[];
     visceralFatMassKg: FatReportTrendPoint[];
     subcutaneousFatMassKg: FatReportTrendPoint[];
@@ -683,6 +684,7 @@ export type MuscleReport = {
   };
   last30Days: {
     boneMassKg: MuscleReportTrendPoint[];
+    muscleMassKg: MuscleReportTrendPoint[];
     muscleRatio: MuscleReportTrendPoint[];
     skeletalMuscleMassKg: MuscleReportTrendPoint[];
     skeletalMuscleRatio: MuscleReportTrendPoint[];
@@ -3275,6 +3277,7 @@ export async function getProfilePerformance(
  function buildFatTrendPoints(
   rows: Array<{
     createdAt: string;
+    fatPercent: number;
     fatMassKg: number;
     visceralFatMassKg: number;
     visceralFatPercent: number;
@@ -3283,6 +3286,10 @@ export async function getProfilePerformance(
   }>,
 ): FatReport["last30Days"] {
   return {
+    fatPercent: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.fatPercent,
+    })),
     fatMassKg: rows.map((row) => ({
       createdAt: row.createdAt,
       value: row.fatMassKg,
@@ -3358,6 +3365,7 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
       `
   SELECT
     created_at AS createdAt,
+    body_fat_pct AS fatPercent,
     fat_mass_kg AS fatMassKg,
     ROUND(fat_mass_kg - subcutaneous_fat_mass_kg, 2) AS visceralFatMassKg,
     ROUND(body_fat_pct - subcutaneous_fat_pct, 2) AS visceralFatPercent,
@@ -3371,6 +3379,7 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
     )
     .all(profileId) as Array<{
     createdAt: string;
+    fatPercent: number;
     fatMassKg: number;
     visceralFatMassKg: number;
     visceralFatPercent: number;
@@ -3432,6 +3441,7 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
   rows: Array<{
     createdAt: string;
     boneMassKg: number;
+    muscleMassKg: number;
     muscleRatio: number;
     skeletalMuscleMassKg: number;
     skeletalMuscleRatio: number;
@@ -3441,6 +3451,10 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
     boneMassKg: rows.map((row) => ({
       createdAt: row.createdAt,
       value: row.boneMassKg,
+    })),
+    muscleMassKg: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.muscleMassKg,
     })),
     muscleRatio: rows.map((row) => ({
       createdAt: row.createdAt,
@@ -3506,6 +3520,7 @@ export async function getProfileMuscleReport(
   SELECT
     created_at AS createdAt,
     ROUND(MAX(fat_free_mass_kg - muscle_mass_kg, 0), 2) AS boneMassKg,
+    muscle_mass_kg AS muscleMassKg,
     muscle_rate_pct AS muscleRatio,
     skeletal_muscle_kg AS skeletalMuscleMassKg,
     CASE
@@ -3521,6 +3536,7 @@ export async function getProfileMuscleReport(
     .all(profileId) as Array<{
     createdAt: string;
     boneMassKg: number;
+    muscleMassKg: number;
     muscleRatio: number;
     skeletalMuscleMassKg: number;
     skeletalMuscleRatio: number;
