@@ -91,9 +91,9 @@ flowchart TD
 flowchart TB
     subgraph API[Application]
         APP[Fastify application]
-        INGEST[/ingest routes]
-        CLIENT[/client routes]
-        HEALTH[/health]
+        INGEST["/ingest routes"]
+        CLIENT["/client routes"]
+        HEALTH["/health"]
         APP --> INGEST
         APP --> CLIENT
         APP --> HEALTH
