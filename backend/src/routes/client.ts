@@ -1,15 +1,15 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
+import { authMiddleware } from "../middleware/auth";
 import { v7 as uuidv7 } from "uuid";
-import { RedisClient } from "bun";
 import {
   addBodyMeasurement,
-  accountExists,
   getLatestBodyCompositionSnapshot,
   getLatestUserBodyMeasurement,
   getProfileById,
   initJob,
   jobExists,
   getProfileAiOverview,
+  getProfileAiReportById,
   getProfileEffortScore,
   getProfileFatReport,
   getProfileFormaScore,
@@ -19,36 +19,43 @@ import {
   isBodyCompositionTrendMetric,
   isBodyCompositionTrendPeriod,
   listBodyCompositionTrends,
+  listActiveProfileAiReportJobs,
+  listLatestCompletedProfileAiReportIds,
+  listRecentProfileAiReports,
   listUserBodyMeasurements,
   listUsers,
+  listUsersByAccountId,
   listUserWeight,
-  profileExists,
+  profileBelongsToAccount,
   registerProfileMetadata,
   registerProfile,
-  registerUser,
+  updateProfile,
   PERIODS,
   TREND_COLUMNS,
-  type AccountId,
   type JobId,
   type ProfileId,
 } from "../db/commands";
 
-const redis = new RedisClient("redis://localhost:6379");
-const sub = new RedisClient("redis://localhost:6379");
-const LONG_POLL_TIMEOUT_MS = 25_000;
+const LONG_POLL_DEFAULT_TIMEOUT_MS = 25_000;
+const LONG_POLL_MAX_TIMEOUT_MS = 30_000;
+const LONG_POLL_INTERVAL_MS = 1_000;
 
-type JobStatusState = {
-  status?: string;
-  version?: number;
-  updatedAt?: number;
-};
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-function parseJobStatus(raw: string): JobStatusState | null {
-  try {
-    return JSON.parse(raw) as JobStatusState;
-  } catch {
-    return null;
-  }
+function parseReportLimit(rawLimit: number | string | undefined) {
+  const parsedLimit = Number(rawLimit ?? 5);
+  return Number.isFinite(parsedLimit)
+    ? Math.min(Math.max(Math.trunc(parsedLimit), 1), 20)
+    : 5;
+}
+
+function parseLongPollTimeoutMs(rawTimeoutMs: number | string | undefined) {
+  const parsedTimeoutMs = Number(rawTimeoutMs ?? LONG_POLL_DEFAULT_TIMEOUT_MS);
+  return Number.isFinite(parsedTimeoutMs)
+    ? Math.min(Math.max(Math.trunc(parsedTimeoutMs), 0), LONG_POLL_MAX_TIMEOUT_MS)
+    : LONG_POLL_DEFAULT_TIMEOUT_MS;
 }
 
 function calculateAgeYears(dateOfBirth: string): number {
@@ -70,137 +77,55 @@ function calculateAgeYears(dateOfBirth: string): number {
   return age;
 }
 
-const clientRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/state/:id/poll", async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const { version } = req.query as { version: string };
-    const clientVersion = Number(version ?? 0);
-    const stateKey = `status:${id}`;
-    const channel = `status:${id}`;
+async function sendProfileNotFoundIfUnauthorized(
+  profileId: ProfileId,
+  accountId: string,
+  reply: FastifyReply,
+) {
+  if (await profileBelongsToAccount(profileId, accountId)) {
+    return false;
+  }
 
-    const currentRaw = await redis.get(stateKey);
-
-    if (currentRaw === null) {
-      return reply.code(404).send({
-        ok: false,
-        error: "Job status does not exist",
-      });
-    }
-
-    const currentState = parseJobStatus(currentRaw);
-
-    if (currentState === null) {
-      return reply.code(500).send({
-        ok: false,
-        error: "Job status is invalid",
-      });
-    }
-
-    if ((currentState.version ?? 0) > clientVersion) {
-      return reply.send({
-        ok: true,
-        changed: true,
-        state: currentState,
-      });
-    }
-
-    const nextState = await new Promise<JobStatusState | null>(
-      (resolve, reject) => {
-        let settled = false;
-        let timeout: ReturnType<typeof setTimeout>;
-
-        const settle = (state: JobStatusState | null) => {
-          if (settled) {
-            return;
-          }
-
-          settled = true;
-          clearTimeout(timeout);
-          sub.unsubscribe(channel, listener).catch((error) => {
-            app.log.warn({ error, channel }, "Failed to unsubscribe long poll");
-          });
-          resolve(state);
-        };
-
-        const listener = (message: string) => {
-          const state = parseJobStatus(message);
-
-          if (state !== null && (state.version ?? 0) > clientVersion) {
-            settle(state);
-          }
-        };
-
-        timeout = setTimeout(() => {
-          settle(null);
-        }, LONG_POLL_TIMEOUT_MS);
-
-        sub
-          .subscribe(channel, listener)
-          .then(async () => {
-            const latestRaw = await redis.get(stateKey);
-            const latestState =
-              latestRaw === null ? null : parseJobStatus(latestRaw);
-
-            if (
-              latestState !== null &&
-              (latestState.version ?? 0) > clientVersion
-            ) {
-              settle(latestState);
-            }
-          })
-          .catch((error) => {
-            if (!settled) {
-              settled = true;
-              clearTimeout(timeout);
-              reject(error);
-            }
-          });
-      },
-    );
-
-    if (nextState === null) {
-      return reply.send({
-        ok: true,
-        changed: false,
-        state: currentState,
-      });
-    }
-
-    return reply.send({
-      ok: true,
-      changed: true,
-      state: nextState,
-    });
+  reply.code(404).send({
+    ok: false,
+    error: "Profile id does not exist",
   });
+  return true;
+}
+
+const clientRoutes: FastifyPluginAsync = async (app) => {
+  app.addHook("preHandler", authMiddleware);
+
+  app.addHook("preHandler", async (request) => {
+    if (
+      typeof request.params === "object" &&
+      request.params !== null &&
+      "profileId" in request.params
+    ) {
+      const params = request.params as Record<string, unknown>;
+      if (typeof params.profileId === "string") {
+        params.profileId = params.profileId.toLowerCase();
+      }
+    }
+  });
+
   app.post(
     "/register",
-    {
-      schema: {
-        body: {
-          type: "object",
-          required: ["mailAddress"],
-          properties: {
-            mailAddress: {
-              type: "string",
-            },
-          },
-        },
-      },
-    },
     async (request, reply) => {
-      const { mailAddress } = request.body as {
-        mailAddress: string;
-      };
-      const id: AccountId = await registerUser({
-        mailAddress,
-      });
+      const {
+        account,
+        clerkUserId,
+      } = request.auth;
 
-      app.log.info({ id, mailAddress }, "Registered account");
+      app.log.info(
+        { id: account.id, clerkUserId },
+        "Resolved account from auth middleware",
+      );
 
       return reply.code(201).send({
         ok: true,
-        id,
-        mailAddress,
+        id: account.id,
+        account,
       });
     },
   );
@@ -208,14 +133,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/register/profiles",
     {
+      config: {
+        deprecated: true,
+      },
       schema: {
         body: {
           type: "object",
-          required: ["accountId", "name"],
+          required: ["name"],
           properties: {
-            accountId: {
-              type: "string",
-            },
             name: {
               type: "string",
             },
@@ -227,33 +152,33 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
-      const { accountId, name, isPrimary = false } = request.body as {
-        accountId: string;
+      reply.header("Deprecation", "true");
+      reply.header("Sunset", "Tue, 30 Jun 2026 23:59:59 GMT");
+      reply.header("Link", '</client/register/profiles/v2>; rel="successor-version"');
+
+      const { name, isPrimary = false } = request.body as {
         name: string;
         isPrimary?: boolean;
       };
+      const accountId = request.auth.account.id;
 
-      if (!await accountExists(accountId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Account id does not exist",
-        });
-      }
-
-      const id: ProfileId = await registerProfile({
+      const { id, isPrimary: registeredIsPrimary } = await registerProfile({
         accountId,
         name,
         isPrimary,
       });
 
-      app.log.info({ id, accountId, name, isPrimary }, "Registered profile");
+      app.log.info(
+        { id, accountId, name, isPrimary: registeredIsPrimary },
+        "Registered profile",
+      );
 
       return reply.code(201).send({
         ok: true,
         id,
         accountId,
         name,
-        isPrimary,
+        isPrimary: registeredIsPrimary,
       });
     },
   );
@@ -261,6 +186,9 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
   app.post(
     "/register/metadata",
     {
+      config: {
+        deprecated: true,
+      },
       schema: {
         body: {
           type: "object",
@@ -302,6 +230,10 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       },
     },
     async (request, reply) => {
+      reply.header("Deprecation", "true");
+      reply.header("Sunset", "Tue, 30 Jun 2026 23:59:59 GMT");
+      reply.header("Link", '</client/register/profiles/v2>; rel="successor-version"');
+
       const {
         profileId,
         heightCm,
@@ -320,11 +252,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         preferredBodyFatPct?: number;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       await registerProfileMetadata({
@@ -363,8 +298,268 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  app.get("/users", async (_request, reply) => {
-    const users = await listUsers();
+  app.post(
+    "/register/profiles/v2",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["name", "heightCm", "dateOfBirth", "peopleType", "gender"],
+          properties: {
+            name: {
+              type: "string",
+            },
+            isPrimary: {
+              type: "boolean",
+              default: false,
+            },
+            heightCm: {
+              type: "number",
+            },
+            dateOfBirth: {
+              type: "string",
+            },
+            peopleType: {
+              type: "string",
+              enum: ["standard", "athlete"],
+            },
+            gender: {
+              type: "string",
+              enum: ["male", "female"],
+            },
+            profileImage: {
+              type: "string",
+              nullable: true,
+            },
+            preferredBodyFatPct: {
+              type: "number",
+              default: 18,
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const {
+        name,
+        isPrimary = false,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage = null,
+        preferredBodyFatPct = 18,
+      } = request.body as {
+        name: string;
+        isPrimary?: boolean;
+        heightCm: number;
+        dateOfBirth: string;
+        peopleType: "standard" | "athlete";
+        gender: "male" | "female";
+        profileImage?: string | null;
+        preferredBodyFatPct?: number;
+      };
+      const accountId = request.auth.account.id;
+
+      const {
+        id: profileId,
+        isPrimary: registeredIsPrimary,
+      } = await registerProfile({
+        accountId,
+        name,
+        isPrimary,
+      });
+
+      await registerProfileMetadata({
+        profileId,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage,
+        preferredBodyFatPct,
+      });
+
+      app.log.info(
+        {
+          profileId,
+          accountId,
+          name,
+          isPrimary: registeredIsPrimary,
+          heightCm,
+          dateOfBirth,
+          peopleType,
+          gender,
+          profileImage,
+          preferredBodyFatPct,
+        },
+        "Registered profile with metadata",
+      );
+
+      return reply.code(201).send({
+        ok: true,
+        profileId,
+        accountId,
+        name,
+        isPrimary: registeredIsPrimary,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage,
+        preferredBodyFatPct,
+      });
+    },
+  );
+
+  app.patch(
+    "/profiles/:profileId",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+        body: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+            },
+            isPrimary: {
+              type: "boolean",
+            },
+            heightCm: {
+              type: "number",
+            },
+            dateOfBirth: {
+              type: "string",
+            },
+            peopleType: {
+              type: "string",
+              enum: ["standard", "athlete"],
+            },
+            gender: {
+              type: "string",
+              enum: ["male", "female"],
+            },
+            profileImage: {
+              type: "string",
+              nullable: true,
+            },
+            preferredBodyFatPct: {
+              type: "number",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+      const accountId = request.auth.account.id;
+      const {
+        name,
+        isPrimary,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage,
+        preferredBodyFatPct,
+      } = request.body as {
+        name?: string;
+        isPrimary?: boolean;
+        heightCm?: number;
+        dateOfBirth?: string;
+        peopleType?: "standard" | "athlete";
+        gender?: "male" | "female";
+        profileImage?: string | null;
+        preferredBodyFatPct?: number;
+      };
+
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          accountId,
+          reply,
+        )
+      ) {
+        return;
+      }
+
+      await updateProfile({
+        profileId,
+        accountId,
+        name,
+        isPrimary,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage,
+        preferredBodyFatPct,
+      });
+
+      app.log.info(
+        {
+          profileId,
+          name,
+          isPrimary,
+          heightCm,
+          dateOfBirth,
+          peopleType,
+          gender,
+          profileImage,
+          preferredBodyFatPct,
+        },
+        "Updated profile",
+      );
+
+      return reply.send({
+        ok: true,
+        profileId,
+        name,
+        isPrimary,
+        heightCm,
+        dateOfBirth,
+        peopleType,
+        gender,
+        profileImage,
+        preferredBodyFatPct,
+      });
+    },
+  );
+
+  app.get(
+    "/users",
+    {
+      config: {
+        deprecated: true,
+      },
+    },
+    async (_request, reply) => {
+      reply.header("Deprecation", "true");
+      reply.header("Sunset", "Tue, 30 Jun 2026 23:59:59 GMT");
+      reply.header("Link", '</client/profiles>; rel="successor-version"');
+
+      const users = await listUsers();
+
+      return reply.send({
+        ok: true,
+        users,
+      });
+    },
+  );
+
+  app.get("/profiles", async (request, reply) => {
+    const users = await listUsersByAccountId(request.auth.account.id);
 
     return reply.send({
       ok: true,
@@ -392,11 +587,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const profile = await getProfileById(profileId);
@@ -447,11 +645,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       return reply.send({
@@ -482,11 +683,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const fat = await getProfileFatReport(profileId);
@@ -526,11 +730,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const muscle = await getProfileMuscleReport(profileId);
@@ -570,11 +777,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const insights = await getProfileAiOverview(profileId);
@@ -592,6 +802,287 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId,
         insights,
         effortScore,
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/insights/recent",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+        querystring: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+      const { limit: rawLimit } = request.query as {
+        limit?: number | string;
+      };
+      const limit = parseReportLimit(rawLimit);
+
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
+      }
+
+      const reports = await listRecentProfileAiReports({ profileId, limit });
+
+      return reply.send({
+        ok: true,
+        profileId,
+        reports,
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/insights/jobs/active",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
+      }
+
+      const jobs = await listActiveProfileAiReportJobs({ profileId });
+
+      return reply.send({
+        ok: true,
+        profileId,
+        jobs,
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/insights/jobs/:jobId/wait",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId", "jobId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+            jobId: {
+              type: "string",
+            },
+          },
+        },
+        querystring: {
+          type: "object",
+          properties: {
+            timeoutMs: {
+              type: "number",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId, jobId } = request.params as {
+        profileId: string;
+        jobId: string;
+      };
+      const { timeoutMs: rawTimeoutMs } = request.query as {
+        timeoutMs?: number | string;
+      };
+      const timeoutMs = parseLongPollTimeoutMs(rawTimeoutMs);
+      const deadline = Date.now() + timeoutMs;
+
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
+      }
+
+      let report = await getProfileAiReportById({ profileId, reportId: jobId });
+
+      if (report === null) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Report job does not exist",
+        });
+      }
+
+      while (
+        report.generationStatus !== "completed" &&
+        report.generationStatus !== "failed" &&
+        Date.now() < deadline
+      ) {
+        await sleep(Math.min(LONG_POLL_INTERVAL_MS, deadline - Date.now()));
+        report = await getProfileAiReportById({ profileId, reportId: jobId });
+
+        if (report === null) {
+          return reply.code(404).send({
+            ok: false,
+            error: "Report job does not exist",
+          });
+        }
+      }
+
+      return reply.send({
+        ok: true,
+        profileId,
+        jobId,
+        reportId: report.reportId,
+        generationStatus: report.generationStatus,
+        generationError: report.generationError,
+        report,
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/insights/report-ids/latest",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+          },
+        },
+        querystring: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId } = request.params as {
+        profileId: string;
+      };
+      const { limit: rawLimit } = request.query as {
+        limit?: number | string;
+      };
+      const limit = parseReportLimit(rawLimit);
+
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
+      }
+
+      const reports = await listLatestCompletedProfileAiReportIds({
+        profileId,
+        limit,
+      });
+
+      return reply.send({
+        ok: true,
+        profileId,
+        reports,
+      });
+    },
+  );
+
+  app.get(
+    "/profiles/:profileId/insights/:reportId",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["profileId", "reportId"],
+          properties: {
+            profileId: {
+              type: "string",
+            },
+            reportId: {
+              type: "string",
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { profileId, reportId } = request.params as {
+        profileId: string;
+        reportId: string;
+      };
+
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
+      }
+
+      const report = await getProfileAiReportById({ profileId, reportId });
+
+      if (report === null) {
+        return reply.code(404).send({
+          ok: false,
+          error: "Report does not exist",
+        });
+      }
+
+      return reply.send({
+        ok: true,
+        report,
       });
     },
   );
@@ -674,11 +1165,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         forearmCm?: number | null;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const { id, createdAt } = await addBodyMeasurement(profileId, {
@@ -749,11 +1243,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const bodyMeasurements = await listUserBodyMeasurements(profileId);
@@ -812,17 +1309,22 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      if (profileId !== undefined && !await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        profileId !== undefined &&
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const points = await listBodyCompositionTrends({
         metric,
         period,
         profileId,
+        accountId: request.auth.account.id,
       });
 
       return reply.send({
@@ -837,66 +1339,10 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
 
   app.post(
     "/start",
-    {
-      schema: {
-        body: {
-          type: "object",
-          required: ["profileId"],
-          properties: {
-            profileId: {
-              type: "string",
-            },
-          },
-        },
-      },
-    },
-    async (request, reply) => {
-      const { profileId } = request.body as {
-        profileId: string;
-      };
-
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
-      }
-
-      const id: JobId = uuidv7();
-
-      if (await jobExists(id)) {
-        return reply.code(409).send({
-          ok: false,
-          error: "Job id already exists",
-        });
-      }
-
-      await redis.set(
-        `status:${id}`,
-        JSON.stringify({
-          status: "starting",
-          version: 1,
-          updatedAt: Date.now(),
-        }),
-      );
-
-      const response = await fetch(
-        `http://192.168.0.50/scale?id=${encodeURIComponent(id)}`,
-      );
-
-      if (response.ok) {
-        await initJob(id, profileId);
-        app.log.info({ id, profileId }, "Started ingest");
-
-        return reply.code(response.status).send({
-          ok: true,
-          id,
-          profileId,
-        });
-      }
-
-      return reply.code(response.status).send({
+    async (_request, reply) => {
+      return reply.code(410).send({
         ok: false,
+        error: "/start is deprecated. Use the ingest endpoints instead.",
       });
     },
   );
@@ -921,11 +1367,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         profileId: string;
       };
 
-      if (!await profileExists(profileId)) {
-        return reply.code(404).send({
-          ok: false,
-          error: "Profile id does not exist",
-        });
+      if (
+        await sendProfileNotFoundIfUnauthorized(
+          profileId,
+          request.auth.account.id,
+          reply,
+        )
+      ) {
+        return;
       }
 
       const weights = await listUserWeight(profileId);
@@ -938,19 +1387,6 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
     },
   );
 
-  app.get("/ws/sub/:jobId", { websocket: true }, async (socket, request) => {
-    const { jobId } = request.params as { jobId: string };
-    const channel = `job:${jobId}`;
-    const listener = (message: string) => {
-      socket.send(message);
-    };
-
-    socket.on("close", async () => {
-      await sub.unsubscribe(channel, listener);
-    });
-
-    await sub.subscribe(channel, listener);
-  });
 };
 
 export default clientRoutes;

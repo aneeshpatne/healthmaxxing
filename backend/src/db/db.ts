@@ -4,14 +4,23 @@ import { db } from "./client";
 export const BODY_COMPOSITION_METRICS_NEW_FACTORS = [
   "bmi",
   "body_fat_pct",
+  "fat_mass_kg",
+  "fat_free_mass_kg",
+  "desired_weight_kg",
   "body_score",
   "body_age_years",
   "water_pct",
   "muscle_mass_kg",
+  "muscle_rate_pct",
   "bmr_kcal",
   "visceral_fat",
+  "ideal_weight_kg",
+  "protein_mass_kg",
+  "skeletal_muscle_kg",
   "protein_pct",
   "subcutaneous_fat_pct",
+  "subcutaneous_fat_mass_kg",
+  "predicted_lean_mass_kg",
 ] as const;
 
 
@@ -23,12 +32,42 @@ export async function getLatestBodyCompositionMeasurement(profileId: string) {
     .get(profileId);
 }
 
+export async function getLatestBodyCompositionMeasurementV2(profileId: string) {
+  const measurement = await db
+    .prepare(
+      "SELECT bmi, body_fat_pct, fat_mass_kg, fat_free_mass_kg, desired_weight_kg, body_score, body_age_years, water_pct, muscle_mass_kg, muscle_rate_pct, bmr_kcal, visceral_fat, ideal_weight_kg, protein_mass_kg, protein_pct, skeletal_muscle_kg, subcutaneous_fat_pct, subcutaneous_fat_mass_kg, predicted_lean_mass_kg FROM body_composition_metrics_new WHERE profile_id = ? ORDER BY created_at DESC LIMIT 1",
+    )
+    .get(profileId);
+
+  if (!measurement) return null;
+
+  return toCompactMetricTable(
+    measurement as Record<string, unknown>,
+    BODY_COMPOSITION_METRICS_NEW_FACTORS,
+  );
+}
+
 export async function getLatestBodyMeasurement(profileId: string) {
   return await db
     .prepare(
       "SELECT * FROM body_measurements WHERE profile_id = ? ORDER BY created_at DESC LIMIT 1",
     )
     .get(profileId);
+}
+
+export async function getLatestBodyMeasurementV2(profileId: string) {
+  const measurement = await db
+    .prepare(
+      "SELECT neck_cm, shoulder_cm, chest_cm, stomach_cm, waist_cm, calf_cm, thigh_cm, bicep_cm, forearm_cm FROM body_measurements WHERE profile_id = ? ORDER BY created_at DESC LIMIT 1",
+    )
+    .get(profileId);
+
+  if (!measurement) return null;
+
+  return toCompactMetricTable(
+    measurement as Record<string, unknown>,
+    BODY_MEASUREMENT_DELTA_METRICS,
+  );
 }
 
 export async function getProfileMetadata(profileId: string) {
@@ -292,6 +331,67 @@ export async function getBodyCompositionMeasurementDelta(profileId: string) {
     .get(profileId, profileId, profileId, profileId, profileId);
 }
 
+async function getFmiFfmiDelta(profileId: string) {
+  return await db
+    .prepare(
+      `
+    WITH latest_measurement AS (
+      SELECT fmi, ffmi
+      FROM derived_body_composition_metrics
+      WHERE profile_id = ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    ),
+    forever_avg AS (
+      SELECT
+        AVG(fmi) AS fmi,
+        AVG(ffmi) AS ffmi
+      FROM derived_body_composition_metrics
+      WHERE profile_id = ?
+    ),
+    last_year_avg AS (
+      SELECT
+        AVG(fmi) AS fmi,
+        AVG(ffmi) AS ffmi
+      FROM derived_body_composition_metrics
+      WHERE profile_id = ?
+        AND created_at >= datetime('now', '-1 year')
+    ),
+    last_30_days_avg AS (
+      SELECT
+        AVG(fmi) AS fmi,
+        AVG(ffmi) AS ffmi
+      FROM derived_body_composition_metrics
+      WHERE profile_id = ?
+        AND created_at >= datetime('now', '-30 days')
+    ),
+    last_7_days_avg AS (
+      SELECT
+        AVG(fmi) AS fmi,
+        AVG(ffmi) AS ffmi
+      FROM derived_body_composition_metrics
+      WHERE profile_id = ?
+        AND created_at >= datetime('now', '-7 days')
+    )
+    SELECT
+      latest_measurement.fmi - forever_avg.fmi AS fmi_forever_delta,
+      latest_measurement.fmi - last_year_avg.fmi AS fmi_last_year_delta,
+      latest_measurement.fmi - last_30_days_avg.fmi AS fmi_last_30_days_delta,
+      latest_measurement.fmi - last_7_days_avg.fmi AS fmi_last_7_days_delta,
+      latest_measurement.ffmi - forever_avg.ffmi AS ffmi_forever_delta,
+      latest_measurement.ffmi - last_year_avg.ffmi AS ffmi_last_year_delta,
+      latest_measurement.ffmi - last_30_days_avg.ffmi AS ffmi_last_30_days_delta,
+      latest_measurement.ffmi - last_7_days_avg.ffmi AS ffmi_last_7_days_delta
+    FROM latest_measurement
+    CROSS JOIN forever_avg
+    CROSS JOIN last_year_avg
+    CROSS JOIN last_30_days_avg
+    CROSS JOIN last_7_days_avg
+    `,
+    )
+    .get(profileId, profileId, profileId, profileId, profileId);
+}
+
 const BODY_COMPOSITION_DELTA_METRICS = [
   "bmi",
   "body_fat_pct",
@@ -329,6 +429,13 @@ export type CompactDeltaTable = {
   rows: CompactDeltaRow[];
 };
 
+type CompactMetricRow = [string, number | null];
+
+export type CompactMetricTable = {
+  columns: ["metric", "value"];
+  rows: CompactMetricRow[];
+};
+
 function compactDelta(value: unknown): number | null {
   // PostgreSQL returns expressions involving AVG(integer) as NUMERIC, which
   // Bun may decode as a string. BIGINT values can similarly arrive as bigint.
@@ -363,6 +470,16 @@ function toCompactDeltaTable(
   };
 }
 
+function toCompactMetricTable(
+  measurement: Record<string, unknown>,
+  metrics: readonly string[],
+): CompactMetricTable {
+  return {
+    columns: ["metric", "value"],
+    rows: metrics.map((metric) => [metric, compactDelta(measurement[metric])]),
+  };
+}
+
 /**
  * Token-efficient form of getBodyCompositionMeasurementDelta.
  *
@@ -370,10 +487,19 @@ function toCompactDeltaTable(
  * are the latest measurement minus the corresponding period average.
  */
 export async function getBodyCompositionMeasurementDeltaV2(profileId: string) {
-  const delta = await getBodyCompositionMeasurementDelta(profileId);
+  const [delta, fmiFfmiDelta] = await Promise.all([
+    getBodyCompositionMeasurementDelta(profileId),
+    getFmiFfmiDelta(profileId),
+  ]);
   if (!delta) return null;
 
-  return toCompactDeltaTable(delta, BODY_COMPOSITION_DELTA_METRICS);
+  const combinedDelta = { ...delta, ...(fmiFfmiDelta as Record<string, unknown>) };
+
+  return toCompactDeltaTable(combinedDelta, [
+    ...BODY_COMPOSITION_DELTA_METRICS,
+    "fmi",
+    "ffmi",
+  ]);
 }
 
 export async function getBodyMeasurementDelta(profileId: string) {
@@ -513,7 +639,7 @@ export async function getBodyMeasurementDeltaV2(profileId: string) {
 }
 
 function deltaTableToTsv(table: CompactDeltaTable | null): string {
-  if (!table) return "No measurements available.";
+  if (!table) return "";
 
   return [
     table.columns.join("\t"),
@@ -523,12 +649,76 @@ function deltaTableToTsv(table: CompactDeltaTable | null): string {
   ].join("\n");
 }
 
+function metricTableToTsv(table: CompactMetricTable | null): string {
+  if (!table) return "";
+
+  return [
+    table.columns.join("\t"),
+    ...table.rows.map((row) =>
+      row.map((value) => value ?? "NA").join("\t"),
+    ),
+  ].join("\n");
+}
+
+export function formatRecordAsTsv(
+  record: Record<string, unknown> | null | undefined,
+): string {
+  if (!record) return "";
+
+  const formatValue = (key: string, value: unknown) => {
+    if (value == null) return "NA";
+
+    if (key === "dateOfBirth") {
+      const date = new Date(String(value));
+      if (!Number.isNaN(date.getTime())) {
+        return date.toLocaleDateString("en-IN", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+      }
+    }
+
+    return String(value);
+  };
+
+  return [
+    "key\tvalue",
+    ...Object.entries(record).map(
+      ([key, value]) => `${key}\t${formatValue(key, value)}`,
+    ),
+  ].join("\n");
+}
+
+export function formatBodyCompositionMeasurementDelta(
+  table: CompactDeltaTable | null,
+): string {
+  return deltaTableToTsv(table);
+}
+
+export function formatBodyMeasurementDelta(
+  table: CompactDeltaTable | null,
+): string {
+  return deltaTableToTsv(table);
+}
+
+export function formatLatestBodyMeasurement(
+  table: CompactMetricTable | null,
+): string {
+  return metricTableToTsv(table);
+}
+
+export function formatLatestBodyCompositionMeasurement(
+  table: CompactMetricTable | null,
+): string {
+  return metricTableToTsv(table);
+}
+
 export function bodyMeasurementDeltasToLlmInput(
   bodyComposition: CompactDeltaTable | null,
   bodyMeasurements: CompactDeltaTable | null,
 ): string {
   return [
-    "Deltas are latest measurement minus period average.",
     "[body_composition]",
     deltaTableToTsv(bodyComposition),
     "[body_measurements]",

@@ -14,12 +14,12 @@ if (!apiKey) {
 }
 
 // export const model = new ChatOpenAI({
-//   apiKey: process.env.NVIDIA_API_KEY,
-//   model: "moonshotai/kimi-k2.6",
+//   apiKey: process.env.CEREBRAS_API_KEY,
+//   model: "gpt-oss-120b",
 //   temperature: 1,
 //   maxTokens: 65536,
 //   configuration: {
-//     baseURL: "https://integrate.api.nvidia.com/v1",
+//     baseURL: "https://api.cerebras.ai/v1",
 //     defaultHeaders: {
 //       Accept: "application/json",
 //     },
@@ -29,7 +29,7 @@ if (!apiKey) {
 export const model = new ChatDeepSeek("deepseek-v4-pro", {
   apiKey: deepSeekApiKey,
   modelKwargs: {
-    reasoning_effort: "max",
+    reasoning_effort: "high",
   },
 });
 

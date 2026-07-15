@@ -22,9 +22,10 @@ type BodyCompositionMetricsNewWithCreatedAtRow = BodyCompositionMetricsNewRow & 
   createdAt: string;
 };
 
-export type JobId = string;
-export type AccountId = string;
-export type ProfileId = string;
+export type UUID = string;
+export type JobId = UUID;
+export type AccountId = UUID;
+export type ProfileId = UUID;
 
 export type UserWeight = {
   id: string;
@@ -165,6 +166,37 @@ export type AddObservationInput = {
 export type UpdateObservationFieldRemarkInput = {
   field_name_normalized: string;
   remark: string;
+};
+
+export type ProfileAiReportJsonLd = {
+  reportId: string;
+  profileId: ProfileId;
+  data: unknown;
+};
+
+export type ProfileInsightGenerationStatus =
+  | "pending"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed";
+
+export type ProfileAiReportById = {
+  reportId: string;
+  profileId: ProfileId;
+  generationStatus: ProfileInsightGenerationStatus;
+  generationError: string | null;
+  createdAt: string;
+  updatedAt: string;
+  data: unknown | null;
+};
+
+export type RecentProfileAiReport = Omit<ProfileAiReportById, "data"> & {
+  hasData: boolean;
+};
+
+export type ProfileAiReportJob = RecentProfileAiReport & {
+  jobId: string;
 };
 
 export type LatestBodyCompositionSnapshot = {
@@ -601,6 +633,7 @@ export type FatReport = {
     subcutaneousFatRatio: number;
   };
   last30Days: {
+    fatPercent: FatReportTrendPoint[];
     fatMassKg: FatReportTrendPoint[];
     visceralFatMassKg: FatReportTrendPoint[];
     subcutaneousFatMassKg: FatReportTrendPoint[];
@@ -651,6 +684,7 @@ export type MuscleReport = {
   };
   last30Days: {
     boneMassKg: MuscleReportTrendPoint[];
+    muscleMassKg: MuscleReportTrendPoint[];
     muscleRatio: MuscleReportTrendPoint[];
     skeletalMuscleMassKg: MuscleReportTrendPoint[];
     skeletalMuscleRatio: MuscleReportTrendPoint[];
@@ -680,7 +714,7 @@ export type Users = {
 };
 
 type UserRow = Omit<Users, "isPrimary"> & {
-  isPrimary: number;
+  isPrimary: boolean | number;
 };
 
 export type RegisterUserInput = {
@@ -699,6 +733,19 @@ export type RegisterProfileMetadataInput = {
   gender: "male" | "female";
   heightCm: number;
   peopleType: "standard" | "athlete";
+  profileImage?: string | null;
+  preferredBodyFatPct?: number;
+};
+
+export type UpdateProfileInput = {
+  profileId: ProfileId;
+  accountId: AccountId;
+  name?: string;
+  isPrimary?: boolean;
+  heightCm?: number;
+  dateOfBirth?: string;
+  peopleType?: "standard" | "athlete";
+  gender?: "male" | "female";
   profileImage?: string | null;
   preferredBodyFatPct?: number;
 };
@@ -890,7 +937,7 @@ export type profile = {
 };
 
 type ProfileRow = Omit<profile, "isPrimary"> & {
-  isPrimary: number;
+  isPrimary: boolean | number;
 };
 
 export async function jobExists(jobId: JobId) {
@@ -917,6 +964,24 @@ export async function profileExists(profileId: ProfileId) {
 `,
     )
     .get(profileId);
+
+  return profile !== null;
+}
+
+export async function profileBelongsToAccount(
+  profileId: ProfileId,
+  accountId: AccountId,
+) {
+  const profile = await db    .prepare(
+      `
+  SELECT 1
+  FROM profiles
+  WHERE id = ?
+    AND account_id = ?
+  LIMIT 1
+`,
+    )
+    .get(profileId, accountId);
 
   return profile !== null;
 }
@@ -1219,20 +1284,40 @@ export async function registerProfile({
 }: RegisterProfileInput) {
   const profileId: ProfileId = uuidv7();
 
-  await db.prepare(
-    `
-  INSERT INTO profiles (
-    id,
-    account_id,
-    name,
-    is_primary,
-    created_at
-  )
-  VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-`,
-  ).run(profileId, accountId, name, isPrimary);
+  let shouldBePrimary = isPrimary;
 
-  return profileId;
+  await db.transaction(async (tx) => {
+    const countRow = await tx.prepare(
+      `
+    SELECT COUNT(*) AS count FROM profiles WHERE account_id = ?
+    `,
+    ).get(accountId) as { count: number } | null;
+
+    shouldBePrimary = isPrimary || Number(countRow?.count ?? 0) === 0;
+
+    if (shouldBePrimary) {
+      await tx.prepare(
+        `
+      UPDATE profiles SET is_primary = false WHERE account_id = ? AND id != ?
+      `,
+      ).run(accountId, profileId);
+    }
+
+    await tx.prepare(
+      `
+    INSERT INTO profiles (
+      id,
+      account_id,
+      name,
+      is_primary,
+      created_at
+    )
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `,
+    ).run(profileId, accountId, name, shouldBePrimary);
+  });
+
+  return { id: profileId, isPrimary: shouldBePrimary };
 }
 
 export async function registerProfileMetadata({
@@ -1275,6 +1360,82 @@ export async function registerProfileMetadata({
     profileImage,
     preferredBodyFatPct,
   );
+}
+
+export async function updateProfile({
+  profileId,
+  accountId,
+  name,
+  isPrimary,
+  heightCm,
+  dateOfBirth,
+  peopleType,
+  gender,
+  profileImage,
+  preferredBodyFatPct,
+}: UpdateProfileInput) {
+  await db.transaction(async (tx) => {
+    if (isPrimary === true) {
+      await tx.prepare(
+        `
+      UPDATE profiles SET is_primary = false WHERE account_id = ? AND id != ?
+      `,
+      ).run(accountId, profileId);
+    }
+
+    const profileUpdates: string[] = [];
+    const profileValues: (string | boolean)[] = [];
+
+    if (name !== undefined) {
+      profileUpdates.push("name = ?");
+      profileValues.push(name);
+    }
+    if (isPrimary !== undefined) {
+      profileUpdates.push("is_primary = ?");
+      profileValues.push(isPrimary);
+    }
+
+    if (profileUpdates.length > 0) {
+      await tx.prepare(
+        `UPDATE profiles SET ${profileUpdates.join(", ")} WHERE id = ?`,
+      ).run(...profileValues, profileId);
+    }
+
+    const metadataUpdates: string[] = [];
+    const metadataValues: (string | number | null)[] = [];
+
+    if (heightCm !== undefined) {
+      metadataUpdates.push("height_cm = ?");
+      metadataValues.push(heightCm);
+    }
+    if (dateOfBirth !== undefined) {
+      metadataUpdates.push("date_of_birth = ?");
+      metadataValues.push(dateOfBirth);
+    }
+    if (peopleType !== undefined) {
+      metadataUpdates.push("people_type = ?");
+      metadataValues.push(peopleType);
+    }
+    if (gender !== undefined) {
+      metadataUpdates.push("gender = ?");
+      metadataValues.push(gender);
+    }
+    if (profileImage !== undefined) {
+      metadataUpdates.push("profile_image = ?");
+      metadataValues.push(profileImage);
+    }
+    if (preferredBodyFatPct !== undefined) {
+      metadataUpdates.push("preferred_body_fat_pct = ?");
+      metadataValues.push(preferredBodyFatPct);
+    }
+
+    if (metadataUpdates.length > 0) {
+      metadataUpdates.push("updated_at = CURRENT_TIMESTAMP");
+      await tx.prepare(
+        `UPDATE profile_metadata SET ${metadataUpdates.join(", ")} WHERE profile_id = ?`,
+      ).run(...metadataValues, profileId);
+    }
+  });
 }
 
 export async function listUserWeight(profileId: ProfileId) {
@@ -1651,10 +1812,11 @@ async function getOrCreateProfileInsightReport(
     id,
     profile_id,
     body_composition_metrics_id,
+    generation_status,
     created_at,
     updated_at
   )
-  SELECT ?, ?, ?, created_at, CURRENT_TIMESTAMP
+  SELECT ?, ?, ?, 'pending', created_at, CURRENT_TIMESTAMP
   FROM body_composition_metrics_new
   WHERE id = ?
 `,
@@ -1834,15 +1996,33 @@ export async  function createSnapshotReports({
   derivedMetrics?: DerivedBodyCompositionMetrics;
   modelName?: string | null;
 }) {
-  await getOrCreatePerformanceReport(
+  const performanceReportId = await getOrCreatePerformanceReport(
     profileId,
     bodyCompositionMetricsId,
     derivedMetrics,
     modelName,
   );
-  await getOrCreateProfileInsightReport(profileId, bodyCompositionMetricsId);
-  await getOrCreateFatReport(profileId, bodyCompositionMetricsId, modelName);
-  await getOrCreateMuscleReport(profileId, bodyCompositionMetricsId, modelName);
+  const insightReportId = await getOrCreateProfileInsightReport(
+    profileId,
+    bodyCompositionMetricsId,
+  );
+  const fatReportId = await getOrCreateFatReport(
+    profileId,
+    bodyCompositionMetricsId,
+    modelName,
+  );
+  const muscleReportId = await getOrCreateMuscleReport(
+    profileId,
+    bodyCompositionMetricsId,
+    modelName,
+  );
+
+  return {
+    performanceReportId,
+    insightReportId,
+    fatReportId,
+    muscleReportId,
+  };
 }
 
   async function getLatestReportIds(profileId: ProfileId) {
@@ -1886,15 +2066,23 @@ export async function listBodyCompositionTrends({
   metric,
   period,
   profileId,
+  accountId,
 }: {
   metric: BodyCompositionTrendMetric;
   period: BodyCompositionTrendPeriod;
   profileId?: ProfileId;
+  accountId?: AccountId;
 }) {
   const range = PERIODS[period];
-  const profileFilter = profileId === undefined ? "" : "AND profile_id = ?";
-  const rangeFilter = range === null ? "" : "AND created_at >= datetime('now', ?)";
+  const profileFilter = profileId === undefined
+    ? ""
+    : "AND body_composition_metrics_new.profile_id = ?";
+  const accountFilter = accountId === undefined ? "" : "AND profiles.account_id = ?";
+  const rangeFilter = range === null
+    ? ""
+    : "AND body_composition_metrics_new.created_at >= datetime('now', ?)";
   const params = [
+    ...(accountId === undefined ? [] : [accountId]),
     ...(profileId === undefined ? [] : [profileId]),
     ...(range === null ? [] : [range]),
   ];
@@ -1904,13 +2092,16 @@ export async function listBodyCompositionTrends({
       `
   SELECT
     profile_id AS profileId,
-    created_at AS createdAt,
+    body_composition_metrics_new.created_at AS createdAt,
     ${metric} AS value
   FROM body_composition_metrics_new
+  INNER JOIN profiles
+    ON profiles.id = body_composition_metrics_new.profile_id
   WHERE 1 = 1
+    ${accountFilter}
     ${profileFilter}
     ${rangeFilter}
-  ORDER BY created_at ASC
+  ORDER BY body_composition_metrics_new.created_at ASC
 `,
     )
     .all(...params) as BodyCompositionTrendPoint[];
@@ -2203,6 +2394,223 @@ export async function upsertProfileEffortScore({
   WHERE id = ?
 `,
   ).run(score, remark, modelName, reportIds.insightReportId);
+}
+
+export async function upsertProfileAiReportJsonLd({
+  reportId,
+  profileId,
+  data,
+}: ProfileAiReportJsonLd) {
+  await db.transaction(async (tx) => {
+    await tx.prepare(
+      `
+  INSERT INTO profile_ai_report_jsonld (
+    report_id,
+    profile_id,
+    data
+  )
+  VALUES (?, ?, ?::jsonb)
+  ON CONFLICT (report_id) DO UPDATE SET
+    profile_id = EXCLUDED.profile_id,
+    data = EXCLUDED.data,
+    created_on = CURRENT_TIMESTAMP
+`,
+    ).run(reportId, profileId, JSON.stringify(data));
+
+    await tx.prepare(
+      `
+  UPDATE profile_insight_reports
+  SET
+    generation_status = 'completed',
+    generation_error = NULL,
+    updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
+    AND profile_id = ?
+`,
+    ).run(reportId, profileId);
+  });
+}
+
+export async function updateProfileInsightReportGenerationStatus({
+  reportId,
+  profileId,
+  status,
+  error = null,
+}: {
+  reportId: string;
+  profileId: ProfileId;
+  status: ProfileInsightGenerationStatus;
+  error?: string | null;
+}) {
+  const updated = await db.prepare(
+    `
+  UPDATE profile_insight_reports
+  SET
+    generation_status = ?,
+    generation_error = ?,
+    updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
+    AND profile_id = ?
+  RETURNING id
+`,
+  ).get(status, error, reportId, profileId) as { id: string } | null;
+
+  if (updated === null) {
+    throw new Error(
+      `Profile insight report ${reportId} does not exist for profile ${profileId}`,
+    );
+  }
+}
+
+export async function failActiveProfileInsightReportJobsOnStartup() {
+  await db.prepare(
+    `
+  UPDATE profile_insight_reports
+  SET
+    generation_status = 'failed',
+    generation_error = 'Job queue was reset on server startup',
+    updated_at = CURRENT_TIMESTAMP
+  WHERE generation_status IN ('pending', 'queued', 'running')
+`,
+  ).run();
+}
+
+function parseJsonData(raw: unknown): unknown {
+  return typeof raw === "string" ? JSON.parse(raw) : raw;
+}
+
+export async function getProfileAiReportById({
+  profileId,
+  reportId,
+}: {
+  profileId: ProfileId;
+  reportId: string;
+}): Promise<ProfileAiReportById | null> {
+  const row = await db
+    .prepare(
+      `
+  SELECT
+    profile_insight_reports.id AS reportId,
+    profile_insight_reports.profile_id AS profileId,
+    CASE
+      WHEN profile_ai_report_jsonld.report_id IS NOT NULL THEN 'completed'
+      ELSE profile_insight_reports.generation_status
+    END AS generationStatus,
+    profile_insight_reports.generation_error AS generationError,
+    profile_insight_reports.created_at AS createdAt,
+    profile_insight_reports.updated_at AS updatedAt,
+    profile_ai_report_jsonld.data AS data
+  FROM profile_insight_reports
+  LEFT JOIN profile_ai_report_jsonld
+    ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
+  WHERE profile_insight_reports.id = ?
+    AND profile_insight_reports.profile_id = ?
+  LIMIT 1
+`,
+    )
+    .get(reportId, profileId) as
+    | (Omit<ProfileAiReportById, "data"> & { data: unknown | null })
+    | null;
+
+  if (row === null) {
+    return null;
+  }
+
+  return {
+    ...row,
+    data: row.data === null ? null : parseJsonData(row.data),
+  };
+}
+
+export async function listRecentProfileAiReports({
+  profileId,
+  limit = 5,
+}: {
+  profileId: ProfileId;
+  limit?: number;
+}): Promise<RecentProfileAiReport[]> {
+  return await db
+    .prepare(
+      `
+  SELECT
+    profile_insight_reports.id AS reportId,
+    profile_insight_reports.profile_id AS profileId,
+    CASE
+      WHEN profile_ai_report_jsonld.report_id IS NOT NULL THEN 'completed'
+      ELSE profile_insight_reports.generation_status
+    END AS generationStatus,
+    profile_insight_reports.generation_error AS generationError,
+    profile_insight_reports.created_at AS createdAt,
+    profile_insight_reports.updated_at AS updatedAt,
+    profile_ai_report_jsonld.report_id IS NOT NULL AS hasData
+  FROM profile_insight_reports
+  LEFT JOIN profile_ai_report_jsonld
+    ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
+  WHERE profile_insight_reports.profile_id = ?
+  ORDER BY profile_insight_reports.created_at DESC
+  LIMIT ?
+`,
+    )
+    .all(profileId, limit) as RecentProfileAiReport[];
+}
+
+export async function listActiveProfileAiReportJobs({
+  profileId,
+}: {
+  profileId: ProfileId;
+}): Promise<ProfileAiReportJob[]> {
+  return await db
+    .prepare(
+      `
+  SELECT
+    profile_insight_reports.id AS jobId,
+    profile_insight_reports.id AS reportId,
+    profile_insight_reports.profile_id AS profileId,
+    profile_insight_reports.generation_status AS generationStatus,
+    profile_insight_reports.generation_error AS generationError,
+    profile_insight_reports.created_at AS createdAt,
+    profile_insight_reports.updated_at AS updatedAt,
+    profile_ai_report_jsonld.report_id IS NOT NULL AS hasData
+  FROM profile_insight_reports
+  LEFT JOIN profile_ai_report_jsonld
+    ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
+  WHERE profile_insight_reports.profile_id = ?
+    AND profile_insight_reports.generation_status IN ('pending', 'queued', 'running')
+    AND profile_ai_report_jsonld.report_id IS NULL
+  ORDER BY profile_insight_reports.created_at DESC
+`,
+    )
+    .all(profileId) as ProfileAiReportJob[];
+}
+
+export async function listLatestCompletedProfileAiReportIds({
+  profileId,
+  limit = 5,
+}: {
+  profileId: ProfileId;
+  limit?: number;
+}): Promise<ProfileAiReportJob[]> {
+  return await db
+    .prepare(
+      `
+  SELECT
+    profile_insight_reports.id AS jobId,
+    profile_insight_reports.id AS reportId,
+    profile_insight_reports.profile_id AS profileId,
+    'completed' AS generationStatus,
+    profile_insight_reports.generation_error AS generationError,
+    profile_insight_reports.created_at AS createdAt,
+    profile_insight_reports.updated_at AS updatedAt,
+    true AS hasData
+  FROM profile_ai_report_jsonld
+  INNER JOIN profile_insight_reports
+    ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
+  WHERE profile_insight_reports.profile_id = ?
+  ORDER BY profile_ai_report_jsonld.created_on DESC
+  LIMIT ?
+`,
+    )
+    .all(profileId, limit) as ProfileAiReportJob[];
 }
 
 export async function upsertDerivedMetricsComments({
@@ -2869,6 +3277,7 @@ export async function getProfilePerformance(
  function buildFatTrendPoints(
   rows: Array<{
     createdAt: string;
+    fatPercent: number;
     fatMassKg: number;
     visceralFatMassKg: number;
     visceralFatPercent: number;
@@ -2877,6 +3286,10 @@ export async function getProfilePerformance(
   }>,
 ): FatReport["last30Days"] {
   return {
+    fatPercent: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.fatPercent,
+    })),
     fatMassKg: rows.map((row) => ({
       createdAt: row.createdAt,
       value: row.fatMassKg,
@@ -2952,6 +3365,7 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
       `
   SELECT
     created_at AS createdAt,
+    body_fat_pct AS fatPercent,
     fat_mass_kg AS fatMassKg,
     ROUND(fat_mass_kg - subcutaneous_fat_mass_kg, 2) AS visceralFatMassKg,
     ROUND(body_fat_pct - subcutaneous_fat_pct, 2) AS visceralFatPercent,
@@ -2965,6 +3379,7 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
     )
     .all(profileId) as Array<{
     createdAt: string;
+    fatPercent: number;
     fatMassKg: number;
     visceralFatMassKg: number;
     visceralFatPercent: number;
@@ -3026,6 +3441,7 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
   rows: Array<{
     createdAt: string;
     boneMassKg: number;
+    muscleMassKg: number;
     muscleRatio: number;
     skeletalMuscleMassKg: number;
     skeletalMuscleRatio: number;
@@ -3035,6 +3451,10 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
     boneMassKg: rows.map((row) => ({
       createdAt: row.createdAt,
       value: row.boneMassKg,
+    })),
+    muscleMassKg: rows.map((row) => ({
+      createdAt: row.createdAt,
+      value: row.muscleMassKg,
     })),
     muscleRatio: rows.map((row) => ({
       createdAt: row.createdAt,
@@ -3100,6 +3520,7 @@ export async function getProfileMuscleReport(
   SELECT
     created_at AS createdAt,
     ROUND(MAX(fat_free_mass_kg - muscle_mass_kg, 0), 2) AS boneMassKg,
+    muscle_mass_kg AS muscleMassKg,
     muscle_rate_pct AS muscleRatio,
     skeletal_muscle_kg AS skeletalMuscleMassKg,
     CASE
@@ -3115,6 +3536,7 @@ export async function getProfileMuscleReport(
     .all(profileId) as Array<{
     createdAt: string;
     boneMassKg: number;
+    muscleMassKg: number;
     muscleRatio: number;
     skeletalMuscleMassKg: number;
     skeletalMuscleRatio: number;
@@ -3232,7 +3654,37 @@ export async function listUsers() {
 
   return rows.map((row) => ({
     ...row,
-    isPrimary: row.isPrimary === 1,
+    isPrimary: row.isPrimary === true || row.isPrimary === 1,
+  }));
+}
+
+export async function listUsersByAccountId(accountId: AccountId) {
+  const rows = await db    .prepare(
+      `
+  SELECT
+    profiles.id,
+    profiles.account_id AS accountId,
+    profiles.name,
+    profiles.is_primary AS isPrimary,
+    profile_metadata.height_cm AS heightCm,
+    profile_metadata.date_of_birth AS dateOfBirth,
+    profile_metadata.people_type AS peopleType,
+    profile_metadata.gender,
+    profile_metadata.profile_image AS profileImage,
+    profile_metadata.preferred_body_fat_pct AS preferredBodyFatPct,
+    profiles.created_at AS createdAt
+  FROM profiles
+  LEFT JOIN profile_metadata
+    ON profile_metadata.profile_id = profiles.id
+  WHERE profiles.account_id = ?
+  ORDER BY profiles.created_at DESC
+`,
+    )
+    .all(accountId) as UserRow[];
+
+  return rows.map((row) => ({
+    ...row,
+    isPrimary: row.isPrimary === true || row.isPrimary === 1,
   }));
 }
 
@@ -3262,6 +3714,6 @@ export async function getProfileById(id: ProfileId) {
 
   return {
     ...row,
-    isPrimary: row.isPrimary === 1,
+    isPrimary: row.isPrimary === true || row.isPrimary === 1,
   };
 }
