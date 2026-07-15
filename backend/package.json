@@ -7,6 +7,8 @@
     "start": "bun run src/main.ts",
     "server": "bun run index.ts",
     "worker": "bun run src/bull/worker.ts",
+    "launchd:install": "bun run scripts/install-launchd.ts",
+    "launchd:uninstall": "bun run scripts/uninstall-launchd.ts",
     "db:up": "docker-compose up -d postgres",
     "db:down": "docker-compose down",
     "db:migrate": "bun run scripts/migrate.ts",
