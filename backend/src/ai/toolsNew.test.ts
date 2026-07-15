@@ -67,7 +67,7 @@ const payload = insights_schema.parse({
   muscle: {
     muscle_mass: card("muscle mass"),
     bone_mass_trend: card("bone mass trend"),
-    muscle_mass_trend: card("muscle mass trend"),
+    muscle_ratio_trend: card("muscle ratio trend"),
     skeletal_muscle_mass_trend: card("skeletal muscle trend"),
   },
 });
@@ -117,6 +117,7 @@ const sources = {
       subcutaneousFatRatio: 0.72,
     },
     last30Days: {
+      fatPercent: [{ createdAt: "2026-06-01", value: 24.5 }],
       fatMassKg: trend,
       visceralFatMassKg: [{ createdAt: "2026-06-01", value: -0.2 }],
       subcutaneousFatMassKg: [{ createdAt: "2026-06-01", value: -0.5 }],
@@ -139,6 +140,7 @@ const sources = {
     },
     last30Days: {
       boneMassKg: [{ createdAt: "2026-06-01", value: 0.1 }],
+      muscleMassKg: [{ createdAt: "2026-06-01", value: 42 }],
       muscleRatio: [{ createdAt: "2026-06-01", value: 0.4 }],
       skeletalMuscleMassKg: [{ createdAt: "2026-06-01", value: 0.2 }],
       skeletalMuscleRatio: [{ createdAt: "2026-06-01", value: 0.3 }],
@@ -188,6 +190,14 @@ test("preprocessProfileAiReportPayload marks performance source types", () => {
 test("preprocessProfileAiReportPayload marks fat and muscle with values and trends", () => {
   const preprocessed = preprocessProfileAiReportPayload(payload, sources);
 
+  expect(preprocessed.fat.fat_ratio.preprocess).toEqual({
+    value: 24.5,
+    trends: { fatPercent: sources.fatReport.last30Days.fatPercent },
+  });
+  expect(preprocessed.fat.fat_ratio_trend.preprocess).toEqual({
+    value: 24.5,
+    trends: { fatPercent: sources.fatReport.last30Days.fatPercent },
+  });
   expect(preprocessed.fat.visceral_vs_subcutaneous.preprocess).toEqual({
     value: sources.fatReport.metrics.visceralSubcutaneous30dDelta,
     trends: {
@@ -202,6 +212,10 @@ test("preprocessProfileAiReportPayload marks fat and muscle with values and tren
   });
   expect(preprocessed.muscle.muscle_mass.preprocess).toEqual({
     value: 42,
+    trends: { muscleMassKg: sources.muscleReport.last30Days.muscleMassKg },
+  });
+  expect(preprocessed.muscle.muscle_ratio_trend.preprocess).toEqual({
+    value: 56,
     trends: { muscleRatio: sources.muscleReport.last30Days.muscleRatio },
   });
   expect(preprocessed.muscle.skeletal_muscle_mass_trend.preprocess).toEqual({
