@@ -1,6 +1,10 @@
 import { tool } from "langchain";
 import * as z from "zod";
-import { BODY_COMPOSITION_METRICS_NEW_FACTORS, db } from "../db/db";
+import {
+  BODY_COMPOSITION_METRICS_NEW_FACTORS,
+  db,
+  getLatestBodyCompositionMeasurement,
+} from "../db/db";
 import {
   getProfileFatReport,
   getProfileMuscleReport,
@@ -28,6 +32,7 @@ const body_type_enum = z.enum([
   "obese",
 ]);
 
+const factor_color_enum = z.enum(["red", "orange", "yellow", "green"]);
 const trends = z.enum(BODY_COMPOSITION_METRICS_NEW_FACTORS);
 const remark_schema = z.object({
   marker: marker_enum,
@@ -95,6 +100,7 @@ type ProfileAiReportPreprocessSources = {
   fatReport?: FatReport | null;
   muscleReport?: MuscleReport | null;
   progressTrends?: BodyCompositionProgressTrends;
+  latestBodyComposition?: Record<string, unknown> | null;
 };
 
 type ProfileAiReportResolvedSources = {
@@ -102,6 +108,7 @@ type ProfileAiReportResolvedSources = {
   fatReport: FatReport | null;
   muscleReport: MuscleReport | null;
   progressTrends: BodyCompositionProgressTrends;
+  latestBodyComposition: Record<string, unknown> | null;
 };
 
 const emptyProgressTrends: BodyCompositionProgressTrends = {
@@ -229,6 +236,19 @@ export const insights_schema = z.object({
         "One concise coaching sentence naming the highest-ROI action and the visible payoff it should create.",
       ),
     }),
+    factor: z.object({
+      factor: trends.describe(
+        "The single existing body composition metric that is most outstanding or has the most improvement potential.",
+      ),
+      comment: z
+        .string()
+        .describe(
+          "One concise sentence explaining why this factor stands out or has the most potential.",
+        ),
+      remark: remark_schema.describe(
+        "One concise coaching sentence explaining how the user can build on this factor.",
+      ),
+    }),
     physique_archetype: z.object({
       title: z
         .string()
@@ -281,6 +301,9 @@ export const insights_schema = z.object({
         .describe("One concise sentence explaining the FFMI gauge result."),
       remark: remark_schema.describe(
         "One concise coaching sentence explaining what the FFMI gauge says about lean mass.",
+      ),
+      factor_color: factor_color_enum.describe(
+        "AI-selected gauge status: green is strong, yellow is a mild opportunity, orange needs meaningful attention, and red is the highest-priority opportunity.",
       ),
     }),
     fmi_vs_ffmi: z.object({
@@ -382,6 +405,9 @@ export const insights_schema = z.object({
       remark: remark_schema.describe(
         "One concise coaching sentence interpreting fat ratio in a supportive way.",
       ),
+      factor_color: factor_color_enum.describe(
+        "AI-selected gauge status: green is strong, yellow is a mild opportunity, orange needs meaningful attention, and red is the highest-priority opportunity.",
+      ),
     }),
     fat_ratio_trend: z.object({
       heading: z
@@ -461,6 +487,25 @@ export const insights_schema = z.object({
     }),
   }),
   muscle: z.object({
+    skeletal_muscle_gauge: z.object({
+      heading: z
+        .string()
+        .describe("Short display heading for skeletal muscle percentage."),
+      title: z
+        .string()
+        .describe("Short title interpreting skeletal muscle percentage."),
+      comment: z
+        .string()
+        .describe(
+          "One concise sentence explaining the skeletal muscle percentage gauge result.",
+        ),
+      remark: remark_schema.describe(
+        "One concise coaching sentence explaining what skeletal muscle percentage means for the user's physique.",
+      ),
+      factor_color: factor_color_enum.describe(
+        "AI-selected gauge status: green is strong, yellow is a mild opportunity, orange needs meaningful attention, and red is the highest-priority opportunity.",
+      ),
+    }),
     muscle_mass: z.object({
       heading: z.string().describe("Short display heading for muscle mass."),
       title: z
@@ -530,10 +575,15 @@ export function preprocessProfileAiReportPayload({
   fatReport = null,
   muscleReport = null,
   progressTrends = emptyProgressTrends,
+  latestBodyComposition = null,
 }: ProfileAiReportPreprocessSources = {}) {
   return {
     insights: {
       ...insights,
+      factor: withValue(
+        insights.factor,
+        latestBodyComposition?.[insights.factor.factor] ?? null,
+      ),
       progress: withTrends(
         {
           ...insights.progress,
@@ -613,6 +663,10 @@ export function preprocessProfileAiReportPayload({
       ),
     },
     muscle: {
+      skeletal_muscle_gauge: withValue(
+        muscle.skeletal_muscle_gauge,
+        muscleReport?.metrics.skeletalMuscleRatio ?? null,
+      ),
       muscle_mass: withValueAndTrends(
         muscle.muscle_mass,
         muscleReport?.metrics.totalMuscleKg ?? null,
@@ -685,7 +739,13 @@ export async function getProfileAiProgressTrends(
 export async function getProfileAiReportPreprocessSources(
   profileId: string,
 ): Promise<ProfileAiReportResolvedSources> {
-  const [performanceReport, fatReport, muscleReport, progressTrends] =
+  const [
+    performanceReport,
+    fatReport,
+    muscleReport,
+    progressTrends,
+    latestBodyComposition,
+  ] =
     await Promise.all([
       optionalSource("performance report", () => getProfilePerformance(profileId), null),
       optionalSource("fat report", () => getProfileFatReport(profileId), null),
@@ -695,6 +755,15 @@ export async function getProfileAiReportPreprocessSources(
         () => getProfileAiProgressTrends(profileId),
         emptyProgressTrends,
       ),
+      optionalSource(
+        "latest body composition",
+        async () =>
+          (await getLatestBodyCompositionMeasurement(profileId)) as Record<
+            string,
+            unknown
+          > | null,
+        null,
+      ),
     ]);
 
   return {
@@ -702,6 +771,7 @@ export async function getProfileAiReportPreprocessSources(
     fatReport,
     muscleReport,
     progressTrends,
+    latestBodyComposition,
   };
 }
 

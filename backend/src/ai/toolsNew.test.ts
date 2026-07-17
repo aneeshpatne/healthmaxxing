@@ -20,6 +20,16 @@ function card(label: string) {
   };
 }
 
+function gaugeCard(
+  label: string,
+  factorColor: "red" | "orange" | "yellow" | "green" = "green",
+) {
+  return {
+    ...card(label),
+    factor_color: factorColor,
+  };
+}
+
 function insightCard(label: string) {
   return {
     title: `${label} title`,
@@ -39,6 +49,11 @@ const payload = insights_schema.parse({
       trends: ["bmi", "water_pct"],
     },
     lever: insightCard("lever"),
+    factor: {
+      factor: "skeletal_muscle_kg",
+      comment: "Skeletal muscle has the clearest potential.",
+      remark: remark("Build steadily from your current muscle base."),
+    },
     physique_archetype: {
       ...insightCard("physique"),
       body_type: "fit",
@@ -49,7 +64,7 @@ const payload = insights_schema.parse({
     },
   },
   performance: {
-    ffmi_gauge: card("ffmi"),
+    ffmi_gauge: gaugeCard("ffmi"),
     fmi_vs_ffmi: card("fmi vs ffmi"),
     body_composition_flow: card("composition flow"),
     composition_trends: card("composition trends"),
@@ -57,7 +72,7 @@ const payload = insights_schema.parse({
     excess_fat_gauge: card("excess fat"),
   },
   fat: {
-    fat_ratio: card("fat ratio"),
+    fat_ratio: gaugeCard("fat ratio", "yellow"),
     fat_ratio_trend: card("fat ratio trend"),
     visceral_vs_subcutaneous: card("visceral vs subcutaneous"),
     visceral_trend: card("visceral trend"),
@@ -65,6 +80,7 @@ const payload = insights_schema.parse({
     fat_mass_trend: card("fat mass trend"),
   },
   muscle: {
+    skeletal_muscle_gauge: gaugeCard("skeletal muscle gauge"),
     muscle_mass: card("muscle mass"),
     bone_mass_trend: card("bone mass trend"),
     muscle_ratio_trend: card("muscle ratio trend"),
@@ -152,7 +168,37 @@ const sources = {
     fat_mass_kg: [{ createdAt: "2026-06-01", value: 18 }],
     muscle_mass_kg: [{ createdAt: "2026-06-01", value: 42 }],
   },
+  latestBodyComposition: {
+    skeletal_muscle_kg: 31,
+  },
 };
+
+test("insight factor and gauge colors are constrained enums", () => {
+  expect(payload.insights.factor.factor).toBe("skeletal_muscle_kg");
+  expect(payload.performance.ffmi_gauge.factor_color).toBe("green");
+  expect(payload.fat.fat_ratio.factor_color).toBe("yellow");
+  expect(payload.muscle.skeletal_muscle_gauge.factor_color).toBe("green");
+
+  const invalidFactor = structuredClone(payload) as any;
+  invalidFactor.insights.factor.factor = "unknown_metric";
+  expect(insights_schema.safeParse(invalidFactor).success).toBe(false);
+
+  const invalidColor = structuredClone(payload) as any;
+  invalidColor.performance.ffmi_gauge.factor_color = "blue";
+  expect(insights_schema.safeParse(invalidColor).success).toBe(false);
+});
+
+test("preprocessProfileAiReportPayload resolves the selected insight factor", () => {
+  const preprocessed = preprocessProfileAiReportPayload(payload, sources);
+
+  expect(preprocessed.insights.factor.preprocess).toEqual({ value: 31 });
+
+  const missingSource = preprocessProfileAiReportPayload(payload, {
+    ...sources,
+    latestBodyComposition: null,
+  });
+  expect(missingSource.insights.factor.preprocess).toEqual({ value: null });
+});
 
 test("preprocessProfileAiReportPayload forces progress trends only", () => {
   const preprocessed = preprocessProfileAiReportPayload(payload, sources);
@@ -213,6 +259,9 @@ test("preprocessProfileAiReportPayload marks fat and muscle with values and tren
   expect(preprocessed.muscle.muscle_mass.preprocess).toEqual({
     value: 42,
     trends: { muscleMassKg: sources.muscleReport.last30Days.muscleMassKg },
+  });
+  expect(preprocessed.muscle.skeletal_muscle_gauge.preprocess).toEqual({
+    value: 41,
   });
   expect(preprocessed.muscle.muscle_ratio_trend.preprocess).toEqual({
     value: 56,

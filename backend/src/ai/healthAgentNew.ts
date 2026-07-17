@@ -48,6 +48,11 @@ Every remark has a marker. Choose the one that best fits the sentence:
 - complement: the sentence reinforces what's already working.
 Default to complement for strengths and trend_up/trend_down only when describing an actual directional trend.
 
+FACTOR AND GAUGE STATUS
+- Select one Insights factor from the available body composition metric keys. Choose the metric that is either the clearest current strength or offers the greatest visible improvement potential.
+- Select factor_color for the FFMI, body-fat, and skeletal-muscle gauges from the current data: green for strong status, yellow for a mild opportunity, orange for a meaningful opportunity, and red only for the highest-priority opportunity.
+- Keep gauge colors consistent with each gauge's title, comment, and remark. Do not use clinical or risk-based reasoning.
+
 Never use risk-focused, fear-based, or clinical language. No diagnoses, no cliches. Keep every field concise — if a sentence needs a dash or semicolon, split it or cut it.`,
 );
 
