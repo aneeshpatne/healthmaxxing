@@ -18,6 +18,16 @@ enum FormaSpacing {
     static let cardInset = lg
 }
 
+enum FormaSemicircularGaugeLayout {
+    static let aspectRatio: CGFloat = 2
+    static let strokeWidth: CGFloat = 20
+    static let labelInset: CGFloat = 30
+    static let markerDiameter: CGFloat = 18
+    static let markerStrokeWidth: CGFloat = 3.5
+    static let scoreOffset: CGFloat = 20
+    static let valueFontSize: CGFloat = 40
+}
+
 enum FormaRadius {
     static let badge: CGFloat = 8
     static let inset: CGFloat = 14
@@ -402,8 +412,8 @@ struct FormaChartSummaryItem: Identifiable {
     let value: String
     let color: Color
 
-    init(label: String, value: String, color: Color) {
-        self.id = label
+    init(id: String, label: String, value: String, color: Color) {
+        self.id = id
         self.label = label
         self.value = value
         self.color = color
@@ -626,6 +636,7 @@ struct FormaTimeSeriesChart: View {
             date: date,
             items: selectedItems.map {
                 FormaChartSummaryItem(
+                    id: $0.id,
                     label: $0.metric,
                     value: formatted($0.value),
                     color: $0.color
