@@ -50,6 +50,33 @@ enum RemarkMarker: String, Codable, Equatable {
     }
 }
 
+enum FactorColor: String, Codable, Equatable {
+    case red
+    case orange
+    case yellow
+    case green
+
+    var color: Color {
+        switch self {
+        case .red: return .red
+        case .orange: return .orange
+        case .yellow: return .yellow
+        case .green: return .green
+        }
+    }
+}
+
+enum BodyType: String, Codable, Equatable {
+    case muscular
+    case fit
+    case normal
+    case skinnyFat = "skinny fat"
+    case overweight
+    case obese
+
+    var displayName: String { rawValue.capitalized }
+}
+
 
 struct InsightReportPayload: Equatable {
     let overview: InsightReportSection?
@@ -57,6 +84,7 @@ struct InsightReportPayload: Equatable {
     let momentum: InsightReportSection?
     let progress: InsightReportProgressSection?
     let lever: InsightReportSection?
+    let factor: InsightReportFactorSection?
     let physiqueArchetype: InsightReportPhysiqueSection?
     let effortScore: InsightReportEffortScoreSection?
     let performance: [String: InsightReportMetricSection]
@@ -74,6 +102,7 @@ struct InsightReportPayload: Equatable {
         self.momentum = InsightReportSection(json: insights["momentum"])
         self.progress = InsightReportProgressSection(json: insights["progress"])
         self.lever = InsightReportSection(json: insights["lever"])
+        self.factor = InsightReportFactorSection(json: insights["factor"])
         self.physiqueArchetype = InsightReportPhysiqueSection(json: insights["physique_archetype"])
         self.effortScore = InsightReportEffortScoreSection(json: insights["effort_score"])
         self.performance = Self.metricSections(from: root["performance"])
@@ -83,6 +112,23 @@ struct InsightReportPayload: Equatable {
 
     private static func metricSections(from json: JSONValue?) -> [String: InsightReportMetricSection] {
         (json?.objectValue ?? [:]).compactMapValues(InsightReportMetricSection.init(json:))
+    }
+}
+
+struct InsightReportFactorSection: Equatable {
+    let factor: String?
+    let factorColor: FactorColor?
+    let comment: String?
+    let remark: InsightReportRemark?
+    let value: Double?
+
+    init?(json: JSONValue?) {
+        guard let object = json?.objectValue else { return nil }
+        self.factor = object["factor"]?.stringValue
+        self.factorColor = object["factor_color"]?.stringValue.flatMap(FactorColor.init(rawValue:))
+        self.comment = object["comment"]?.stringValue
+        self.remark = InsightReportRemark(json: object["remark"])
+        self.value = object["preprocess"]?.objectValue?["value"]?.numberValue
     }
 }
 
@@ -130,7 +176,7 @@ struct InsightReportPhysiqueSection: Equatable {
     let title: String?
     let headline: String?
     let comment: String?
-    let bodyType: String?
+    let bodyType: BodyType?
 
     init?(json: JSONValue?) {
         guard let object = json?.objectValue else {
@@ -140,7 +186,7 @@ struct InsightReportPhysiqueSection: Equatable {
         self.title = object["title"]?.stringValue
         self.headline = object["headline"]?.stringValue
         self.comment = object["comment"]?.stringValue
-        self.bodyType = object["body_type"]?.stringValue
+        self.bodyType = object["body_type"]?.stringValue.flatMap(BodyType.init(rawValue:))
     }
 }
 
@@ -188,6 +234,7 @@ struct InsightReportMetricSection: Equatable {
     let headline: String?
     let comment: String?
     let remark: InsightReportRemark?
+    let factorColor: FactorColor?
     let value: JSONValue?
     let trends: [String: [InsightReportTrendPoint]]
 
@@ -201,6 +248,7 @@ struct InsightReportMetricSection: Equatable {
         self.headline = object["headline"]?.stringValue
         self.comment = object["comment"]?.stringValue
         self.remark = InsightReportRemark(json: object["remark"])
+        self.factorColor = object["factor_color"]?.stringValue.flatMap(FactorColor.init(rawValue:))
         self.value = object["preprocess"]?.objectValue?["value"]
         self.trends = Self.trendSections(from: object["preprocess"]?.objectValue?["trends"])
     }
