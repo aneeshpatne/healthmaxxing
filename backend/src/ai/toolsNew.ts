@@ -32,11 +32,33 @@ const body_type_enum = z.enum([
   "obese",
 ]);
 
+/** green=strong, yellow=mild opp, orange=meaningful, red=highest priority */
 const factor_color_enum = z.enum(["red", "orange", "yellow", "green"]);
 const trends = z.enum(BODY_COMPOSITION_METRICS_NEW_FACTORS);
+
 const remark_schema = z.object({
   marker: marker_enum,
   text: z.string(),
+});
+
+/** Shared insight card: short title/headline, one-sentence comment + remark. */
+const insight_card_schema = z.object({
+  title: z.string(),
+  headline: z.string(),
+  comment: z.string(),
+  remark: remark_schema,
+});
+
+/** Shared display card for performance/fat/muscle sections. */
+const display_card_schema = z.object({
+  heading: z.string(),
+  title: z.string(),
+  comment: z.string(),
+  remark: remark_schema,
+});
+
+const gauge_card_schema = display_card_schema.extend({
+  factor_color: factor_color_enum,
 });
 
 const PROFILE_PROGRESS_TRENDS = [
@@ -137,431 +159,79 @@ async function optionalSource<T>(
 
 export const insights_schema = z.object({
   insights: z.object({
-    overview: z.object({
-      title: z
-        .string()
-        .describe(
-          "Title which builds upon the user's achievement, or potential of what the user can achieve.",
-        ),
-      headline: z
-        .string()
-        .describe(
-          "Headline progress statement summarizing the user's achievement. A short, positive, complete sentence.",
-        ),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence expanding the overview with the clearest supporting context.",
-        ),
-      remark: remark_schema.describe(
-        "Supporting explanation displayed below the headline in smaller text. Explains why they're making progress or what specific metric/result supports the headline. One sentence, coaching tone.",
-      ),
-    }),
-    foundation: z.object({
-      title: z
-        .string()
-        .describe(
-          "Short title for what is already working well in the user's current physique.",
-        ),
-      headline: z
-        .string()
-        .describe(
-          "Short headline summarizing the user's strongest current foundation.",
-        ),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining the main strength behind the user's current foundation.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence describing the user's current base and what it gives them to build on.",
-      ),
-    }),
-    momentum: z.object({
-      title: z
-        .string()
-        .describe(
-          "Short title for what is actively improving or shifting in the user's recent data.",
-        ),
-      headline: z
-        .string()
-        .describe(
-          "Short headline summarizing the user's strongest current momentum signal.",
-        ),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining the recent pattern behind the momentum signal.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining the strongest recent trend and why it matters.",
-      ),
-    }),
-    progress: z.object({
-      title: z
-        .string()
-        .describe("Short title for the user's overall progress signal."),
-      headline: z
-        .string()
-        .describe(
-          "Short headline summarizing the user's most important progress pattern.",
-        ),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining how the selected trends support the progress read.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence interpreting the user's progress.",
-      ),
-      trends: z
-        .array(trends)
-        .describe(
-          "Selectable body composition metric trends that support this progress insight.",
-        ),
-    }),
-    lever: z.object({
-      title: z
-        .string()
-        .describe("Short title for the single highest-impact next move."),
-      headline: z
-        .string()
-        .describe("Short headline summarizing the highest-impact next move."),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining why this lever has the highest payoff.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence naming the highest-ROI action and the visible payoff it should create.",
-      ),
-    }),
+    overview: insight_card_schema.describe(
+      "Achievement / potential overview",
+    ),
+    foundation: insight_card_schema.describe("What is already working"),
+    momentum: insight_card_schema.describe("Strongest recent trend signal"),
+    progress: insight_card_schema
+      .extend({
+        trends: z
+          .array(trends)
+          .describe("Body-comp metric keys supporting this progress read"),
+      })
+      .describe("Overall progress pattern"),
+    lever: insight_card_schema.describe("Single highest-ROI next move"),
     factor: z.object({
       factor: trends.describe(
-        "The single existing body composition metric that is most outstanding or has the most improvement potential.",
+        "Outstanding metric key or best improvement potential",
       ),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining why this factor stands out or has the most potential.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining how the user can build on this factor.",
-      ),
+      factor_color: factor_color_enum,
+      comment: z.string(),
+      remark: remark_schema,
     }),
     physique_archetype: z.object({
-      title: z
-        .string()
-        .describe("Short label introducing the user's current body type."),
-      headline: z
-        .string()
-        .describe(
-          "Short headline describing the user's current physique archetype in supportive language.",
-        ),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining why this body type classification fits the current data.",
-        ),
-      body_type: body_type_enum.describe("Current body type classification."),
+      title: z.string(),
+      headline: z.string(),
+      comment: z.string(),
+      body_type: body_type_enum,
     }),
     effort_score: z.object({
-      title: z
-        .string()
-        .describe("Short label introducing the user's effort score."),
-      headline: z
-        .string()
-        .describe(
-          "Short headline summarizing what the effort score says about the user's current progress.",
-        ),
-      score: z
-        .number()
-        .int()
-        .min(0)
-        .max(100)
-        .describe("Effort score from 0 to 100."),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining the main evidence behind the effort score.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining the score and its main driver.",
-      ),
+      title: z.string(),
+      headline: z.string(),
+      score: z.number().int().min(0).max(100),
+      comment: z.string(),
+      remark: remark_schema,
     }),
   }),
   performance: z.object({
-    ffmi_gauge: z.object({
-      heading: z.string().describe("Short display heading for the FFMI gauge."),
-      title: z
-        .string()
-        .describe("Short title interpreting the user's FFMI level."),
-      comment: z
-        .string()
-        .describe("One concise sentence explaining the FFMI gauge result."),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining what the FFMI gauge says about lean mass.",
-      ),
-      factor_color: factor_color_enum.describe(
-        "AI-selected gauge status: green is strong, yellow is a mild opportunity, orange needs meaningful attention, and red is the highest-priority opportunity.",
-      ),
-    }),
-    fmi_vs_ffmi: z.object({
-      heading: z
-        .string()
-        .describe("Short display heading for the FMI vs FFMI composition map."),
-      title: z
-        .string()
-        .describe(
-          "Short title interpreting the user's fat mass index against fat-free mass index.",
-        ),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining the FMI vs FFMI composition map result.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining the user's composition map position.",
-      ),
-    }),
-    body_composition_flow: z.object({
-      heading: z
-        .string()
-        .describe("Short display heading for body composition flow."),
-      title: z
-        .string()
-        .describe(
-          "Short title interpreting lean mass and fat mass contribution to total weight.",
-        ),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining lean mass and fat mass contribution to total weight.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining how lean mass and fat mass are shaping total weight.",
-      ),
-    }),
-    composition_trends: z.object({
-      heading: z
-        .string()
-        .describe("Short display heading for composition trends."),
-      title: z
-        .string()
-        .describe("Short title comparing lean change against fat change."),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining recent lean change versus fat change.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining whether recent change is moving toward more lean mass, less fat, or a better balance.",
-      ),
-    }),
-    target_vs_current_weight: z.object({
-      heading: z
-        .string()
-        .describe("Short display heading for target versus current weight."),
-      title: z
-        .string()
-        .describe(
-          "Short title interpreting the gap between current weight and target weight.",
-        ),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining current weight relative to target weight.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining the practical meaning of the current-to-target weight gap.",
-      ),
-    }),
-    excess_fat_gauge: z.object({
-      heading: z
-        .string()
-        .describe("Short display heading for the excess fat gauge."),
-      title: z
-        .string()
-        .describe("Short title interpreting excess fat relative to target."),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining the excess fat gauge result.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining how much fat loss opportunity remains in a supportive way.",
-      ),
-    }),
+    ffmi_gauge: gauge_card_schema.describe("FFMI lean-mass gauge"),
+    fmi_vs_ffmi: display_card_schema.describe("FMI vs FFMI map"),
+    body_composition_flow: display_card_schema.describe(
+      "Lean vs fat contribution to weight",
+    ),
+    composition_trends: display_card_schema.describe(
+      "Recent lean change vs fat change",
+    ),
+    target_vs_current_weight: display_card_schema.describe(
+      "Current vs target weight gap",
+    ),
+    excess_fat_gauge: display_card_schema.describe(
+      "Excess fat vs target (supportive)",
+    ),
   }),
   fat: z.object({
-    fat_ratio: z.object({
-      heading: z.string().describe("Short display heading for fat ratio."),
-      title: z
-        .string()
-        .describe("Short title interpreting the user's fat ratio."),
-      comment: z
-        .string()
-        .describe("One concise sentence explaining the fat ratio result."),
-      remark: remark_schema.describe(
-        "One concise coaching sentence interpreting fat ratio in a supportive way.",
-      ),
-      factor_color: factor_color_enum.describe(
-        "AI-selected gauge status: green is strong, yellow is a mild opportunity, orange needs meaningful attention, and red is the highest-priority opportunity.",
-      ),
-    }),
-    fat_ratio_trend: z.object({
-      heading: z
-        .string()
-        .describe("Short display heading for fat ratio trend."),
-      title: z
-        .string()
-        .describe("Short title interpreting the fat ratio trend."),
-      comment: z
-        .string()
-        .describe("One concise sentence explaining how fat ratio is trending."),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining what the fat ratio trend means.",
-      ),
-    }),
-    visceral_vs_subcutaneous: z.object({
-      heading: z
-        .string()
-        .describe(
-          "Short display heading for visceral versus subcutaneous fat.",
-        ),
-      title: z
-        .string()
-        .describe(
-          "Short title comparing visceral fat against subcutaneous fat.",
-        ),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining the visceral versus subcutaneous fat balance.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence interpreting visceral versus subcutaneous fat.",
-      ),
-    }),
-    visceral_trend: z.object({
-      heading: z
-        .string()
-        .describe("Short display heading for visceral fat trend."),
-      title: z
-        .string()
-        .describe("Short title interpreting visceral fat trend."),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining how visceral fat is trending.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining what the visceral fat trend means.",
-      ),
-    }),
-    subcutaneous_fat_mass_trend: z.object({
-      heading: z
-        .string()
-        .describe("Short display heading for subcutaneous fat mass trend."),
-      title: z
-        .string()
-        .describe("Short title interpreting subcutaneous fat mass trend."),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining how subcutaneous fat mass is trending.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining what the subcutaneous fat mass trend means.",
-      ),
-    }),
-    fat_mass_trend: z.object({
-      heading: z.string().describe("Short display heading for fat mass trend."),
-      title: z.string().describe("Short title interpreting fat mass trend."),
-      comment: z
-        .string()
-        .describe("One concise sentence explaining how fat mass is trending."),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining what the fat mass trend means.",
-      ),
-    }),
+    fat_ratio: gauge_card_schema.describe("Fat ratio gauge"),
+    fat_ratio_trend: display_card_schema.describe("Fat ratio trend"),
+    visceral_vs_subcutaneous: display_card_schema.describe(
+      "Visceral vs subcutaneous balance",
+    ),
+    visceral_trend: display_card_schema.describe("Visceral fat trend"),
+    subcutaneous_fat_mass_trend: display_card_schema.describe(
+      "Subcutaneous fat mass trend",
+    ),
+    fat_mass_trend: display_card_schema.describe("Fat mass trend"),
   }),
   muscle: z.object({
-    skeletal_muscle_gauge: z.object({
-      heading: z
-        .string()
-        .describe("Short display heading for skeletal muscle percentage."),
-      title: z
-        .string()
-        .describe("Short title interpreting skeletal muscle percentage."),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining the skeletal muscle percentage gauge result.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining what skeletal muscle percentage means for the user's physique.",
-      ),
-      factor_color: factor_color_enum.describe(
-        "AI-selected gauge status: green is strong, yellow is a mild opportunity, orange needs meaningful attention, and red is the highest-priority opportunity.",
-      ),
-    }),
-    muscle_mass: z.object({
-      heading: z.string().describe("Short display heading for muscle mass."),
-      title: z
-        .string()
-        .describe("Short title interpreting the user's muscle mass."),
-      comment: z
-        .string()
-        .describe("One concise sentence explaining the muscle mass result."),
-      remark: remark_schema.describe(
-        "One concise coaching sentence interpreting muscle mass in a supportive way.",
-      ),
-    }),
-    bone_mass_trend: z.object({
-      heading: z
-        .string()
-        .describe("Short display heading for bone mass trend."),
-      title: z.string().describe("Short title interpreting bone mass trend."),
-      comment: z
-        .string()
-        .describe("One concise sentence explaining how bone mass is trending."),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining what the bone mass trend means.",
-      ),
-    }),
-    muscle_ratio_trend: z.object({
-      heading: z
-        .string()
-        .describe("Short display heading for muscle percentage trend."),
-      title: z
-        .string()
-        .describe("Short title interpreting the muscle percentage trend."),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining how muscle percentage is trending.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining what the muscle percentage trend means.",
-      ),
-    }),
-    skeletal_muscle_mass_trend: z.object({
-      heading: z
-        .string()
-        .describe("Short display heading for skeletal muscle mass trend."),
-      title: z
-        .string()
-        .describe("Short title interpreting skeletal muscle mass trend."),
-      comment: z
-        .string()
-        .describe(
-          "One concise sentence explaining how skeletal muscle mass is trending.",
-        ),
-      remark: remark_schema.describe(
-        "One concise coaching sentence explaining what the skeletal muscle mass trend means.",
-      ),
-    }),
+    skeletal_muscle_gauge: gauge_card_schema.describe(
+      "Skeletal muscle % gauge",
+    ),
+    muscle_mass: display_card_schema.describe("Muscle mass"),
+    bone_mass_trend: display_card_schema.describe("Bone mass trend"),
+    muscle_ratio_trend: display_card_schema.describe("Muscle % trend"),
+    skeletal_muscle_mass_trend: display_card_schema.describe(
+      "Skeletal muscle mass trend",
+    ),
   }),
 });
 
@@ -798,7 +468,7 @@ export function createTools(reportId: string, profileId: string) {
     {
       name: "profile_ai_report",
       description:
-        "Generate the complete structured profile AI report payload.",
+        "Generate the complete structured profile AI report. Cards: short title/headline/heading, one-sentence comment, remark{marker,text}. Markers: trend_up|trend_down|ai_recommendation|caution|complement. factor_color: green|yellow|orange|red (strong→highest priority). Supportive coach tone; no clinical/risk language.",
       schema: insights_schema,
     },
   );

@@ -51,6 +51,7 @@ const payload = insights_schema.parse({
     lever: insightCard("lever"),
     factor: {
       factor: "skeletal_muscle_kg",
+      factor_color: "yellow",
       comment: "Skeletal muscle has the clearest potential.",
       remark: remark("Build steadily from your current muscle base."),
     },
@@ -175,6 +176,7 @@ const sources = {
 
 test("insight factor and gauge colors are constrained enums", () => {
   expect(payload.insights.factor.factor).toBe("skeletal_muscle_kg");
+  expect(payload.insights.factor.factor_color).toBe("yellow");
   expect(payload.performance.ffmi_gauge.factor_color).toBe("green");
   expect(payload.fat.fat_ratio.factor_color).toBe("yellow");
   expect(payload.muscle.skeletal_muscle_gauge.factor_color).toBe("green");
@@ -184,7 +186,7 @@ test("insight factor and gauge colors are constrained enums", () => {
   expect(insights_schema.safeParse(invalidFactor).success).toBe(false);
 
   const invalidColor = structuredClone(payload) as any;
-  invalidColor.performance.ffmi_gauge.factor_color = "blue";
+  invalidColor.insights.factor.factor_color = "blue";
   expect(insights_schema.safeParse(invalidColor).success).toBe(false);
 });
 

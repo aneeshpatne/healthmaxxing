@@ -638,13 +638,18 @@ export async function getBodyMeasurementDeltaV2(profileId: string) {
   return toCompactDeltaTable(delta, BODY_MEASUREMENT_DELTA_METRICS);
 }
 
+function cell(value: unknown): string {
+  if (value == null) return "NA";
+  return String(value);
+}
+
 function deltaTableToTsv(table: CompactDeltaTable | null): string {
   if (!table) return "";
 
   return [
     table.columns.join("\t"),
     ...table.rows.map((row) =>
-      row.map((value) => value ?? "NA").join("\t"),
+      row.map((value) => cell(value)).join("\t"),
     ),
   ].join("\n");
 }
@@ -655,7 +660,89 @@ function metricTableToTsv(table: CompactMetricTable | null): string {
   return [
     table.columns.join("\t"),
     ...table.rows.map((row) =>
-      row.map((value) => value ?? "NA").join("\t"),
+      row.map((value) => cell(value)).join("\t"),
+    ),
+  ].join("\n");
+}
+
+/** YYYY-MM-DD when parseable; otherwise original string or null. */
+export function formatIsoDate(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Compact profile line for LLM input.
+ * Example: h=165 dob=1968-10-05 type=standard sex=male targetBF=18
+ */
+export function formatProfileMetadataCompact(
+  record: Record<string, unknown> | null | undefined,
+): string {
+  if (!record) return "";
+
+  const parts: string[] = [];
+  const height = record.heightCm;
+  const dob = formatIsoDate(record.dateOfBirth);
+  const peopleType = record.peopleType;
+  const gender = record.gender;
+  const targetBf = record.preferredBodyFatPct;
+
+  if (height != null) parts.push(`h=${height}`);
+  if (dob != null) parts.push(`dob=${dob}`);
+  if (peopleType != null) parts.push(`type=${peopleType}`);
+  if (gender != null) parts.push(`sex=${gender}`);
+  if (targetBf != null) parts.push(`targetBF=${targetBf}`);
+
+  return parts.join(" ");
+}
+
+/**
+ * Merge current snapshot + period deltas into one TSV.
+ * Columns: m (metric), v (current), all/y1/d30/d7 (latest − period avg).
+ * Omits empty tables. Keeps full metric keys (tool enums).
+ */
+export function formatSnapshotWithDeltas(
+  latest: CompactMetricTable | null,
+  delta: CompactDeltaTable | null,
+): string {
+  if (!latest && !delta) return "";
+
+  const valueByMetric = new Map<string, number | null>(
+    (latest?.rows ?? []).map(([metric, value]) => [metric, value]),
+  );
+
+  if (delta) {
+    const header = "m\tv\tall\ty1\td30\td7";
+    const seen = new Set<string>();
+    const lines: string[] = [header];
+
+    for (const row of delta.rows) {
+      const metric = row[0];
+      seen.add(metric);
+      const current = valueByMetric.has(metric)
+        ? cell(valueByMetric.get(metric))
+        : "NA";
+      lines.push(
+        [metric, current, ...row.slice(1).map((value) => cell(value))].join(
+          "\t",
+        ),
+      );
+    }
+
+    for (const [metric, value] of valueByMetric) {
+      if (seen.has(metric)) continue;
+      lines.push([metric, cell(value), "NA", "NA", "NA", "NA"].join("\t"));
+    }
+
+    return lines.join("\n");
+  }
+
+  return [
+    "m\tv",
+    ...(latest?.rows ?? []).map(
+      ([metric, value]) => `${metric}\t${cell(value)}`,
     ),
   ].join("\n");
 }
@@ -669,14 +756,7 @@ export function formatRecordAsTsv(
     if (value == null) return "NA";
 
     if (key === "dateOfBirth") {
-      const date = new Date(String(value));
-      if (!Number.isNaN(date.getTime())) {
-        return date.toLocaleDateString("en-IN", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        });
-      }
+      return formatIsoDate(value) ?? "NA";
     }
 
     return String(value);

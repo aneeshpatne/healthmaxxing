@@ -26,16 +26,21 @@ if (!apiKey) {
 //   },
 // });
 
-export const model = new ChatDeepSeek("deepseek-v4-pro", {
-  apiKey: deepSeekApiKey,
-  modelKwargs: {
-    reasoning_effort: "high",
-  },
-});
-
-// export const model = await initChatModel("openai:gpt-5.5", {
-//   apiKey: openaiApiKey,
+// export const model = new ChatDeepSeek("deepseek-v4-pro", {
+//   apiKey: deepSeekApiKey,
+//   modelKwargs: {
+//     reasoning_effort: "high",
+//   },
 // });
+
+export const model = await initChatModel("gpt-5.6-terra", {
+  modelProvider: "openai",
+  apiKey: openaiApiKey,
+  useResponsesApi: true,
+  reasoningEffort: "low",
+  promptCacheKey: "news-primary-agent",
+  promptCacheRetention: "24h",
+});
 
 // export const model = new ChatGoogle({
 //   apiKey: googleApiKey,
