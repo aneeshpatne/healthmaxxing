@@ -1,5 +1,6 @@
 import { v7 as uuidv7 } from "uuid";
 import { BODY_COMPOSITION_METRICS_NEW_FACTORS, db } from "./db";
+import type { DatabaseClient } from "./client";
 import {
   calculateCompositionSummary,
   type CompositionSummary,
@@ -197,6 +198,14 @@ export type RecentProfileAiReport = Omit<ProfileAiReportById, "data"> & {
 
 export type ProfileAiReportJob = RecentProfileAiReport & {
   jobId: string;
+};
+
+export type ProfileInsightReportSource = {
+  reportId: string;
+  profileId: ProfileId;
+  bodyCompositionMetricsId: string;
+  asOf: string;
+  profileContext: Record<string, unknown> | null;
 };
 
 export type LatestBodyCompositionSnapshot = {
@@ -622,22 +631,20 @@ export type FatReport = {
   createdAt: string;
   metrics: {
     fatPercent: number;
-    visceralSubcutaneous30dDelta: {
-      visceralFatDeltaKg: number;
+    visceralFatIndex: number;
+    fatDistribution30dDelta: {
+      visceralFatIndexDelta: number;
       subcutaneousFatDeltaKg: number;
     };
     fatMassKg: number;
-    visceralFatMassKg: number;
-    visceralFatPercent: number;
     subcutaneousFatMassKg: number;
     subcutaneousFatRatio: number;
   };
   last30Days: {
     fatPercent: FatReportTrendPoint[];
     fatMassKg: FatReportTrendPoint[];
-    visceralFatMassKg: FatReportTrendPoint[];
+    visceralFatIndex: FatReportTrendPoint[];
     subcutaneousFatMassKg: FatReportTrendPoint[];
-    visceralFatPercent: FatReportTrendPoint[];
     subcutaneousFatPercent: FatReportTrendPoint[];
   };
   comments: FatReportComments;
@@ -677,13 +684,13 @@ export type MuscleReport = {
   createdAt: string;
   metrics: {
     totalMuscleKg: number;
-    boneMassKg: number;
+    leanNonMuscleMassKg: number;
     muscleRatio: number;
     skeletalMuscleMassKg: number;
     skeletalMuscleRatio: number;
   };
   last30Days: {
-    boneMassKg: MuscleReportTrendPoint[];
+    leanNonMuscleMassKg: MuscleReportTrendPoint[];
     muscleMassKg: MuscleReportTrendPoint[];
     muscleRatio: MuscleReportTrendPoint[];
     skeletalMuscleMassKg: MuscleReportTrendPoint[];
@@ -1033,10 +1040,11 @@ export async function addMeasurement(
   weight: number,
   heartbeat: number,
   impedance: number,
+  idempotencyKey: string | null = null,
 ) {
   const id = uuidv7();
 
-  await db.prepare(
+  const inserted = await db.prepare(
     `
   INSERT INTO measurements (
     id,
@@ -1044,13 +1052,74 @@ export async function addMeasurement(
     weight,
     heart_rate,
     impedance,
+    idempotency_key,
     created_at
   )
-  VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  ON CONFLICT (profile_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL
+  DO NOTHING
+  RETURNING id
 `,
-  ).run(id, profileId, weight, heartbeat, impedance);
+  ).get(id, profileId, weight, heartbeat, impedance, idempotencyKey) as
+    | { id: string }
+    | null;
 
-  return id;
+  if (inserted !== null) {
+    return { id, created: true };
+  }
+
+  const existing = await db.prepare(
+    `SELECT id FROM measurements
+     WHERE profile_id = ? AND idempotency_key = ? LIMIT 1`,
+  ).get(profileId, idempotencyKey) as { id: string } | null;
+  if (existing === null) {
+    throw new Error("Unable to resolve idempotent measurement");
+  }
+
+  return { id: existing.id, created: false };
+}
+
+export async function getMeasurementProcessingResult(measurementId: string) {
+  return await db.prepare(
+    `
+  SELECT
+    measurements.calculation_status AS calculationStatus,
+    measurements.calculation_error AS calculationError,
+    profile_insight_reports.id AS reportId,
+    profile_insight_reports.generation_status AS reportStatus
+  FROM measurements
+  LEFT JOIN body_composition_metrics_new
+    ON body_composition_metrics_new.measurement_id = measurements.id
+  LEFT JOIN profile_insight_reports
+    ON profile_insight_reports.body_composition_metrics_id = body_composition_metrics_new.id
+  WHERE measurements.id = ?
+  LIMIT 1
+`,
+  ).get(measurementId) as {
+    calculationStatus: string;
+    calculationError: string | null;
+    reportId: string | null;
+    reportStatus: string | null;
+  } | null;
+}
+
+export async function updateMeasurementCalculationStatus({
+  measurementId,
+  status,
+  error = null,
+}: {
+  measurementId: string;
+  status: "pending" | "completed" | "failed";
+  error?: string | null;
+}) {
+  await db.prepare(
+    `
+  UPDATE measurements
+  SET calculation_status = ?, calculation_error = ?
+  WHERE id = ?
+`,
+  ).run(status, error, measurementId);
 }
 
  function quantityQty(value: QuantityValue | null | undefined): number | null {
@@ -1610,14 +1679,19 @@ export async  function saveBodyCompositionMetrics(
 export async function addProprietaryBodyCompositionMetrics(
   profileId: ProfileId,
   metrics: BodyCompositionMetricsNewRow,
+  measurementId: string | null = null,
+  profileContext: Record<string, unknown> | null = null,
+  client: DatabaseClient = db,
 ) {
   const id = uuidv7();
 
-  await db.prepare(
+  await client.prepare(
     `
   INSERT INTO body_composition_metrics_new (
     id,
     profile_id,
+    measurement_id,
+    profile_context,
     bmi,
     body_fat_pct,
     fat_mass_kg,
@@ -1639,11 +1713,13 @@ export async function addProprietaryBodyCompositionMetrics(
     predicted_lean_mass_kg,
     created_at
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 `,
   ).run(
     id,
     profileId,
+    measurementId,
+    profileContext === null ? null : JSON.stringify(profileContext),
     metrics.bmi,
     metrics.body_fat_pct,
     metrics.fat_mass_kg,
@@ -1671,23 +1747,57 @@ export async function addProprietaryBodyCompositionMetrics(
 export async function addDerivedBodyComposition(
   profileId: ProfileId,
   metrics: DerivedBodyCompositionMetrics,
+  bodyCompositionMetricsId: string | null = null,
+  client: DatabaseClient = db,
 ) {
   const id = uuidv7();
 
-  await db.prepare(
+  await client.prepare(
     `
   INSERT INTO derived_body_composition_metrics (
     id,
     profile_id,
+    body_composition_metrics_id,
     fmi,
     ffmi,
     created_at
   )
-  VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 `,
-  ).run(id, profileId, metrics.fmi, metrics.ffmi);
+  ).run(id, profileId, bodyCompositionMetricsId, metrics.fmi, metrics.ffmi);
 
   return id;
+}
+
+export async function addMeasurementCompositionSnapshot({
+  profileId,
+  measurementId,
+  metrics,
+  derivedMetrics,
+  profileContext,
+}: {
+  profileId: ProfileId;
+  measurementId: string;
+  metrics: BodyCompositionMetricsNewRow;
+  derivedMetrics: DerivedBodyCompositionMetrics;
+  profileContext: Record<string, unknown>;
+}) {
+  return await db.transaction(async (tx) => {
+    const metricsId = await addProprietaryBodyCompositionMetrics(
+      profileId,
+      metrics,
+      measurementId,
+      profileContext,
+      tx,
+    );
+    await addDerivedBodyComposition(
+      profileId,
+      derivedMetrics,
+      metricsId,
+      tx,
+    );
+    return metricsId;
+  });
 }
 
 async function getLatestBodyCompositionMetricsId(profileId: ProfileId) {
@@ -1710,8 +1820,9 @@ async function getOrCreatePerformanceReport(
   bodyCompositionMetricsId: string,
   metrics?: Partial<DerivedBodyCompositionMetrics>,
   modelName: string | null = null,
+  client: DatabaseClient = db,
 ) {
-  const existing = await db    .prepare(
+  const existing = await client.prepare(
       `
   SELECT id
   FROM performance_reports
@@ -1723,7 +1834,7 @@ async function getOrCreatePerformanceReport(
 
   if (existing !== null) {
     if (metrics?.fmi !== undefined || metrics?.ffmi !== undefined || modelName !== null) {
-      await db.prepare(
+      await client.prepare(
         `
   UPDATE performance_reports
   SET
@@ -1741,7 +1852,7 @@ async function getOrCreatePerformanceReport(
 
   const id = uuidv7();
 
-  await db.prepare(
+  await client.prepare(
     `
   INSERT INTO performance_reports (
     id,
@@ -1789,8 +1900,9 @@ async function getOrCreatePerformanceReport(
 async function getOrCreateProfileInsightReport(
   profileId: ProfileId,
   bodyCompositionMetricsId: string,
+  client: DatabaseClient = db,
 ) {
-  const existing = await db    .prepare(
+  const existing = await client.prepare(
       `
   SELECT id
   FROM profile_insight_reports
@@ -1806,7 +1918,7 @@ async function getOrCreateProfileInsightReport(
 
   const id = uuidv7();
 
-  await db.prepare(
+  await client.prepare(
     `
   INSERT INTO profile_insight_reports (
     id,
@@ -1829,8 +1941,9 @@ async function getOrCreateFatReport(
   profileId: ProfileId,
   bodyCompositionMetricsId: string,
   modelName: string | null = null,
+  client: DatabaseClient = db,
 ) {
-  const existing = await db    .prepare(
+  const existing = await client.prepare(
       `
   SELECT id
   FROM fat_reports
@@ -1842,7 +1955,7 @@ async function getOrCreateFatReport(
 
   if (existing !== null) {
     if (modelName !== null) {
-      await db.prepare(
+      await client.prepare(
         `
   UPDATE fat_reports
   SET model_name = ?, updated_at = CURRENT_TIMESTAMP
@@ -1856,18 +1969,17 @@ async function getOrCreateFatReport(
 
   const id = uuidv7();
 
-  await db.prepare(
+  await client.prepare(
     `
   INSERT INTO fat_reports (
     id,
     profile_id,
     body_composition_metrics_id,
     fat_percent,
-    visceral_fat_delta_30d_kg,
+    visceral_fat_index_delta_30d,
     subcutaneous_fat_delta_30d_kg,
     fat_mass_kg,
-    visceral_fat_mass_kg,
-    visceral_fat_percent,
+    visceral_fat_index,
     subcutaneous_fat_mass_kg,
     subcutaneous_fat_ratio,
     model_name,
@@ -1880,14 +1992,12 @@ async function getOrCreateFatReport(
     latest.id,
     latest.body_fat_pct,
     ROUND(
-      (latest.fat_mass_kg - latest.subcutaneous_fat_mass_kg) -
-      (baseline.fat_mass_kg - baseline.subcutaneous_fat_mass_kg),
+      latest.visceral_fat - baseline.visceral_fat,
       2
     ),
     ROUND(latest.subcutaneous_fat_mass_kg - baseline.subcutaneous_fat_mass_kg, 2),
     latest.fat_mass_kg,
-    ROUND(latest.fat_mass_kg - latest.subcutaneous_fat_mass_kg, 2),
-    ROUND(latest.body_fat_pct - latest.subcutaneous_fat_pct, 2),
+    latest.visceral_fat,
     latest.subcutaneous_fat_mass_kg,
     CASE
       WHEN latest.fat_mass_kg <= 0 THEN 0
@@ -1919,8 +2029,9 @@ async function getOrCreateMuscleReport(
   profileId: ProfileId,
   bodyCompositionMetricsId: string,
   modelName: string | null = null,
+  client: DatabaseClient = db,
 ) {
-  const existing = await db    .prepare(
+  const existing = await client.prepare(
       `
   SELECT id
   FROM muscle_reports
@@ -1932,7 +2043,7 @@ async function getOrCreateMuscleReport(
 
   if (existing !== null) {
     if (modelName !== null) {
-      await db.prepare(
+      await client.prepare(
         `
   UPDATE muscle_reports
   SET model_name = ?, updated_at = CURRENT_TIMESTAMP
@@ -1946,14 +2057,14 @@ async function getOrCreateMuscleReport(
 
   const id = uuidv7();
 
-  await db.prepare(
+  await client.prepare(
     `
   INSERT INTO muscle_reports (
     id,
     profile_id,
     body_composition_metrics_id,
     total_muscle_kg,
-    bone_mass_kg,
+    lean_non_muscle_mass_kg,
     muscle_ratio,
     skeletal_muscle_mass_kg,
     skeletal_muscle_ratio,
@@ -1996,33 +2107,38 @@ export async  function createSnapshotReports({
   derivedMetrics?: DerivedBodyCompositionMetrics;
   modelName?: string | null;
 }) {
-  const performanceReportId = await getOrCreatePerformanceReport(
-    profileId,
-    bodyCompositionMetricsId,
-    derivedMetrics,
-    modelName,
-  );
-  const insightReportId = await getOrCreateProfileInsightReport(
-    profileId,
-    bodyCompositionMetricsId,
-  );
-  const fatReportId = await getOrCreateFatReport(
-    profileId,
-    bodyCompositionMetricsId,
-    modelName,
-  );
-  const muscleReportId = await getOrCreateMuscleReport(
-    profileId,
-    bodyCompositionMetricsId,
-    modelName,
-  );
-
-  return {
-    performanceReportId,
-    insightReportId,
-    fatReportId,
-    muscleReportId,
-  };
+  return await db.transaction(async (tx) => {
+    const performanceReportId = await getOrCreatePerformanceReport(
+      profileId,
+      bodyCompositionMetricsId,
+      derivedMetrics,
+      modelName,
+      tx,
+    );
+    const insightReportId = await getOrCreateProfileInsightReport(
+      profileId,
+      bodyCompositionMetricsId,
+      tx,
+    );
+    const fatReportId = await getOrCreateFatReport(
+      profileId,
+      bodyCompositionMetricsId,
+      modelName,
+      tx,
+    );
+    const muscleReportId = await getOrCreateMuscleReport(
+      profileId,
+      bodyCompositionMetricsId,
+      modelName,
+      tx,
+    );
+    return {
+      performanceReportId,
+      insightReportId,
+      fatReportId,
+      muscleReportId,
+    };
+  });
 }
 
   async function getLatestReportIds(profileId: ProfileId) {
@@ -2401,8 +2517,7 @@ export async function upsertProfileAiReportJsonLd({
   profileId,
   data,
 }: ProfileAiReportJsonLd) {
-  await db.transaction(async (tx) => {
-    await tx.prepare(
+  await db.prepare(
       `
   INSERT INTO profile_ai_report_jsonld (
     report_id,
@@ -2416,19 +2531,6 @@ export async function upsertProfileAiReportJsonLd({
     created_on = CURRENT_TIMESTAMP
 `,
     ).run(reportId, profileId, JSON.stringify(data));
-
-    await tx.prepare(
-      `
-  UPDATE profile_insight_reports
-  SET
-    generation_status = 'completed',
-    generation_error = NULL,
-    updated_at = CURRENT_TIMESTAMP
-  WHERE id = ?
-    AND profile_id = ?
-`,
-    ).run(reportId, profileId);
-  });
 }
 
 export async function updateProfileInsightReportGenerationStatus({
@@ -2462,6 +2564,43 @@ export async function updateProfileInsightReportGenerationStatus({
   }
 }
 
+export async function getProfileInsightReportSource({
+  reportId,
+  profileId,
+}: {
+  reportId: string;
+  profileId: ProfileId;
+}): Promise<ProfileInsightReportSource> {
+  const source = await db.prepare(
+    `
+  SELECT
+    profile_insight_reports.id AS reportId,
+    profile_insight_reports.profile_id AS profileId,
+    profile_insight_reports.body_composition_metrics_id AS bodyCompositionMetricsId,
+    body_composition_metrics_new.created_at AS asOf,
+    body_composition_metrics_new.profile_context AS profileContext
+  FROM profile_insight_reports
+  INNER JOIN body_composition_metrics_new
+    ON body_composition_metrics_new.id = profile_insight_reports.body_composition_metrics_id
+  WHERE profile_insight_reports.id = ?
+    AND profile_insight_reports.profile_id = ?
+  LIMIT 1
+`,
+  ).get(reportId, profileId) as ProfileInsightReportSource | null;
+
+  if (source === null) {
+    throw new Error(`Report ${reportId} has no source snapshot for profile ${profileId}`);
+  }
+
+  return {
+    ...source,
+    profileContext:
+      typeof source.profileContext === "string"
+        ? JSON.parse(source.profileContext)
+        : source.profileContext,
+  };
+}
+
 export async function failActiveProfileInsightReportJobsOnStartup() {
   await db.prepare(
     `
@@ -2492,10 +2631,7 @@ export async function getProfileAiReportById({
   SELECT
     profile_insight_reports.id AS reportId,
     profile_insight_reports.profile_id AS profileId,
-    CASE
-      WHEN profile_ai_report_jsonld.report_id IS NOT NULL THEN 'completed'
-      ELSE profile_insight_reports.generation_status
-    END AS generationStatus,
+    profile_insight_reports.generation_status AS generationStatus,
     profile_insight_reports.generation_error AS generationError,
     profile_insight_reports.created_at AS createdAt,
     profile_insight_reports.updated_at AS updatedAt,
@@ -2535,10 +2671,7 @@ export async function listRecentProfileAiReports({
   SELECT
     profile_insight_reports.id AS reportId,
     profile_insight_reports.profile_id AS profileId,
-    CASE
-      WHEN profile_ai_report_jsonld.report_id IS NOT NULL THEN 'completed'
-      ELSE profile_insight_reports.generation_status
-    END AS generationStatus,
+    profile_insight_reports.generation_status AS generationStatus,
     profile_insight_reports.generation_error AS generationError,
     profile_insight_reports.created_at AS createdAt,
     profile_insight_reports.updated_at AS updatedAt,
@@ -2576,7 +2709,6 @@ export async function listActiveProfileAiReportJobs({
     ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
   WHERE profile_insight_reports.profile_id = ?
     AND profile_insight_reports.generation_status IN ('pending', 'queued', 'running')
-    AND profile_ai_report_jsonld.report_id IS NULL
   ORDER BY profile_insight_reports.created_at DESC
 `,
     )
@@ -2606,6 +2738,7 @@ export async function listLatestCompletedProfileAiReportIds({
   INNER JOIN profile_insight_reports
     ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
   WHERE profile_insight_reports.profile_id = ?
+    AND profile_insight_reports.generation_status = 'completed'
   ORDER BY profile_ai_report_jsonld.created_on DESC
   LIMIT ?
 `,
@@ -3065,6 +3198,8 @@ type DerivedMetricsCommentsRow = {
 
 export async function getProfilePerformance(
   profileId: ProfileId,
+  bodyCompositionMetricsId?: string,
+  profileHeightCm?: number | null,
 ) {
   const latestComposition = await db    .prepare(
       `
@@ -3075,11 +3210,13 @@ export async function getProfilePerformance(
     created_at AS createdAt
   FROM body_composition_metrics_new
   WHERE profile_id = ?
+    AND (? IS NULL OR id = ?)
   ORDER BY created_at DESC
   LIMIT 1
 `,
     )
-    .get(profileId) as {
+    .get(profileId, bodyCompositionMetricsId ?? null, bodyCompositionMetricsId ?? null) as {
+    id: string;
     fatMassKg: number;
     leanMassKg: number;
     desiredWeightKg: number;
@@ -3094,11 +3231,12 @@ export async function getProfilePerformance(
     created_at AS createdAt
   FROM body_composition_metrics_new
   WHERE profile_id = ?
+    AND (? IS NULL OR created_at <= ?)
   ORDER BY created_at ASC
   LIMIT 1
 `,
     )
-    .get(profileId) as {
+    .get(profileId, latestComposition?.createdAt ?? null, latestComposition?.createdAt ?? null) as {
     fatMassKg: number;
     leanMassKg: number;
     createdAt: string;
@@ -3113,11 +3251,12 @@ export async function getProfilePerformance(
     created_at AS createdAt
   FROM performance_reports
   WHERE profile_id = ?
+    AND (? IS NULL OR body_composition_metrics_id = ?)
   ORDER BY created_at DESC
   LIMIT 1
 `,
     )
-    .get(profileId) as {
+    .get(profileId, bodyCompositionMetricsId ?? null, bodyCompositionMetricsId ?? null) as {
     id: string;
     fmi: number | null;
     ffmi: number | null;
@@ -3132,11 +3271,18 @@ export async function getProfilePerformance(
     fat_mass_kg AS fatMassKg
   FROM body_composition_metrics_new
   WHERE profile_id = ?
-    AND created_at >= datetime('now', '-30 days')
+    AND (? IS NULL OR created_at <= ?)
+    AND (? IS NULL OR created_at >= ?::timestamptz - INTERVAL '30 days')
   ORDER BY created_at ASC
 `,
     )
-    .all(profileId) as CompositionTrendMassPoint[];
+    .all(
+      profileId,
+      latestComposition?.createdAt ?? null,
+      latestComposition?.createdAt ?? null,
+      latestComposition?.createdAt ?? null,
+      latestComposition?.createdAt ?? null,
+    ) as CompositionTrendMassPoint[];
 
   const performanceComments =
     performanceReport === null
@@ -3146,17 +3292,23 @@ export async function getProfilePerformance(
           performanceReport.id,
         );
 
-  const bodyMeasurements = await listUserBodyMeasurements(profileId);
+  const bodyMeasurements = (await listUserBodyMeasurements(profileId)).filter(
+    (measurement) =>
+      latestComposition === null ||
+      new Date(measurement.createdAt).getTime() <=
+        new Date(latestComposition.createdAt).getTime(),
+  );
   const latestMeasurement = bodyMeasurements[0] ?? null;
   const profile = await getProfileById(profileId);
+  const heightCm = profileHeightCm ?? profile.heightCm;
   const fallbackFmi =
-    latestComposition === null || profile.heightCm === null
+    latestComposition === null || heightCm === null
       ? null
-      : calculateFmi(latestComposition.fatMassKg, profile.heightCm);
+      : calculateFmi(latestComposition.fatMassKg, heightCm);
   const fallbackFfmi =
-    latestComposition === null || profile.heightCm === null
+    latestComposition === null || heightCm === null
       ? null
-      : calculateFfmi(latestComposition.leanMassKg, profile.heightCm);
+      : calculateFfmi(latestComposition.leanMassKg, heightCm);
   const fmi = performanceReport?.fmi ?? fallbackFmi;
   const ffmi = performanceReport?.ffmi ?? fallbackFfmi;
   const targetFatKg =
@@ -3219,7 +3371,7 @@ export async function getProfilePerformance(
     lastBodyRatios: {
       waistHeight: ratioOrNull(
         latestMeasurement?.waistCm ?? null,
-        profile.heightCm,
+        heightCm,
       ),
       shoulderWaist: ratioOrNull(
         latestMeasurement?.shoulderCm ?? null,
@@ -3274,13 +3426,12 @@ export async function getProfilePerformance(
   return comments;
 }
 
- function buildFatTrendPoints(
+function buildFatTrendPoints(
   rows: Array<{
     createdAt: string;
     fatPercent: number;
     fatMassKg: number;
-    visceralFatMassKg: number;
-    visceralFatPercent: number;
+    visceralFatIndex: number;
     subcutaneousFatMassKg: number;
     subcutaneousFatPercent: number;
   }>,
@@ -3294,17 +3445,13 @@ export async function getProfilePerformance(
       createdAt: row.createdAt,
       value: row.fatMassKg,
     })),
-    visceralFatMassKg: rows.map((row) => ({
+    visceralFatIndex: rows.map((row) => ({
       createdAt: row.createdAt,
-      value: row.visceralFatMassKg,
+      value: row.visceralFatIndex,
     })),
     subcutaneousFatMassKg: rows.map((row) => ({
       createdAt: row.createdAt,
       value: row.subcutaneousFatMassKg,
-    })),
-    visceralFatPercent: rows.map((row) => ({
-      createdAt: row.createdAt,
-      value: row.visceralFatPercent,
     })),
     subcutaneousFatPercent: rows.map((row) => ({
       createdAt: row.createdAt,
@@ -3313,7 +3460,10 @@ export async function getProfilePerformance(
   };
 }
 
-export async function getProfileFatReport(profileId: ProfileId): Promise<FatReport | null> {
+export async function getProfileFatReport(
+  profileId: ProfileId,
+  bodyCompositionMetricsId?: string,
+): Promise<FatReport | null> {
   const row = await db    .prepare(
       `
   SELECT
@@ -3321,44 +3471,48 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
     profile_id AS profileId,
     body_composition_metrics_id AS bodyCompositionMetricsId,
     fat_percent AS fatPercent,
-    visceral_fat_delta_30d_kg AS visceralFatDelta30dKg,
+    visceral_fat_index_delta_30d AS visceralFatIndexDelta30d,
     subcutaneous_fat_delta_30d_kg AS subcutaneousFatDelta30dKg,
     fat_mass_kg AS fatMassKg,
-    visceral_fat_mass_kg AS visceralFatMassKg,
-    visceral_fat_percent AS visceralFatPercent,
+    visceral_fat_index AS visceralFatIndex,
     subcutaneous_fat_mass_kg AS subcutaneousFatMassKg,
     subcutaneous_fat_ratio AS subcutaneousFatRatio,
     created_at AS createdAt
   FROM fat_reports
   WHERE profile_id = ?
+    AND (? IS NULL OR body_composition_metrics_id = ?)
   ORDER BY created_at DESC
   LIMIT 1
 `,
     )
-    .get(profileId) as {
+    .get(
+      profileId,
+      bodyCompositionMetricsId ?? null,
+      bodyCompositionMetricsId ?? null,
+    ) as {
     id: string;
     profileId: ProfileId;
     bodyCompositionMetricsId: string;
     fatPercent: number;
-    visceralFatDelta30dKg: number;
+    visceralFatIndexDelta30d: number;
     subcutaneousFatDelta30dKg: number;
     fatMassKg: number;
-    visceralFatMassKg: number;
-    visceralFatPercent: number;
+    visceralFatIndex: number;
     subcutaneousFatMassKg: number;
     subcutaneousFatRatio: number;
     createdAt: string;
   } | null;
 
   if (row === null) {
-    const bodyCompositionMetricsId = await getLatestBodyCompositionMetricsId(profileId);
+    const fallbackMetricsId =
+      bodyCompositionMetricsId ?? await getLatestBodyCompositionMetricsId(profileId);
 
-    if (bodyCompositionMetricsId === null) {
+    if (fallbackMetricsId === null) {
       return null;
     }
 
-    await getOrCreateFatReport(profileId, bodyCompositionMetricsId);
-    return await getProfileFatReport(profileId);
+    await getOrCreateFatReport(profileId, fallbackMetricsId);
+    return await getProfileFatReport(profileId, fallbackMetricsId);
   }
 
   const trendRows = await db    .prepare(
@@ -3367,22 +3521,21 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
     created_at AS createdAt,
     body_fat_pct AS fatPercent,
     fat_mass_kg AS fatMassKg,
-    ROUND(fat_mass_kg - subcutaneous_fat_mass_kg, 2) AS visceralFatMassKg,
-    ROUND(body_fat_pct - subcutaneous_fat_pct, 2) AS visceralFatPercent,
+    visceral_fat AS visceralFatIndex,
     subcutaneous_fat_mass_kg AS subcutaneousFatMassKg,
     subcutaneous_fat_pct AS subcutaneousFatPercent
   FROM body_composition_metrics_new
   WHERE profile_id = ?
-    AND created_at >= datetime('now', '-30 days')
+    AND created_at <= ?
+    AND created_at >= ?::timestamptz - INTERVAL '30 days'
   ORDER BY created_at ASC
 `,
     )
-    .all(profileId) as Array<{
+    .all(profileId, row.createdAt, row.createdAt) as Array<{
     createdAt: string;
     fatPercent: number;
     fatMassKg: number;
-    visceralFatMassKg: number;
-    visceralFatPercent: number;
+    visceralFatIndex: number;
     subcutaneousFatMassKg: number;
     subcutaneousFatPercent: number;
   }>;
@@ -3394,13 +3547,12 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
     createdAt: row.createdAt,
     metrics: {
       fatPercent: row.fatPercent,
-      visceralSubcutaneous30dDelta: {
-        visceralFatDeltaKg: row.visceralFatDelta30dKg,
+      visceralFatIndex: row.visceralFatIndex,
+      fatDistribution30dDelta: {
+        visceralFatIndexDelta: row.visceralFatIndexDelta30d,
         subcutaneousFatDeltaKg: row.subcutaneousFatDelta30dKg,
       },
       fatMassKg: row.fatMassKg,
-      visceralFatMassKg: row.visceralFatMassKg,
-      visceralFatPercent: row.visceralFatPercent,
       subcutaneousFatMassKg: row.subcutaneousFatMassKg,
       subcutaneousFatRatio: row.subcutaneousFatRatio,
     },
@@ -3437,10 +3589,10 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
   return comments;
 }
 
- function buildMuscleTrendPoints(
+function buildMuscleTrendPoints(
   rows: Array<{
     createdAt: string;
-    boneMassKg: number;
+    leanNonMuscleMassKg: number;
     muscleMassKg: number;
     muscleRatio: number;
     skeletalMuscleMassKg: number;
@@ -3448,9 +3600,9 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
   }>,
 ): MuscleReport["last30Days"] {
   return {
-    boneMassKg: rows.map((row) => ({
+    leanNonMuscleMassKg: rows.map((row) => ({
       createdAt: row.createdAt,
-      value: row.boneMassKg,
+      value: row.leanNonMuscleMassKg,
     })),
     muscleMassKg: rows.map((row) => ({
       createdAt: row.createdAt,
@@ -3473,6 +3625,7 @@ export async function getProfileFatReport(profileId: ProfileId): Promise<FatRepo
 
 export async function getProfileMuscleReport(
   profileId: ProfileId,
+  bodyCompositionMetricsId?: string,
 ): Promise<MuscleReport | null> {
   const row = await db    .prepare(
       `
@@ -3481,23 +3634,28 @@ export async function getProfileMuscleReport(
     profile_id AS profileId,
     body_composition_metrics_id AS bodyCompositionMetricsId,
     total_muscle_kg AS totalMuscleKg,
-    bone_mass_kg AS boneMassKg,
+    lean_non_muscle_mass_kg AS leanNonMuscleMassKg,
     muscle_ratio AS muscleRatio,
     skeletal_muscle_mass_kg AS skeletalMuscleMassKg,
     skeletal_muscle_ratio AS skeletalMuscleRatio,
     created_at AS createdAt
   FROM muscle_reports
   WHERE profile_id = ?
+    AND (? IS NULL OR body_composition_metrics_id = ?)
   ORDER BY created_at DESC
   LIMIT 1
 `,
     )
-    .get(profileId) as {
+    .get(
+      profileId,
+      bodyCompositionMetricsId ?? null,
+      bodyCompositionMetricsId ?? null,
+    ) as {
     id: string;
     profileId: ProfileId;
     bodyCompositionMetricsId: string;
     totalMuscleKg: number;
-    boneMassKg: number;
+    leanNonMuscleMassKg: number;
     muscleRatio: number;
     skeletalMuscleMassKg: number;
     skeletalMuscleRatio: number;
@@ -3505,21 +3663,22 @@ export async function getProfileMuscleReport(
   } | null;
 
   if (row === null) {
-    const bodyCompositionMetricsId = await getLatestBodyCompositionMetricsId(profileId);
+    const fallbackMetricsId =
+      bodyCompositionMetricsId ?? await getLatestBodyCompositionMetricsId(profileId);
 
-    if (bodyCompositionMetricsId === null) {
+    if (fallbackMetricsId === null) {
       return null;
     }
 
-    await getOrCreateMuscleReport(profileId, bodyCompositionMetricsId);
-    return await getProfileMuscleReport(profileId);
+    await getOrCreateMuscleReport(profileId, fallbackMetricsId);
+    return await getProfileMuscleReport(profileId, fallbackMetricsId);
   }
 
   const trendRows = await db    .prepare(
       `
   SELECT
     created_at AS createdAt,
-    ROUND(MAX(fat_free_mass_kg - muscle_mass_kg, 0), 2) AS boneMassKg,
+    ROUND(MAX(fat_free_mass_kg - muscle_mass_kg, 0), 2) AS leanNonMuscleMassKg,
     muscle_mass_kg AS muscleMassKg,
     muscle_rate_pct AS muscleRatio,
     skeletal_muscle_kg AS skeletalMuscleMassKg,
@@ -3529,13 +3688,14 @@ export async function getProfileMuscleReport(
     END AS skeletalMuscleRatio
   FROM body_composition_metrics_new
   WHERE profile_id = ?
-    AND created_at >= datetime('now', '-30 days')
+    AND created_at <= ?
+    AND created_at >= ?::timestamptz - INTERVAL '30 days'
   ORDER BY created_at ASC
 `,
     )
-    .all(profileId) as Array<{
+    .all(profileId, row.createdAt, row.createdAt) as Array<{
     createdAt: string;
-    boneMassKg: number;
+    leanNonMuscleMassKg: number;
     muscleMassKg: number;
     muscleRatio: number;
     skeletalMuscleMassKg: number;
@@ -3549,7 +3709,7 @@ export async function getProfileMuscleReport(
     createdAt: row.createdAt,
     metrics: {
       totalMuscleKg: row.totalMuscleKg,
-      boneMassKg: row.boneMassKg,
+      leanNonMuscleMassKg: row.leanNonMuscleMassKg,
       muscleRatio: row.muscleRatio,
       skeletalMuscleMassKg: row.skeletalMuscleMassKg,
       skeletalMuscleRatio: row.skeletalMuscleRatio,
