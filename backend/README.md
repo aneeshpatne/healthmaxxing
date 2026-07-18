@@ -184,7 +184,7 @@ healthmaxxing/
 - A Clerk application and a valid `CLERK_SECRET_KEY` for authenticated routes.
 - A reachable implementation of `proto/metrics_model.proto`; the default address is `localhost:50058`.
 - Redis for report jobs; the default connection is `redis://localhost:6379` and Redis is not defined in the included Compose file.
-- `NVIDIA_API_KEY` and `DEEPSEEK_API_KEY` for the currently configured full report runtime. The first is checked during module loading; the second authenticates the selected report model.
+- `OPENAI_API_KEY` for the currently configured structured report model.
 - Network access for dependency installation, Clerk verification, and hosted model calls.
 
 No dedicated hardware or UI simulator is required: clients send measurements over HTTP. The Bun API can run on macOS or Linux, while the included `launchd` installer is macOS-only. Production deployments must supply managed PostgreSQL, Redis, authentication, metric-service, and model-provider configuration rather than the local defaults.
@@ -217,8 +217,7 @@ No dedicated hardware or UI simulator is required: clients send measurements ove
    CLERK_SECRET_KEY=replace-with-a-clerk-secret
    METRICS_MODEL_ADDRESS=localhost:50058
    REDIS_URL=redis://localhost:6379
-   NVIDIA_API_KEY=replace-with-a-provider-key
-   DEEPSEEK_API_KEY=replace-with-a-provider-key
+   OPENAI_API_KEY=replace-with-an-openai-key
    PORT=3030
    HOST=0.0.0.0
    ```
