@@ -1,6 +1,9 @@
 import { Job, Worker } from "bullmq";
 import { runAgentOrchestratorNew } from "../ai/agentOrchestratorNew";
-import { updateProfileInsightReportGenerationStatus } from "../db/commands";
+import {
+  getProfileAiReportById,
+  updateProfileInsightReportGenerationStatus,
+} from "../db/commands";
 import { connection } from "./queue";
 
 export function startWorker() {
@@ -20,17 +23,28 @@ export function startWorker() {
         });
 
         try {
-          await runAgentOrchestratorNew(profileId, reportId);
+          const agentResult = await runAgentOrchestratorNew(profileId, reportId);
+          if (agentResult.toolCallCount !== 1) {
+            throw new Error(
+              `Report agent must call profile_ai_report exactly once; received ${agentResult.toolCallCount}`,
+            );
+          }
+          const persisted = await getProfileAiReportById({ profileId, reportId });
+          if (persisted?.data === null || persisted === null) {
+            throw new Error("Report agent completed without persisting structured output");
+          }
           await updateProfileInsightReportGenerationStatus({
             reportId,
             profileId,
             status: "completed",
           });
         } catch (error) {
+          const finalAttempt =
+            job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
           await updateProfileInsightReportGenerationStatus({
             reportId,
             profileId,
-            status: "failed",
+            status: finalAttempt ? "failed" : "queued",
             error: error instanceof Error ? error.message : String(error),
           });
           throw error;

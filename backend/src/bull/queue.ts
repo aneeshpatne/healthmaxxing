@@ -21,7 +21,17 @@ type GenerateReportJob = {
 const queue = new Queue<GenerateReportJob>("jobs", { connection });
 
 export async function addQueueItem(reportId: string, profileId: string) {
-  return await queue.add("generate_report", { reportId, profileId }, { jobId: reportId });
+  return await queue.add(
+    "generate_report",
+    { reportId, profileId },
+    {
+      jobId: reportId,
+      attempts: 3,
+      backoff: { type: "exponential", delay: 2_000 },
+      removeOnComplete: 100,
+      removeOnFail: 500,
+    },
+  );
 }
 
 export async function obliterateQueue() {
