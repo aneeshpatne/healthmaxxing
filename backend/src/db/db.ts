@@ -47,6 +47,90 @@ export async function getLatestBodyCompositionMeasurementV2(profileId: string) {
   );
 }
 
+export async function getBodyCompositionMeasurementByIdV2(
+  profileId: string,
+  bodyCompositionMetricsId: string,
+) {
+  const measurement = await db.prepare(
+    `SELECT bmi, body_fat_pct, fat_mass_kg, fat_free_mass_kg, desired_weight_kg,
+      body_score, body_age_years, water_pct, muscle_mass_kg, muscle_rate_pct,
+      bmr_kcal, visceral_fat, ideal_weight_kg, protein_mass_kg, protein_pct,
+      skeletal_muscle_kg, subcutaneous_fat_pct, subcutaneous_fat_mass_kg,
+      predicted_lean_mass_kg
+     FROM body_composition_metrics_new
+     WHERE profile_id = ? AND id = ?
+     LIMIT 1`,
+  ).get(profileId, bodyCompositionMetricsId);
+
+  if (!measurement) return null;
+  return toCompactMetricTable(
+    measurement as Record<string, unknown>,
+    BODY_COMPOSITION_METRICS_NEW_FACTORS,
+  );
+}
+
+type ReportTrendBundle = {
+  table: CompactDeltaTable | null;
+  asOf: string;
+  firstReadingAt: string | null;
+  readingCount: number;
+};
+
+export function buildEndpointDeltaTable(
+  rows: Array<Record<string, unknown> & { createdAt: string }>,
+  metrics: readonly string[],
+  asOf: string,
+): ReportTrendBundle {
+  const latest = rows.at(-1);
+  if (!latest) {
+    return { table: null, asOf, firstReadingAt: null, readingCount: 0 };
+  }
+
+  const asOfTime = new Date(asOf).getTime();
+  const periods = [
+    Number.NEGATIVE_INFINITY,
+    asOfTime - 365 * 24 * 60 * 60 * 1000,
+    asOfTime - 30 * 24 * 60 * 60 * 1000,
+    asOfTime - 7 * 24 * 60 * 60 * 1000,
+  ];
+  const baselines = periods.map((cutoff) =>
+    rows.find((row) => new Date(row.createdAt).getTime() >= cutoff),
+  );
+
+  return {
+    asOf,
+    firstReadingAt: rows[0]?.createdAt ?? null,
+    readingCount: rows.length,
+    table: {
+      columns: ["metric", ...BODY_COMPOSITION_DELTA_PERIODS],
+      rows: metrics.map((metric) => [
+        metric,
+        ...baselines.map((baseline) => {
+          if (!baseline || baseline === latest) return null;
+          const current = compactDelta(latest[metric]);
+          const initial = compactDelta(baseline[metric]);
+          return current === null || initial === null
+            ? null
+            : compactDelta(current - initial);
+        }),
+      ]),
+    },
+  };
+}
+
+export async function getBodyCompositionEndpointTrendsV2(
+  profileId: string,
+  asOf: string,
+): Promise<ReportTrendBundle> {
+  const rows = await db.prepare(
+    `SELECT *, created_at AS createdAt
+     FROM body_composition_metrics_new
+     WHERE profile_id = ? AND created_at <= ?
+     ORDER BY created_at ASC`,
+  ).all(profileId, asOf) as Array<Record<string, unknown> & { createdAt: string }>;
+  return buildEndpointDeltaTable(rows, BODY_COMPOSITION_DELTA_METRICS, asOf);
+}
+
 export async function getLatestBodyMeasurement(profileId: string) {
   return await db
     .prepare(
@@ -68,6 +152,37 @@ export async function getLatestBodyMeasurementV2(profileId: string) {
     measurement as Record<string, unknown>,
     BODY_MEASUREMENT_DELTA_METRICS,
   );
+}
+
+export async function getLatestBodyMeasurementAtV2(
+  profileId: string,
+  asOf: string,
+) {
+  const measurement = await db.prepare(
+    `SELECT neck_cm, shoulder_cm, chest_cm, stomach_cm, waist_cm, calf_cm,
+      thigh_cm, bicep_cm, forearm_cm
+     FROM body_measurements
+     WHERE profile_id = ? AND created_at <= ?
+     ORDER BY created_at DESC LIMIT 1`,
+  ).get(profileId, asOf);
+  if (!measurement) return null;
+  return toCompactMetricTable(
+    measurement as Record<string, unknown>,
+    BODY_MEASUREMENT_DELTA_METRICS,
+  );
+}
+
+export async function getBodyMeasurementEndpointTrendsV2(
+  profileId: string,
+  asOf: string,
+): Promise<ReportTrendBundle> {
+  const rows = await db.prepare(
+    `SELECT *, created_at AS createdAt
+     FROM body_measurements
+     WHERE profile_id = ? AND created_at <= ?
+     ORDER BY created_at ASC`,
+  ).all(profileId, asOf) as Array<Record<string, unknown> & { createdAt: string }>;
+  return buildEndpointDeltaTable(rows, BODY_MEASUREMENT_DELTA_METRICS, asOf);
 }
 
 export async function getProfileMetadata(profileId: string) {
@@ -485,6 +600,7 @@ function toCompactMetricTable(
  *
  * Each row is [metric, forever, last_year, last_30_days, last_7_days]. Values
  * are the latest measurement minus the corresponding period average.
+ * Kept for backward-compatible client queries; AI reports use endpoint trends.
  */
 export async function getBodyCompositionMeasurementDeltaV2(profileId: string) {
   const [delta, fmiFfmiDelta] = await Promise.all([
@@ -675,7 +791,7 @@ export function formatIsoDate(value: unknown): string | null {
 
 /**
  * Compact profile line for LLM input.
- * Example: h=165 dob=1968-10-05 type=standard sex=male targetBF=18
+ * Example: h_cm=165 age_y=57 type=standard sex=male targetBF_pct=18
  */
 export function formatProfileMetadataCompact(
   record: Record<string, unknown> | null | undefined,
@@ -684,16 +800,30 @@ export function formatProfileMetadataCompact(
 
   const parts: string[] = [];
   const height = record.heightCm;
-  const dob = formatIsoDate(record.dateOfBirth);
+  const dob = record.dateOfBirth == null ? null : new Date(String(record.dateOfBirth));
+  const storedAge = Number(record.ageYears);
+  const age = Number.isFinite(storedAge)
+    ? storedAge
+    : dob !== null && !Number.isNaN(dob.getTime())
+      ? Math.max(
+          0,
+          new Date().getUTCFullYear() - dob.getUTCFullYear() -
+            (new Date().getUTCMonth() < dob.getUTCMonth() ||
+            (new Date().getUTCMonth() === dob.getUTCMonth() &&
+              new Date().getUTCDate() < dob.getUTCDate())
+              ? 1
+              : 0),
+        )
+        : null;
   const peopleType = record.peopleType;
   const gender = record.gender;
   const targetBf = record.preferredBodyFatPct;
 
-  if (height != null) parts.push(`h=${height}`);
-  if (dob != null) parts.push(`dob=${dob}`);
+  if (height != null) parts.push(`h_cm=${height}`);
+  if (age != null) parts.push(`age_y=${age}`);
   if (peopleType != null) parts.push(`type=${peopleType}`);
   if (gender != null) parts.push(`sex=${gender}`);
-  if (targetBf != null) parts.push(`targetBF=${targetBf}`);
+  if (targetBf != null) parts.push(`targetBF_pct=${targetBf}`);
 
   return parts.join(" ");
 }
