@@ -4,19 +4,26 @@ import {
   preprocessProfileAiReportPayload,
 } from "./toolsNew";
 
-function remark(text: string) {
+function remark(
+  text: string,
+  factorColor: "red" | "orange" | "yellow" | "green" = "green",
+) {
   return {
     marker: "complement" as const,
+    factor_color: factorColor,
     text,
   };
 }
 
-function card(label: string) {
+function card(
+  label: string,
+  factorColor: "red" | "orange" | "yellow" | "green" = "green",
+) {
   return {
     heading: `${label} heading`,
     title: `${label} title`,
     comment: `${label} comment`,
-    remark: remark(`${label} remark`),
+    remark: remark(`${label} remark`, factorColor),
   };
 }
 
@@ -25,7 +32,7 @@ function gaugeCard(
   factorColor: "red" | "orange" | "yellow" | "green" = "green",
 ) {
   return {
-    ...card(label),
+    ...card(label, factorColor),
     factor_color: factorColor,
   };
 }
@@ -46,14 +53,17 @@ const payload = insights_schema.parse({
     momentum: insightCard("momentum"),
     progress: {
       ...insightCard("progress"),
-      trends: ["bmi", "water_pct"],
+      trends: ["body_fat_pct", "fat_mass_kg"],
     },
     lever: insightCard("lever"),
     factor: {
       factor: "skeletal_muscle_kg",
       factor_color: "yellow",
       comment: "Skeletal muscle has the clearest potential.",
-      remark: remark("Build steadily from your current muscle base."),
+      remark: remark(
+        "Build steadily from your current muscle base.",
+        "yellow",
+      ),
     },
     physique_archetype: {
       ...insightCard("physique"),
@@ -71,21 +81,24 @@ const payload = insights_schema.parse({
     composition_trends: card("composition trends"),
     target_vs_current_weight: card("target vs current"),
     excess_fat_gauge: card("excess fat"),
+    body_ratios: card("body ratios"),
   },
   fat: {
     fat_ratio: gaugeCard("fat ratio", "yellow"),
     fat_ratio_trend: card("fat ratio trend"),
-    visceral_vs_subcutaneous: card("visceral vs subcutaneous"),
+    fat_distribution_context: card("fat distribution context"),
     visceral_trend: card("visceral trend"),
     subcutaneous_fat_mass_trend: card("subcutaneous trend"),
     fat_mass_trend: card("fat mass trend"),
+    waist_context: card("waist context"),
   },
   muscle: {
     skeletal_muscle_gauge: gaugeCard("skeletal muscle gauge"),
     muscle_mass: card("muscle mass"),
-    bone_mass_trend: card("bone mass trend"),
+    lean_mass_balance: card("lean mass balance"),
     muscle_ratio_trend: card("muscle ratio trend"),
     skeletal_muscle_mass_trend: card("skeletal muscle trend"),
+    hydration_context: card("hydration context"),
   },
 });
 
@@ -123,22 +136,20 @@ const sources = {
     createdAt: "2026-06-01",
     metrics: {
       fatPercent: 24.5,
-      visceralSubcutaneous30dDelta: {
-        visceralFatDeltaKg: -0.2,
+      visceralFatIndex: 8,
+      fatDistribution30dDelta: {
+        visceralFatIndexDelta: -1,
         subcutaneousFatDeltaKg: -0.5,
       },
       fatMassKg: 18,
-      visceralFatMassKg: 5,
-      visceralFatPercent: 6.8,
       subcutaneousFatMassKg: 13,
       subcutaneousFatRatio: 0.72,
     },
     last30Days: {
       fatPercent: [{ createdAt: "2026-06-01", value: 24.5 }],
       fatMassKg: trend,
-      visceralFatMassKg: [{ createdAt: "2026-06-01", value: -0.2 }],
+      visceralFatIndex: [{ createdAt: "2026-06-01", value: 8 }],
       subcutaneousFatMassKg: [{ createdAt: "2026-06-01", value: -0.5 }],
-      visceralFatPercent: [{ createdAt: "2026-06-01", value: -0.1 }],
       subcutaneousFatPercent: [{ createdAt: "2026-06-01", value: -0.3 }],
     },
     comments: {},
@@ -150,13 +161,13 @@ const sources = {
     createdAt: "2026-06-01",
     metrics: {
       totalMuscleKg: 42,
-      boneMassKg: 12,
+      leanNonMuscleMassKg: 12,
       muscleRatio: 56,
       skeletalMuscleMassKg: 31,
       skeletalMuscleRatio: 41,
     },
     last30Days: {
-      boneMassKg: [{ createdAt: "2026-06-01", value: 0.1 }],
+      leanNonMuscleMassKg: [{ createdAt: "2026-06-01", value: 12 }],
       muscleMassKg: [{ createdAt: "2026-06-01", value: 42 }],
       muscleRatio: [{ createdAt: "2026-06-01", value: 0.4 }],
       skeletalMuscleMassKg: [{ createdAt: "2026-06-01", value: 0.2 }],
@@ -171,6 +182,8 @@ const sources = {
   },
   latestBodyComposition: {
     skeletal_muscle_kg: 31,
+    water_pct: 58,
+    protein_pct: 18,
   },
 };
 
@@ -180,6 +193,7 @@ test("insight factor and gauge colors are constrained enums", () => {
   expect(payload.performance.ffmi_gauge.factor_color).toBe("green");
   expect(payload.fat.fat_ratio.factor_color).toBe("yellow");
   expect(payload.muscle.skeletal_muscle_gauge.factor_color).toBe("green");
+  expect(payload.insights.overview.remark.factor_color).toBe("green");
 
   const invalidFactor = structuredClone(payload) as any;
   invalidFactor.insights.factor.factor = "unknown_metric";
@@ -188,6 +202,10 @@ test("insight factor and gauge colors are constrained enums", () => {
   const invalidColor = structuredClone(payload) as any;
   invalidColor.insights.factor.factor_color = "blue";
   expect(insights_schema.safeParse(invalidColor).success).toBe(false);
+
+  const invalidRemarkColor = structuredClone(payload) as any;
+  invalidRemarkColor.insights.overview.remark.factor_color = "blue";
+  expect(insights_schema.safeParse(invalidRemarkColor).success).toBe(false);
 });
 
 test("preprocessProfileAiReportPayload resolves the selected insight factor", () => {
@@ -202,16 +220,18 @@ test("preprocessProfileAiReportPayload resolves the selected insight factor", ()
   expect(missingSource.insights.factor.preprocess).toEqual({ value: null });
 });
 
-test("preprocessProfileAiReportPayload forces progress trends only", () => {
+test("preprocessProfileAiReportPayload keeps only selected progress trends", () => {
   const preprocessed = preprocessProfileAiReportPayload(payload, sources);
 
   expect(preprocessed.insights.progress.trends).toEqual([
     "body_fat_pct",
     "fat_mass_kg",
-    "muscle_mass_kg",
   ]);
   expect(preprocessed.insights.progress.preprocess).toEqual({
-    trends: sources.progressTrends,
+    trends: {
+      body_fat_pct: sources.progressTrends.body_fat_pct,
+      fat_mass_kg: sources.progressTrends.fat_mass_kg,
+    },
   });
   expect("value" in preprocessed.insights.progress.preprocess).toBe(false);
   expect(preprocessed.insights.progress.comment).toBe("progress comment");
@@ -246,10 +266,15 @@ test("preprocessProfileAiReportPayload marks fat and muscle with values and tren
     value: 24.5,
     trends: { fatPercent: sources.fatReport.last30Days.fatPercent },
   });
-  expect(preprocessed.fat.visceral_vs_subcutaneous.preprocess).toEqual({
-    value: sources.fatReport.metrics.visceralSubcutaneous30dDelta,
+  expect(preprocessed.fat.fat_distribution_context.preprocess).toEqual({
+    value: {
+      visceralFatIndex: 8,
+      subcutaneousFatMassKg: 13,
+      subcutaneousFatRatio: 0.72,
+      deltas: sources.fatReport.metrics.fatDistribution30dDelta,
+    },
     trends: {
-      visceralFatMassKg: sources.fatReport.last30Days.visceralFatMassKg,
+      visceralFatIndex: sources.fatReport.last30Days.visceralFatIndex,
       subcutaneousFatMassKg:
         sources.fatReport.last30Days.subcutaneousFatMassKg,
     },
@@ -268,6 +293,13 @@ test("preprocessProfileAiReportPayload marks fat and muscle with values and tren
   expect(preprocessed.muscle.muscle_ratio_trend.preprocess).toEqual({
     value: 56,
     trends: { muscleRatio: sources.muscleReport.last30Days.muscleRatio },
+  });
+  expect(preprocessed.muscle.lean_mass_balance.preprocess).toEqual({
+    value: 12,
+    trends: {
+      leanNonMuscleMassKg:
+        sources.muscleReport.last30Days.leanNonMuscleMassKg,
+    },
   });
   expect(preprocessed.muscle.skeletal_muscle_mass_trend.preprocess).toEqual({
     value: 31,
@@ -289,4 +321,33 @@ test("preprocessProfileAiReportPayload does not emit source keys", () => {
 
   expect(serialized.includes("valueKey")).toBe(false);
   expect(serialized.includes("trendKeys")).toBe(false);
+});
+
+test("preprocess adds report evidence and computes progress consistency", () => {
+  const preprocessed = preprocessProfileAiReportPayload(payload, {
+    ...sources,
+    evidence: {
+      asOf: "2026-06-01T00:00:00.000Z",
+      readingCount: 4,
+      confidence: "medium",
+    },
+    progressTrends: {
+      body_fat_pct: [
+        { createdAt: "2026-05-01", value: 26 },
+        { createdAt: "2026-06-01", value: 24.5 },
+      ],
+      fat_mass_kg: [
+        { createdAt: "2026-05-01", value: 20 },
+        { createdAt: "2026-06-01", value: 18 },
+      ],
+      muscle_mass_kg: [
+        { createdAt: "2026-05-01", value: 41 },
+        { createdAt: "2026-06-01", value: 42 },
+      ],
+    },
+  });
+
+  expect(preprocessed.insights.report_context?.confidence).toBe("medium");
+  expect(preprocessed.insights.effort_score.score).toBe(86);
+  expect(preprocessed.fat.fat_mass_trend.preprocess.evidence?.readingCount).toBe(4);
 });

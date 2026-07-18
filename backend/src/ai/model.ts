@@ -1,16 +1,8 @@
-import { ChatGoogle } from "@langchain/google";
-import { ChatOpenRouter } from "@langchain/openrouter";
-import { ChatDeepSeek } from "@langchain/deepseek";
-import { ChatOpenAI } from "@langchain/openai";
 import { initChatModel } from "langchain";
-export const apiKey = process.env.NVIDIA_API_KEY;
-export const deepSeekApiKey = process.env.DEEPSEEK_API_KEY;
 export const openaiApiKey = process.env.OPENAI_API_KEY;
-export const googleApiKey = process.env.GOOGLE_API_KEY;
-export const openRouterApiKey = process.env.OPENROUTER_API_KEY;
 
-if (!apiKey) {
-  throw new Error("NVIDIA_API_KEY is not set");
+if (!openaiApiKey) {
+  throw new Error("OPENAI_API_KEY is not set");
 }
 
 // export const model = new ChatOpenAI({
@@ -38,7 +30,7 @@ export const model = await initChatModel("gpt-5.6-terra", {
   apiKey: openaiApiKey,
   useResponsesApi: true,
   reasoningEffort: "low",
-  promptCacheKey: "news-primary-agent",
+  promptCacheKey: "healthmaxxing-report-agent-v2",
   promptCacheRetention: "24h",
 });
 

@@ -17,8 +17,10 @@ EVIDENCE FIRST
 - Ground every claim in a supplied current value, comparison, or trend. Specificity should feel earned by the data.
 - Prefer the clearest signal over mentioning every metric. Do not infer causes, habits, appearance, or progress that the data cannot support.
 - A positive current value can support a strength even when no trend exists. Do not call it progress without directional evidence.
+- One reading is a current snapshot only. Never call it progress, momentum, stable, or holding steady.
+- Two readings support only an endpoint comparison. Three or more readings may support a directional pattern, with confidence proportional to reading count.
 - Treat small or conflicting deltas with restraint: "holding fairly steady" or "a small opportunity to improve consistency."
-- If evidence is sparse or missing, say only what the available data supports. Never fill gaps with generic praise.
+- If evidence is sparse or missing, explicitly say there is not enough history for a trend. Never fill gaps with generic praise.
 
 COACHING ARC
 Use Strength → Progress → Opportunity → Payoff across the report.
@@ -33,8 +35,11 @@ SECTION ROLES
 - lever: The single highest-ROI next focus. State what to move, in which direction, and the visible or practical payoff. Do not prescribe an unsupported method.
 - factor: Choose one body-composition metric representing the clearest strength or greatest visible improvement potential. Its comment, marker, and color must tell the same story.
 - physique_archetype: Use a positive, identity-based 2–3 word label grounded in the data. Never use a clinical or negative label in the title.
-- effort_score: Base the score on the direction and consistency of all available trends. Explain it using the strongest trend signal without moralizing effort or discipline.
+- effort_score: Treat this as progress consistency, not effort or discipline. Base it only on available directional evidence and say when history is sparse.
 - performance, fat, and muscle cards: Interpret the specific card's metric. Do not turn every card into another overview or repeat the same recommendation.
+- The muscle lean_mass_balance card is fat-free mass not classified as muscle. Never call it bone or bone mineral mass.
+- visceral_fat is a device-estimated index, not kilograms or a direct measurement. Never call it visceral fat mass or percent.
+- desired_weight_kg assumes current fat-free mass stays unchanged while body fat moves to targetBF_pct. State that assumption when discussing the target.
 
 ANTI-REPETITION
 - Each card must add a distinct observation, implication, or action.
@@ -66,7 +71,7 @@ REMARK MARKERS
 - complement: reinforces a current strength or stable positive signal. Default for strengths.
 
 STATUS COLORS
-Set factor_color on the Insights factor and every gauge. Green means strong, yellow means a mild opportunity, orange means a meaningful opportunity, and red means the highest priority. Red should be rare and still use calm language. Keep the color consistent with the title, comment, and remark.
+Set remark.factor_color on every remark. Also set the existing top-level factor_color on the Insights factor and every gauge. Green means strong, yellow means a mild opportunity, orange means a meaningful opportunity, and red means the highest priority. Red should be rare and still use calm language. When both locations exist, they must match. Keep the color consistent with the title, comment, and remark.
 
 Keep every field concise. No diagnoses, fear-based language, moral judgment, clichés, unsupported prescriptions, or conflicting messages.`,
 );
@@ -151,6 +156,40 @@ export function getTokenUsage(result: unknown): TokenUsage {
   };
 }
 
+export function countProfileReportToolCalls(result: unknown): number {
+  const messages =
+    result && typeof result === "object" &&
+    Array.isArray((result as Record<string, unknown>).messages)
+      ? ((result as Record<string, unknown>).messages as unknown[])
+      : [];
+  let count = 0;
+  for (const message of messages) {
+    if (!message || typeof message !== "object") continue;
+    const record = message as Record<string, unknown>;
+    const additional =
+      record.additional_kwargs && typeof record.additional_kwargs === "object"
+        ? (record.additional_kwargs as Record<string, unknown>)
+        : null;
+    const toolCalls = Array.isArray(record.tool_calls)
+      ? record.tool_calls
+      : additional?.tool_calls;
+    if (!Array.isArray(toolCalls)) continue;
+    count += toolCalls.filter((call) => {
+      if (!call || typeof call !== "object") return false;
+      const callRecord = call as Record<string, unknown>;
+      const rawFunction =
+        callRecord.function && typeof callRecord.function === "object"
+          ? (callRecord.function as Record<string, unknown>)
+          : null;
+      return (
+        callRecord.name === "profile_ai_report" ||
+        rawFunction?.name === "profile_ai_report"
+      );
+    }).length;
+  }
+  return count;
+}
+
 export async function analyzeHealthDataNew(input: {
   reportId: string;
   profileId: string;
@@ -166,8 +205,9 @@ export async function analyzeHealthDataNew(input: {
     messages: [
       systemMsg,
       new HumanMessage(
-        `Data legend: m=metric key, v=current value, all/y1/d30/d7=latest minus period avg (forever/1y/30d/7d). NA=missing.
+        `Data legend: m=metric key, v=current value, all/y1/d30/d7=current minus the earliest reading available in that period. NA means unavailable or insufficient readings.
 bc=body composition, bm=body measurements (cm).
+Units: *_kg=kilograms, *_pct=percent, bmi/fmi/ffmi=kg/m², bmr_kcal=kilocalories/day, visceral_fat=device-estimated index.
 
 ${input.userContext}`,
       ),
@@ -177,5 +217,9 @@ ${input.userContext}`,
   const tokenUsage = getTokenUsage(result);
   // console.log("[healthAgentNew] token usage", tokenUsage);
 
-  return { result, tokenUsage };
+  return {
+    result,
+    tokenUsage,
+    toolCallCount: countProfileReportToolCalls(result),
+  };
 }
