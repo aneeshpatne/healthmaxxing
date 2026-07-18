@@ -180,6 +180,8 @@ export async function backfillBodyCompositionFromGrpc({
           metricsBase.fat_free_mass_kg,
           measurement.heightCm,
         );
+        const bodyNewId = bodyNewRows[index]?.id ?? uuidv7();
+        const derivedId = derivedRows[index]?.id ?? uuidv7();
 
         await db.transaction(async (tx) => {
           await tx.prepare(
@@ -222,6 +224,8 @@ export async function backfillBodyCompositionFromGrpc({
   INSERT INTO body_composition_metrics_new (
     id,
     profile_id,
+    measurement_id,
+    profile_context,
     bmi,
     body_fat_pct,
     fat_mass_kg,
@@ -243,8 +247,10 @@ export async function backfillBodyCompositionFromGrpc({
     predicted_lean_mass_kg,
     created_at
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
+    measurement_id = excluded.measurement_id,
+    profile_context = excluded.profile_context,
     bmi = excluded.bmi,
     body_fat_pct = excluded.body_fat_pct,
     fat_mass_kg = excluded.fat_mass_kg,
@@ -267,8 +273,19 @@ export async function backfillBodyCompositionFromGrpc({
     created_at = excluded.created_at
 `,
           ).run(
-            bodyNewRows[index]?.id ?? uuidv7(),
+            bodyNewId,
             currentProfileId,
+            measurement.id,
+            JSON.stringify({
+              heightCm: measurement.heightCm,
+              ageYears: calculateAgeYears(
+                measurement.dateOfBirth,
+                new Date(measurement.createdAt),
+              ),
+              gender: measurement.gender,
+              peopleType: measurement.peopleType,
+              preferredBodyFatPct: measurement.preferredBodyFatPct,
+            }),
             metricsBase.bmi,
             metricsBase.body_fat_pct,
             metricsBase.fat_mass_kg,
@@ -296,23 +313,32 @@ export async function backfillBodyCompositionFromGrpc({
   INSERT INTO derived_body_composition_metrics (
     id,
     profile_id,
+    body_composition_metrics_id,
     fmi,
     ffmi,
     created_at
   )
-  VALUES (?, ?, ?, ?, ?)
+  VALUES (?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
+    body_composition_metrics_id = excluded.body_composition_metrics_id,
     fmi = excluded.fmi,
     ffmi = excluded.ffmi,
     created_at = excluded.created_at
 `,
           ).run(
-            derivedRows[index]?.id ?? uuidv7(),
+            derivedId,
             currentProfileId,
+            bodyNewId,
             fmi,
             ffmi,
             measurement.createdAt,
           );
+
+          await tx.prepare(
+            `UPDATE measurements
+             SET calculation_status = 'completed', calculation_error = NULL
+             WHERE id = ?`,
+          ).run(measurement.id);
         });
 
         result.processed += 1;
@@ -321,6 +347,11 @@ export async function backfillBodyCompositionFromGrpc({
         result.derivedBodyCompositionMetrics.upserted += 1;
       } catch (error) {
         result.skipped += 1;
+        await db.prepare(
+          `UPDATE measurements
+           SET calculation_status = 'failed', calculation_error = ?
+           WHERE id = ?`,
+        ).run(error instanceof Error ? error.message : String(error), measurement.id);
         console.error(
           `Failed to backfill body composition for measurement ${measurement.id}:`,
           error,

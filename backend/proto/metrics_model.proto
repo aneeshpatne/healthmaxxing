@@ -12,6 +12,7 @@ message CalculateRequest {
   double weight_kg = 3;
   Sex sex = 4;
   double impedance = 5;
+  string people_type = 6;
 }
 
 enum Sex {
