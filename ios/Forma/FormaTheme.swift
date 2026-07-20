@@ -1071,13 +1071,19 @@ struct FormaChartEmptyState: View {
     }
 }
 
-struct FormaChartPoint: Identifiable {
+struct FormaChartPoint: Identifiable, Equatable {
     let date: Date
     let value: Double
     let metric: String
     let color: Color
 
     var id: String { "\(metric)|\(date.timeIntervalSinceReferenceDate)" }
+
+    static func == (lhs: FormaChartPoint, rhs: FormaChartPoint) -> Bool {
+        lhs.date == rhs.date
+            && lhs.value == rhs.value
+            && lhs.metric == rhs.metric
+    }
 }
 
 struct FormaTimeSeriesChart: View {
@@ -1088,8 +1094,21 @@ struct FormaTimeSeriesChart: View {
 
     @State private var selectedDate: Date?
 
+    /// Prefer caller-provided order; only sort when samples arrive out of order.
     private var data: [FormaChartPoint] {
-        points.sorted {
+        guard points.count > 1 else { return points }
+        var isOrdered = true
+        for index in 1..<points.count {
+            let previous = points[index - 1]
+            let current = points[index]
+            if previous.date > current.date
+                || (previous.date == current.date && previous.metric > current.metric) {
+                isOrdered = false
+                break
+            }
+        }
+        guard !isOrdered else { return points }
+        return points.sorted {
             $0.date == $1.date ? $0.metric < $1.metric : $0.date < $1.date
         }
     }
@@ -1123,9 +1142,11 @@ struct FormaTimeSeriesChart: View {
         }
         .padding(FormaSpacing.md)
         .formaSurface(.chart, padding: nil)
-        .onChange(of: points.map(\.id)) { _, ids in
+        // Charts are expensive to interpolate — never inherit tab-switch animations.
+        .transaction { $0.animation = nil }
+        .onChange(of: points) { _, newPoints in
             guard let selectedDate else { return }
-            if !points.contains(where: { $0.date == selectedDate }) || ids.isEmpty {
+            if newPoints.isEmpty || !newPoints.contains(where: { $0.date == selectedDate }) {
                 self.selectedDate = nil
             }
         }
@@ -1190,7 +1211,7 @@ struct FormaTimeSeriesChart: View {
                 .contentShape(Rectangle())
         }
         .chartXAxis {
-            AxisMarks(position: .bottom, values: FormaChartStyle.axisDates(dates)) { value in
+            AxisMarks(position: .bottom, values: FormaChartStyle.axisDates(dates)) { _ in
                 AxisTick(stroke: StrokeStyle(lineWidth: 0.5))
                     .foregroundStyle(Color.secondary.opacity(0.20))
                 AxisValueLabel(format: .dateTime.month(.abbreviated).day())
