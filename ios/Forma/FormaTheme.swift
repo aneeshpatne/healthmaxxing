@@ -573,6 +573,54 @@ enum FormaTransition {
     static let card: AnyTransition = .opacity.combined(with: .offset(y: 10))
 }
 
+/// One-time app entry reveal. The small lift and scale settle make the first
+/// frame feel intentional without turning launch into a splash screen.
+struct FormaLaunchReveal: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isPresented = false
+    @State private var logoOpacity = 1.0
+    @State private var logoScale = 0.94
+
+    func body(content: Content) -> some View {
+        ZStack {
+            content
+                .opacity(isPresented || reduceMotion ? 1 : 0)
+                .scaleEffect(isPresented || reduceMotion ? 1 : 0.975)
+                .offset(y: isPresented || reduceMotion ? 0 : 14)
+
+            if !reduceMotion {
+                FormaBrandLockup(variant: .hero, wordmarkColor: .white)
+                    .scaleEffect(logoScale)
+                    .opacity(logoOpacity)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear {
+                guard !reduceMotion else {
+                    isPresented = true
+                    return
+                }
+
+                withAnimation(.spring(response: 0.62, dampingFraction: 0.88)) {
+                    isPresented = true
+                }
+
+                withAnimation(.easeOut(duration: 0.38).delay(0.24)) {
+                    logoOpacity = 0
+                    logoScale = 1.04
+                }
+            }
+    }
+}
+
+extension View {
+    func formaLaunchReveal() -> some View {
+        modifier(FormaLaunchReveal())
+    }
+}
+
 // MARK: - Semicircular gauge
 
 /// One colored zone of a semicircular gauge.
