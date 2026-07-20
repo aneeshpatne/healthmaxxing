@@ -78,8 +78,11 @@ struct MetricsView: View {
                 }
             }
             .background(alignment: .top) {
-                FormaAccentWash(accent: pageAccent)
-                    .offset(y: -FormaLayout.floatingSettingsClearance)
+                // Keep the wash above the viewport during pull-to-refresh while
+                // still letting it leave naturally when the page scrolls up.
+                FormaAccentWash(accent: pageAccent, topExtension: 1_000)
+                    .offset(y: -1_000)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.28), value: selectedTab)
             }
         }
         .refreshable {

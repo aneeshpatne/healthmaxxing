@@ -248,20 +248,25 @@ struct FormaBackground: View {
 /// app background or inside scroll content when it should move with the page.
 struct FormaAccentWash: View {
     let accent: Color
+    var topExtension: CGFloat = 0
 
     var body: some View {
         let pastel = accent.pastelized()
+        let totalHeight = 420 + topExtension
+        let extensionStop = topExtension / totalHeight
+        let midpointStop = (topExtension + 210) / totalHeight
 
         LinearGradient(
-            colors: [
-                pastel.opacity(0.30),
-                pastel.opacity(0.11),
-                .clear
+            stops: [
+                .init(color: pastel.opacity(0.30), location: 0),
+                .init(color: pastel.opacity(0.30), location: extensionStop),
+                .init(color: pastel.opacity(0.11), location: midpointStop),
+                .init(color: .clear, location: 1)
             ],
             startPoint: .top,
             endPoint: .bottom
         )
-        .frame(height: 420)
+        .frame(height: totalHeight)
         .accessibilityHidden(true)
     }
 }
