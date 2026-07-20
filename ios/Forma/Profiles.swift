@@ -24,32 +24,40 @@ struct Profiles: View {
             LazyVStack(spacing: 16) {
                 if let errorMessage, !profiles.isEmpty {
                     // Inline warning banner
-                    HStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
+                    HStack(spacing: FormaSpacing.sm) {
+                        FormaIconTile(systemImage: "exclamationmark.triangle.fill", tint: .formaCoral)
+
                         Text(errorMessage)
-                            .font(.subheadline)
+                            .font(FormaTypography.body)
                             .foregroundStyle(.secondary)
                             .lineLimit(nil)
+
                         Spacer()
+
                         Button {
                             self.errorMessage = nil
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundStyle(.tertiary)
                         }
+                        .accessibilityLabel("Dismiss")
                     }
-                    .padding()
-                    .background(Color.appSecondaryBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.red.opacity(0.3), lineWidth: 1)
-                    )
+                    .formaSurface(.card, padding: FormaSpacing.md, tint: .formaCoral)
                 }
 
                 if let errorMessage, profiles.isEmpty {
-                    errorStateView(message: errorMessage)
+                    FormaStatusView(
+                        title: "Couldn't Load Profiles",
+                        message: errorMessage,
+                        systemImage: "exclamationmark.triangle.fill",
+                        tint: .formaCoral,
+                        actionTitle: "Try Again",
+                        actionTint: .sleekAccent
+                    ) {
+                        Task {
+                            await loadProfiles()
+                        }
+                    }
                 } else if isLoading && profiles.isEmpty {
                     VStack(spacing: 16) {
                         ForEach(0..<3, id: \.self) { _ in
@@ -57,7 +65,12 @@ struct Profiles: View {
                         }
                     }
                 } else if profiles.isEmpty {
-                    emptyStateView
+                    FormaStatusView(
+                        title: "No Profiles Yet",
+                        message: "Create or connect a client profile to get started with tracking.",
+                        systemImage: "person.2.crop.horizontal",
+                        tint: .sleekAccent
+                    )
                 } else {
                     ForEach(profiles) { profile in
                         ProfileRow(profile: profile) {
@@ -78,7 +91,10 @@ struct Profiles: View {
                     isShowingAddProfile = true
                 } label: {
                     Image(systemName: "plus")
+                        .font(.system(size: 15, weight: .semibold))
                 }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
                 .accessibilityLabel("Add Profile")
             }
         }
@@ -102,62 +118,6 @@ struct Profiles: View {
         .task {
             await loadProfiles()
         }
-    }
-
-    private func errorStateView(message: String) -> some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 36))
-                .foregroundStyle(.red)
-            
-            Text(message)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-            
-            Button {
-                Task {
-                    await loadProfiles()
-                }
-            } label: {
-                Text("Try Again")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.sleekAccent)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(Color.appSecondaryBackground)
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.appSeparator, lineWidth: 1)
-                    )
-            }
-            .padding(.top, 8)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
-    }
-
-    private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "person.2.crop.horizontal")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.sleekAccent)
-                .padding(.bottom, 4)
-            
-            Text("No Profiles Available")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(.primary)
-            
-            Text("Create or connect a client profile to get started with tracking.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 60)
     }
 
     private func loadProfiles() async {
@@ -224,9 +184,14 @@ struct PrimaryProfileGate: View {
         Group {
             switch loadState {
             case .checking:
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.appBackground.ignoresSafeArea())
+                VStack(spacing: FormaSpacing.cardGap) {
+                    FormaSkeletonCard()
+                    FormaSkeletonCard()
+                    FormaSkeletonCard()
+                }
+                .padding(.horizontal, FormaSpacing.screenGutter)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(FormaBackground())
 
             case .ready:
                 SwiftUIView()
@@ -261,26 +226,17 @@ struct PrimaryProfileGate: View {
                 }
 
             case .failed(let message):
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.red)
-
-                    Text(message)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-
-                    Button {
-                        Task {
-                            await ensurePrimaryProfile()
-                        }
-                    } label: {
-                        Text("Try Again")
-                            .font(.subheadline.weight(.semibold))
+                FormaStatusView(
+                    title: "Couldn't Load Profiles",
+                    message: message,
+                    systemImage: "exclamationmark.triangle.fill",
+                    tint: .formaCoral,
+                    actionTitle: "Try Again",
+                    actionTint: .sleekAccent
+                ) {
+                    Task {
+                        await ensurePrimaryProfile()
                     }
-                    .buttonStyle(.borderedProminent)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.appBackground.ignoresSafeArea())
@@ -430,11 +386,17 @@ private struct ProfileFormView: View {
 
             if let errorMessage {
                 Section {
-                    Text(errorMessage)
-                        .foregroundStyle(.red)
+                    FormaCallout(
+                        text: errorMessage,
+                        systemImage: "exclamationmark.triangle.fill",
+                        tint: .formaCoral
+                    )
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(FormaBackground())
+        .tint(.sleekAccent)
         .navigationTitle(isEditing ? "Edit Profile" : "Add Profile")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -490,8 +452,8 @@ private struct ProfileFormView: View {
                 )
 
                 let response = try await apiClient.send(UpdateClientProfileRequest(profileId: profile.id, body: requestBody))
-                if response.isPrimary {
-                    PrimaryProfileStore.primaryProfileId = response.profileId
+                if response.isPrimary == true {
+                    PrimaryProfileStore.primaryProfileId = response.profileId ?? profile.id
                 }
             } else {
                 let requestBody = CreateClientProfileBody(
@@ -585,31 +547,22 @@ private struct ProfileRow: View {
                     } placeholder: {
                         Circle()
                             .fill(Color.appTertiaryBackground)
-                            .overlay {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                            }
+                            .shimmering()
                     }
                     .frame(width: 60, height: 60)
                     .clipShape(Circle())
                 } else {
-                    initialsView(for: profile.name)
+                    initialsView(for: profile.displayName)
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    // Name & Primary badge (using default system fonts)
-                    Text(profile.name)
-                        .font(.title3.bold())
+                    Text(profile.displayName)
+                        .font(.title3.weight(.bold))
                         .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if profile.isPrimary {
-                        Text("Primary Profile")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(Color.sleekAccent)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Color.sleekAccent.opacity(0.12), in: Capsule())
+                        FormaValueBadge(text: "Primary Profile", tint: .sleekAccent)
                     }
                 }
 
@@ -622,7 +575,7 @@ private struct ProfileRow: View {
                         .frame(width: 36, height: 36)
                         .background(Color.sleekAccent.opacity(0.12), in: Circle())
                 }
-                .accessibilityLabel("Edit \(profile.name)")
+                .accessibilityLabel("Edit \(profile.displayName)")
 
                 if profile.isPrimary {
                     Image(systemName: "checkmark.seal.fill")
@@ -632,8 +585,7 @@ private struct ProfileRow: View {
                 }
             }
 
-            Divider()
-                .background(Color.appSeparator)
+            FormaDivider()
 
             // Role / Category Field
             if let peopleType = profile.peopleType, !peopleType.isEmpty {
@@ -743,59 +695,38 @@ private struct ProfileRow: View {
 }
 
 private struct SkeletonCardView: View {
-    @State private var isAnimating = false
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: FormaSpacing.md) {
+            HStack(spacing: FormaSpacing.md) {
                 Circle()
-                    .fill(Color.appTertiaryBackground)
+                    .fill(Color.secondary.opacity(0.10))
                     .frame(width: 60, height: 60)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.appTertiaryBackground)
-                        .frame(width: 140, height: 18)
-
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.appTertiaryBackground)
-                        .frame(width: 70, height: 22)
+                VStack(alignment: .leading, spacing: FormaSpacing.xs) {
+                    FormaSkeletonBlock(width: 140, height: 18, opacity: 0.14)
+                    FormaSkeletonBlock(width: 70, height: 22, radius: 11, opacity: 0.10)
                 }
                 Spacer()
             }
-            
-            Divider()
-                .background(Color.appSeparator)
+
+            FormaDivider()
 
             VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.appTertiaryBackground)
-                    .frame(width: 100, height: 12)
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.appTertiaryBackground)
-                    .frame(width: 200, height: 16)
+                FormaSkeletonBlock(width: 100, height: 12, opacity: 0.08)
+                FormaSkeletonBlock(width: 200, height: 16, opacity: 0.10)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: FormaSpacing.xs) {
                 ForEach(0..<2, id: \.self) { _ in
-                    HStack(spacing: 8) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.appTertiaryBackground)
-                            .frame(width: 16, height: 16)
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.appTertiaryBackground)
-                            .frame(width: 120, height: 14)
+                    HStack(spacing: FormaSpacing.xs) {
+                        FormaSkeletonBlock(width: 16, height: 16, radius: 5, opacity: 0.10)
+                        FormaSkeletonBlock(width: 120, height: 14, opacity: 0.08)
                     }
                 }
             }
         }
         .formaSurface(.card, padding: FormaSpacing.cardInset)
-        .opacity(isAnimating ? 0.4 : 0.8)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                isAnimating = true
-            }
-        }
+        .shimmering()
     }
 }
 

@@ -18,7 +18,8 @@ struct UpdateClientProfileRequest: APIRequest {
     let requiresAuth = true
 
     init(profileId: UUID, body: UpdateClientProfileBody) {
-        self.path = "client/profiles/\(profileId.uuidString)"
+        // Server lowercases profileId path segments.
+        self.path = "client/profiles/\(profileId.uuidString.lowercased())"
         self.body = body
     }
 }
@@ -46,6 +47,7 @@ struct UpdateClientProfileBody: Encodable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        // Partial PATCH: only send keys that are present (omit nils).
         try container.encodeIfPresent(name, forKey: .name)
         try container.encodeIfPresent(isPrimary, forKey: .isPrimary)
         try container.encodeIfPresent(heightCm, forKey: .heightCm)
@@ -53,24 +55,20 @@ struct UpdateClientProfileBody: Encodable {
         try container.encodeIfPresent(peopleType, forKey: .peopleType)
         try container.encodeIfPresent(gender, forKey: .gender)
         try container.encodeIfPresent(preferredBodyFatPct, forKey: .preferredBodyFatPct)
-
-        if let profileImage {
-            try container.encode(profileImage, forKey: .profileImage)
-        } else {
-            try container.encodeNil(forKey: .profileImage)
-        }
+        try container.encodeIfPresent(profileImage, forKey: .profileImage)
     }
 }
 
+/// PATCH response only echoes provided fields — keep members optional for decode resilience.
 struct UpdateClientProfileResponse: Decodable {
     let ok: Bool
-    let profileId: UUID
-    let name: String
-    let isPrimary: Bool
-    let heightCm: Double
-    let dateOfBirth: String
-    let peopleType: String
-    let gender: String
+    let profileId: UUID?
+    let name: String?
+    let isPrimary: Bool?
+    let heightCm: Double?
+    let dateOfBirth: String?
+    let peopleType: String?
+    let gender: String?
     let profileImage: String?
-    let preferredBodyFatPct: Double
+    let preferredBodyFatPct: Double?
 }

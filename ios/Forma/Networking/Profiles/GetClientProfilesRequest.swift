@@ -26,7 +26,9 @@ struct GetClientProfilesResponse: Decodable {
 struct ClientProfile: Decodable, Identifiable {
     let id: UUID
     let accountId: UUID
-    let name: String
+    /// Server may return null name.
+    let name: String?
+    let mailAddress: String?
     let isPrimary: Bool
     let heightCm: Double?
     let dateOfBirth: String?
@@ -35,4 +37,10 @@ struct ClientProfile: Decodable, Identifiable {
     let profileImage: String?
     let preferredBodyFatPct: Double?
     let createdAt: String?
+
+    /// Display-safe name for UI that still expects a string.
+    var displayName: String {
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? "Profile" : trimmed
+    }
 }
