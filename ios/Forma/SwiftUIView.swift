@@ -36,7 +36,7 @@ struct SwiftUIView: View {
                 }
 
                 Tab("Record", systemImage: "record.circle", value: .record) {
-                    RecordView()
+                    RecordView(reportStore: reportStore)
                 }
 
                 Tab("Vitals", systemImage: "heart.text.square", value: .vitals) {

@@ -97,6 +97,8 @@ final class IdleTimerLease {
 struct RecordView: View {
     private static let minimumMetricDisplayDuration = Duration.milliseconds(800)
 
+    let reportStore: MetricsReportStore
+
     @StateObject private var scaleManager = ScaleBLEManager()
 
     @State private var isSubmittingMeasurement = false
@@ -108,6 +110,8 @@ struct RecordView: View {
     @State private var metricAdvanceTask: Task<Void, Never>?
     @State private var outcomeRevealTask: Task<Void, Never>?
     @State private var idleTimerLease: IdleTimerLease?
+    @State private var cancelFeedbackNonce = 0
+    @State private var retryFeedbackNonce = 0
 
     private let apiClient = APIClient()
     private let clock = ContinuousClock()
@@ -120,13 +124,21 @@ struct RecordView: View {
             ZStack {
                 FormaBackground()
 
-                RecordCircle(
-                    state: circleState,
-                    diameter: diameter,
-                    isEnabled: circleIsEnabled,
-                    showsActivityRing: scaleManager.isReading,
-                    action: handleCircleAction
-                )
+                VStack(spacing: FormaSpacing.xl) {
+                    RecordCircle(
+                        state: circleState,
+                        diameter: diameter,
+                        isEnabled: circleIsEnabled,
+                        showsActivityRing: scaleManager.isReading,
+                        action: handleCircleAction
+                    )
+
+                    RecordFlowFooter(
+                        state: circleState,
+                        measurement: scaleManager.latestMeasurement,
+                        isReading: scaleManager.isReading
+                    )
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.top, FormaLayout.floatingSettingsClearance)
@@ -144,6 +156,22 @@ struct RecordView: View {
             if !scaleManager.isReading {
                 releaseIdleTimerLease()
             }
+        }
+        .sensoryFeedback(RecordFeedbackEvent.start.sensoryFeedback, trigger: scaleManager.isReading) { _, isReading in
+            isReading
+        }
+        .sensoryFeedback(RecordFeedbackEvent.cancel.sensoryFeedback, trigger: cancelFeedbackNonce)
+        .sensoryFeedback(RecordFeedbackEvent.retry.sensoryFeedback, trigger: retryFeedbackNonce)
+        .sensoryFeedback(RecordFeedbackEvent.metric(.weight).sensoryFeedback, trigger: displayedMetricStage) { _, stage in
+            stage != nil
+        }
+        .sensoryFeedback(RecordFeedbackEvent.success.sensoryFeedback, trigger: circleState) { _, state in
+            state == .saved
+        }
+        .sensoryFeedback(RecordFeedbackEvent.error.sensoryFeedback, trigger: circleState) { _, state in
+            if case .recordingFailed = state { return true }
+            if case .submissionFailed = state { return true }
+            return false
         }
     }
 
@@ -191,15 +219,15 @@ struct RecordView: View {
         case .idle:
             return "Starting"
         case .waitingForBluetooth:
-            return "Bluetooth"
+            return "Turn on Bluetooth"
         case .scanning:
-            return "Searching"
+            return "Finding your scale"
         case .connecting:
             return "Connecting"
         case .discoveringServices:
-            return "Preparing"
+            return "Waking your scale"
         case .listening:
-            return "Reading"
+            return "Step on your scale"
         case .finished:
             return "Complete"
         case .failed:
@@ -225,12 +253,14 @@ struct RecordView: View {
             resetToReady()
 
         case .submissionFailed:
+            retryFeedbackNonce += 1
             Task {
                 await submitLatestMeasurement()
             }
 
         case .connecting, .weight, .impedance, .heartRate:
             guard scaleManager.isReading else { return }
+            cancelFeedbackNonce += 1
             cancelReading()
         }
     }
@@ -391,7 +421,7 @@ struct RecordView: View {
 
             let response = try await apiClient.send(AddMeasurementRequest(body: body))
             submittedMeasurement = measurement
-            InsightReportJobStore.add(response.jobId, for: profileId)
+            reportStore.reportQueued(for: profileId, jobId: response.jobId)
             outcome = .saved
         } catch APIError.missingAuthToken {
             outcome = .submissionFailed("Missing auth token.")
@@ -572,6 +602,7 @@ private struct RecordCircle: View {
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
         }
+        .foregroundStyle(Color.actionForeground)
     }
 
     private var backgroundFill: Color {
@@ -579,9 +610,9 @@ private struct RecordCircle: View {
         case .ready:
             return .actionInk
         case .saved:
-            return .green
+            return .sleekAccent
         case .recordingFailed, .submissionFailed:
-            return .red
+            return .formaCoral
         case .connecting, .weight, .impedance, .heartRate:
             return .appSecondaryBackground
         }
@@ -609,9 +640,9 @@ private struct RecordCircle: View {
     private var shadowColor: Color {
         switch state {
         case .saved:
-            return .green.opacity(0.24)
+            return .sleekAccent.opacity(0.24)
         case .recordingFailed, .submissionFailed:
-            return .red.opacity(0.24)
+            return .formaCoral.opacity(0.24)
         case .ready:
             return .actionInk.opacity(0.24)
         case .connecting, .weight, .impedance, .heartRate:
@@ -677,6 +708,70 @@ private struct RecordCircle: View {
     }
 }
 
+/// Guidance area beneath the record circle: stage progress during a reading,
+/// and a visible error message when something goes wrong.
+private struct RecordFlowFooter: View {
+    let state: RecordCircleState
+    let measurement: ScaleMeasurement
+    let isReading: Bool
+
+    var body: some View {
+        Group {
+            switch state {
+            case .recordingFailed(let message), .submissionFailed(let message):
+                Text(message)
+                    .font(FormaTypography.body)
+                    .foregroundStyle(Color.formaCoral)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, FormaSpacing.xxl)
+                    .transition(.opacity)
+
+            case .connecting, .weight, .impedance, .heartRate where isReading:
+                RecordStageTracker(measurement: measurement)
+                    .transition(.opacity)
+
+            case .ready, .saved, .connecting, .weight, .impedance, .heartRate:
+                EmptyView()
+            }
+        }
+        .frame(minHeight: 44, alignment: .top)
+        .animation(.easeOut(duration: 0.22), value: state)
+    }
+}
+
+/// Three-stage progress indicator for the measurement ritual.
+private struct RecordStageTracker: View {
+    let measurement: ScaleMeasurement
+
+    private var stages: [(title: String, isComplete: Bool)] {
+        [
+            ("Weight", measurement.weightKg != nil),
+            ("Impedance", measurement.impedanceOhms != nil),
+            ("Heart Rate", measurement.heartRate != nil)
+        ]
+    }
+
+    var body: some View {
+        HStack(spacing: FormaSpacing.lg) {
+            ForEach(0..<stages.count, id: \.self) { index in
+                let stage = stages[index]
+
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(stage.isComplete ? Color.formaTeal : Color.appTertiaryBackground)
+                        .frame(width: 6, height: 6)
+
+                    Text(stage.title)
+                        .font(FormaTypography.micro)
+                        .foregroundStyle(stage.isComplete ? .primary : .secondary)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct AnimatedRecordPalette: View {
     let diameter: CGFloat
     var reduceMotionOverride: Bool? = nil
@@ -687,7 +782,7 @@ private struct AnimatedRecordPalette: View {
     private static let reducedMotionPhase = Double.pi * 0.38
     private static let fields: [RecordColorField] = [
         RecordColorField(
-            color: Color(red: 1.00, green: 0.42, blue: 0.38),
+            color: Color(red: 0.36, green: 0.87, blue: 0.66), // sleekAccent mint
             center: CGPoint(x: 0.17, y: 0.18),
             size: CGSize(width: 0.94, height: 0.74),
             travel: CGVector(dx: 0.10, dy: 0.08),
@@ -697,7 +792,7 @@ private struct AnimatedRecordPalette: View {
             scaleFrequency: 1
         ),
         RecordColorField(
-            color: Color(red: 1.00, green: 0.54, blue: 0.16),
+            color: Color(red: 0.10, green: 0.52, blue: 0.40), // deep emerald
             center: CGPoint(x: 0.80, y: 0.16),
             size: CGSize(width: 0.82, height: 0.76),
             travel: CGVector(dx: 0.09, dy: 0.10),
@@ -707,7 +802,7 @@ private struct AnimatedRecordPalette: View {
             scaleFrequency: 2
         ),
         RecordColorField(
-            color: Color(red: 0.14, green: 0.33, blue: 0.90),
+            color: Color(red: 0.10, green: 0.42, blue: 0.58), // deep cyan
             center: CGPoint(x: 0.14, y: 0.72),
             size: CGSize(width: 0.92, height: 0.90),
             travel: CGVector(dx: 0.11, dy: 0.08),
@@ -717,7 +812,7 @@ private struct AnimatedRecordPalette: View {
             scaleFrequency: 1
         ),
         RecordColorField(
-            color: Color(red: 0.49, green: 0.23, blue: 0.93),
+            color: Color(red: 0.20, green: 0.72, blue: 0.58), // mid teal
             center: CGPoint(x: 0.78, y: 0.66),
             size: CGSize(width: 0.90, height: 0.84),
             travel: CGVector(dx: 0.10, dy: 0.09),
@@ -727,7 +822,7 @@ private struct AnimatedRecordPalette: View {
             scaleFrequency: 2
         ),
         RecordColorField(
-            color: Color(red: 1.00, green: 0.91, blue: 0.60),
+            color: Color(red: 0.62, green: 0.95, blue: 0.82), // pale mint highlight
             center: CGPoint(x: 0.52, y: 0.46),
             size: CGSize(width: 0.72, height: 0.66),
             travel: CGVector(dx: 0.13, dy: 0.11),
@@ -737,7 +832,7 @@ private struct AnimatedRecordPalette: View {
             scaleFrequency: 1
         ),
         RecordColorField(
-            color: Color(red: 0.27, green: 0.75, blue: 0.66),
+            color: Color(red: 0.28, green: 0.86, blue: 0.71), // formaTeal
             center: CGPoint(x: 0.52, y: 0.96),
             size: CGSize(width: 1.08, height: 0.74),
             travel: CGVector(dx: 0.08, dy: 0.07),
@@ -766,7 +861,7 @@ private struct AnimatedRecordPalette: View {
         Canvas(opaque: true, colorMode: .nonLinear, rendersAsynchronously: true) { context, size in
             context.fill(
                 Path(CGRect(origin: .zero, size: size)),
-                with: .color(Color(red: 0.27, green: 0.75, blue: 0.66))
+                with: .color(Color(red: 0.09, green: 0.38, blue: 0.29)) // deep brand teal base
             )
 
             context.drawLayer { layer in
