@@ -726,7 +726,11 @@ struct FormaSemicircularGauge: View {
         if reduceMotion {
             animatedValue = clamped
         } else {
-            withAnimation(.easeOut(duration: 0.7)) {
+            // Explicit transaction so the marker sweep always runs even when a
+            // parent view has suppressed implicit animations for tab swaps.
+            var transaction = Transaction(animation: .easeOut(duration: 0.7))
+            transaction.disablesAnimations = false
+            withTransaction(transaction) {
                 animatedValue = clamped
             }
         }
