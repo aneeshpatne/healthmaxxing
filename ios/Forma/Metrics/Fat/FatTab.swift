@@ -60,7 +60,9 @@ struct FatTab: View {
     let payload: InsightReportPayload?
 
     var body: some View {
-        VStack(spacing: FormaSpacing.cardGap) {
+        // LazyVStack defers off-screen charts so switching to Fat only builds
+        // the cards that fit the first screen instead of every trend at once.
+        LazyVStack(spacing: FormaSpacing.cardGap) {
             if payload?.fat.isEmpty != false {
                 MetricsUnavailableContent(message: "Fat report data is unavailable.")
             }
@@ -110,7 +112,7 @@ struct FatTab: View {
                     statusColor: .formaPositive,
                     statusIcon: "checkmark.circle.fill",
                     remark: section.remark,
-                    points: trendPoints.map { (date: $0.date, value: $0.value) }
+                    points: chartPoints(from: trendPoints, metric: "Visceral fat", color: .formaAmber)
                 )
             }
 
@@ -126,8 +128,15 @@ struct FatTab: View {
                     statusColor: .formaNegative,
                     statusIcon: "exclamationmark.triangle.fill",
                     remark: section.remark,
-                    points: section.trendPoints(preferredKeys: ["subcutaneousFatKg", "subcutaneous_fat_kg", "subcutaneousFatMassKg"])
-                        .map { (date: $0.date, value: $0.value) }
+                    points: chartPoints(
+                        from: section.trendPoints(preferredKeys: [
+                            "subcutaneousFatKg",
+                            "subcutaneous_fat_kg",
+                            "subcutaneousFatMassKg"
+                        ]),
+                        metric: "Subcutaneous fat",
+                        color: .formaCyan
+                    )
                 )
             }
 
@@ -143,8 +152,11 @@ struct FatTab: View {
                     statusColor: .formaNegative,
                     statusIcon: "chart.line.downtrend.xyaxis",
                     remark: section.remark,
-                    points: section.trendPoints(preferredKeys: ["fatMassKg", "fat_mass_kg", "totalFatKg"])
-                        .map { (date: $0.date, value: $0.value) }
+                    points: chartPoints(
+                        from: section.trendPoints(preferredKeys: ["fatMassKg", "fat_mass_kg", "totalFatKg"]),
+                        metric: "Fat mass",
+                        color: .formaCoral
+                    )
                 )
             }
 
@@ -161,8 +173,11 @@ struct FatTab: View {
                     statusColor: metrics.statusColor,
                     statusIcon: metrics.statusIcon,
                     remark: section.remark,
-                    points: (section.trends["fatPercent"] ?? [])
-                        .map { (date: $0.date, value: $0.value) },
+                    points: chartPoints(
+                        from: section.trends["fatPercent"] ?? [],
+                        metric: "Body fat",
+                        color: .formaCoral
+                    ),
                     accessibilitySummary: "Fat Ratio, \(String(format: "%.1f", value)) percent, \(metrics.statusText.lowercased()), \(metrics.verdictText.lowercased())."
                 )
             }
@@ -170,6 +185,16 @@ struct FatTab: View {
         .padding(.horizontal, FormaSpacing.screenGutter)
         .padding(.top, FormaSpacing.xxs)
         .padding(.bottom, FormaSpacing.xl)
+    }
+
+    private func chartPoints(
+        from points: [InsightReportTrendPoint],
+        metric: String,
+        color: Color
+    ) -> [FormaChartPoint] {
+        points
+            .sorted { $0.date < $1.date }
+            .map { FormaChartPoint(date: $0.date, value: $0.value, metric: metric, color: color) }
     }
 }
 
@@ -269,14 +294,9 @@ private struct FatTrendCard: View {
     var statusColor: Color
     var statusIcon: String
     var remark: InsightReportRemark?
-    let points: [(date: Date, value: Double)]
+    /// Pre-sorted chart points (built once by `FatTab`).
+    let points: [FormaChartPoint]
     var accessibilitySummary: String? = nil
-
-    private var chartPoints: [FormaChartPoint] {
-        points.sorted { $0.date < $1.date }.map {
-            FormaChartPoint(date: $0.date, value: $0.value, metric: metricLabel, color: color)
-        }
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: FormaSpacing.cardContent) {
@@ -285,7 +305,7 @@ private struct FatTrendCard: View {
             }
 
             FormaTimeSeriesChart(
-                points: chartPoints,
+                points: points,
                 unit: unit
             )
 
