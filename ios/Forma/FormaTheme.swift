@@ -13,27 +13,29 @@ enum FormaSpacing {
     static let xxl: CGFloat = 32
 
     static let screenGutter = lg
-    static let cardGap = md
+    static let cardGap = lg
     static let sectionGap = xl
     static let cardInset = lg
+
+    /// Unified vertical rhythm inside cards (header → content → divider → callout).
+    static let cardContent = lg
 }
 
 enum FormaSemicircularGaugeLayout {
     static let aspectRatio: CGFloat = 2
-    static let strokeWidth: CGFloat = 20
+    static let strokeWidth: CGFloat = 18
     static let labelInset: CGFloat = 30
     static let markerDiameter: CGFloat = 18
     static let markerStrokeWidth: CGFloat = 3.5
     static let scoreOffset: CGFloat = 20
-    static let valueFontSize: CGFloat = 40
 }
 
 enum FormaRadius {
-    static let badge: CGFloat = 8
+    static let badge: CGFloat = 9
     static let inset: CGFloat = 14
     static let action: CGFloat = 16
-    static let card: CGFloat = 18
-    static let hero: CGFloat = 24
+    static let card: CGFloat = 22
+    static let hero: CGFloat = 28
 }
 
 enum FormaTypography {
@@ -42,13 +44,23 @@ enum FormaTypography {
     }
 
     static let eyebrow = Font.caption.weight(.bold)
-    static let cardTitle = Font.headline.weight(.semibold)
+    static let cardTitle = Font.system(.headline, design: .rounded).weight(.semibold)
     static let body = Font.subheadline
+    static let metricSmall = Font.system(size: 20, weight: .bold, design: .rounded)
     static let metric = Font.system(size: 34, weight: .semibold, design: .rounded)
     static let heroMetric = Font.system(size: 64, weight: .semibold, design: .rounded)
     static let unit = Font.subheadline.weight(.semibold)
     static let chartLabel = Font.caption2.weight(.medium)
+
+    /// 40pt rounded — the large readout centered in semicircular gauges.
+    static let gaugeValue = Font.system(size: 40, weight: .bold, design: .rounded)
+    /// 10pt — the smallest legible label in the app (legend ranges, dense annotations).
+    static let micro = Font.system(size: 10, weight: .medium)
+    /// Medium-strength headline used inside cards beneath the card title.
+    static let sectionHeadline = Font.body.weight(.medium)
 }
+
+// MARK: - Palette
 
 extension Color {
     static let appBackground = Color(uiColor: UIColor { traits in
@@ -93,47 +105,70 @@ extension Color {
             : UIColor(red: 0.08, green: 0.16, blue: 0.12, alpha: 0.045)
     })
 
+    /// Vivid spring mint — the primary brand accent.
     static let sleekAccent = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.48, green: 0.67, blue: 0.60, alpha: 1)
-            : UIColor(red: 0.20, green: 0.45, blue: 0.38, alpha: 1)
+            ? UIColor(red: 0.36, green: 0.87, blue: 0.66, alpha: 1)
+            : UIColor(red: 0.07, green: 0.56, blue: 0.38, alpha: 1)
     })
 
     static let actionInk = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.39, green: 0.56, blue: 0.50, alpha: 1)
-            : UIColor(red: 0.10, green: 0.20, blue: 0.17, alpha: 1)
+            ? UIColor(red: 0.22, green: 0.62, blue: 0.45, alpha: 1)
+            : UIColor(red: 0.07, green: 0.38, blue: 0.27, alpha: 1)
     })
 
     static let actionForeground = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.035, green: 0.050, blue: 0.045, alpha: 1)
+            ? UIColor(red: 0.025, green: 0.075, blue: 0.055, alpha: 1)
             : UIColor.white
     })
 
+    /// Vivid teal.
     static let formaTeal = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.43, green: 0.66, blue: 0.58, alpha: 1)
-            : UIColor(red: 0.13, green: 0.46, blue: 0.37, alpha: 1)
+            ? UIColor(red: 0.28, green: 0.86, blue: 0.71, alpha: 1)
+            : UIColor(red: 0.05, green: 0.58, blue: 0.44, alpha: 1)
     })
 
+    /// Vivid coral.
     static let formaCoral = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.82, green: 0.47, blue: 0.45, alpha: 1)
-            : UIColor(red: 0.68, green: 0.25, blue: 0.25, alpha: 1)
+            ? UIColor(red: 0.97, green: 0.46, blue: 0.45, alpha: 1)
+            : UIColor(red: 0.86, green: 0.27, blue: 0.27, alpha: 1)
     })
 
+    /// Vivid gold.
     static let formaAmber = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.75, green: 0.63, blue: 0.39, alpha: 1)
-            : UIColor(red: 0.62, green: 0.43, blue: 0.13, alpha: 1)
+            ? UIColor(red: 0.98, green: 0.76, blue: 0.31, alpha: 1)
+            : UIColor(red: 0.80, green: 0.52, blue: 0.07, alpha: 1)
     })
 
+    /// Vivid sky.
     static let formaCyan = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.47, green: 0.65, blue: 0.70, alpha: 1)
-            : UIColor(red: 0.19, green: 0.45, blue: 0.52, alpha: 1)
+            ? UIColor(red: 0.33, green: 0.76, blue: 0.95, alpha: 1)
+            : UIColor(red: 0.07, green: 0.50, blue: 0.69, alpha: 1)
     })
+
+    /// Soft pastel yellow — a mid-scale status step between amber and teal.
+    static let formaYellow = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.96, green: 0.85, blue: 0.42, alpha: 1)
+            : UIColor(red: 0.70, green: 0.56, blue: 0.04, alpha: 1)
+    })
+
+    // MARK: Semantic status aliases — prefer these over raw system colors.
+
+    static let formaPositive = Color.formaTeal
+    static let formaCaution = Color.formaAmber
+    static let formaNegative = Color.formaCoral
+    static let formaInfo = Color.formaCyan
+
+    /// Ring drawn around chart markers. Matches the card surface so markers read
+    /// as a clean cutout in both light and dark appearances.
+    static let appMarkerRing = Color.appSecondaryBackground
 
     static let cardShadow = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
@@ -146,11 +181,37 @@ extension Color {
             ? UIColor(white: 0, alpha: 0.22)
             : UIColor(red: 0.08, green: 0.07, blue: 0.16, alpha: 0.05)
     })
+
+    /// A softened, pastel version of the color — used for atmospheric washes so
+    /// vivid accents can glow gently without looking washed out elsewhere.
+    func pastelized() -> Color {
+        let uiColor = UIColor(self)
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+
+        guard uiColor.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
+            return self
+        }
+
+        return Color(uiColor: UIColor(
+            hue: hue,
+            saturation: max(0, saturation * 0.52),
+            brightness: min(1, brightness * 0.72 + 0.26),
+            alpha: alpha
+        ))
+    }
 }
 
 // MARK: - Background and surfaces
 
 struct FormaBackground: View {
+    /// Optional wash anchored to the top edge, rendered as a pastel tint of the
+    /// accent. Rendered behind scrolling content, so it stays fixed while the
+    /// page scrolls or refreshes.
+    var accent: Color? = nil
+
     var body: some View {
         ZStack {
             Color.appBackground
@@ -168,8 +229,39 @@ struct FormaBackground: View {
                 startRadius: 0,
                 endRadius: 520
             )
+
+            if let accent {
+                VStack(spacing: 0) {
+                    FormaAccentWash(accent: accent)
+
+                    Spacer(minLength: 0)
+                }
+                .transition(.opacity)
+            }
         }
         .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
+}
+
+/// Colored wash used at the top of a page. It can live either in the fixed
+/// app background or inside scroll content when it should move with the page.
+struct FormaAccentWash: View {
+    let accent: Color
+
+    var body: some View {
+        let pastel = accent.pastelized()
+
+        LinearGradient(
+            colors: [
+                pastel.opacity(0.30),
+                pastel.opacity(0.11),
+                .clear
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 420)
         .accessibilityHidden(true)
     }
 }
@@ -203,6 +295,7 @@ enum FormaSurfaceStyle: Equatable {
 private struct FormaSurfaceModifier: ViewModifier {
     let style: FormaSurfaceStyle
     let padding: CGFloat?
+    let tint: Color?
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: style.radius, style: .continuous)
@@ -218,26 +311,61 @@ private struct FormaSurfaceModifier: ViewModifier {
             if style == .inset || style == .chart {
                 shape.fill(style.fill)
             } else {
-                shape
+                let base = shape
                     .fill(style.fill)
-                    .shadow(
-                        color: Color.cardShadow,
-                        radius: style == .floating ? 22 : (style == .hero ? 18 : 12),
-                        x: 0,
-                        y: style == .floating ? 11 : (style == .hero ? 9 : 6)
-                    )
-                    .shadow(
-                        color: Color.contactShadow,
-                        radius: style == .floating ? 3 : 2,
-                        x: 0,
-                        y: 1
-                    )
+                    .overlay {
+                        // Soft top-down sheen for a premium, lit-from-above surface.
+                        shape.fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.appSurfaceHighlight.opacity(0.5),
+                                    Color.appSurfaceHighlight.opacity(0.06),
+                                    .clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                    }
+                    .overlay {
+                        if let tint {
+                            // Atmospheric wash anchoring the card to its status color.
+                            shape.fill(
+                                LinearGradient(
+                                    colors: [tint.opacity(0.14), tint.opacity(0.04), .clear],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                        }
+                    }
+
+                if let tint {
+                    base
+                        .shadow(color: tint.opacity(0.22), radius: 24, x: 0, y: 12)
+                        .shadow(color: Color.cardShadow, radius: 16, x: 0, y: 8)
+                        .shadow(color: Color.contactShadow, radius: 2, x: 0, y: 1)
+                } else {
+                    base
+                        .shadow(
+                            color: Color.cardShadow,
+                            radius: style == .floating ? 24 : (style == .hero ? 20 : 14),
+                            x: 0,
+                            y: style == .floating ? 12 : (style == .hero ? 10 : 7)
+                        )
+                        .shadow(
+                            color: Color.contactShadow,
+                            radius: style == .floating ? 3 : 2,
+                            x: 0,
+                            y: 1
+                        )
+                }
             }
         }
         .overlay {
             shape.strokeBorder(
                 LinearGradient(
-                    colors: [Color.appSurfaceHighlight, Color.appSeparator],
+                    colors: [tint?.opacity(0.35) ?? Color.appSurfaceHighlight, Color.appSeparator],
                     startPoint: .top,
                     endPoint: .bottom
                 ),
@@ -250,15 +378,18 @@ private struct FormaSurfaceModifier: ViewModifier {
 extension View {
     func formaSurface(
         _ style: FormaSurfaceStyle = .card,
-        padding: CGFloat? = FormaSpacing.cardInset
+        padding: CGFloat? = FormaSpacing.cardInset,
+        tint: Color? = nil
     ) -> some View {
-        modifier(FormaSurfaceModifier(style: style, padding: padding))
+        modifier(FormaSurfaceModifier(style: style, padding: padding, tint: tint))
     }
 
-    func formaMetricCard(padding: CGFloat = FormaSpacing.cardInset) -> some View {
-        formaSurface(.card, padding: padding)
+    func formaMetricCard(padding: CGFloat = FormaSpacing.cardInset, tint: Color? = nil) -> some View {
+        formaSurface(.card, padding: padding, tint: tint)
     }
 }
+
+// MARK: - Shared building blocks
 
 struct FormaCardHeader<Trailing: View>: View {
     let title: String
@@ -280,12 +411,14 @@ struct FormaCardHeader<Trailing: View>: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
                     .font(FormaTypography.cardTitle)
+                    .tracking(-0.2)
                     .foregroundStyle(.primary)
 
                 if let subtitle, !subtitle.isEmpty, subtitle != title {
                     Text(subtitle)
                         .font(FormaTypography.body)
                         .foregroundStyle(.secondary)
+                        .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -302,6 +435,58 @@ extension FormaCardHeader where Trailing == EmptyView {
     }
 }
 
+/// Consistent hairline separator used between card content and insights.
+struct FormaDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.appSeparator)
+            .frame(height: 0.5)
+    }
+}
+
+/// Soft tinted capsule used for headline values and statuses.
+struct FormaValueBadge: View {
+    let text: String
+    var tint: Color = .sleekAccent
+
+    var body: some View {
+        Text(text)
+            .font(.subheadline.weight(.bold))
+            .monospacedDigit()
+            .foregroundStyle(tint)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(tint.opacity(0.13), in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(tint.opacity(0.18), lineWidth: 0.5)
+            }
+    }
+}
+
+/// Small tinted tile used to present an SF Symbol alongside text.
+struct FormaIconTile: View {
+    let systemImage: String
+    var tint: Color = .sleekAccent
+    var size: CGFloat = 30
+    var radius: CGFloat = FormaRadius.badge
+    var symbolFont: Font = .system(size: 13, weight: .semibold)
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(symbolFont)
+            .foregroundStyle(tint)
+            .frame(width: size, height: size)
+            .background {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(tint.opacity(0.12))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .strokeBorder(tint.opacity(0.14), lineWidth: 0.5)
+                    }
+            }
+    }
+}
+
 struct FormaCallout: View {
     let text: String
     var systemImage = "sparkles"
@@ -310,11 +495,7 @@ struct FormaCallout: View {
     var body: some View {
         if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             HStack(alignment: .top, spacing: FormaSpacing.sm) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 30, height: 30)
-                    .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                FormaIconTile(systemImage: systemImage, tint: tint)
 
                 Text(text)
                     .font(FormaTypography.body)
@@ -325,6 +506,352 @@ struct FormaCallout: View {
                 Spacer(minLength: 0)
             }
         }
+    }
+}
+
+// MARK: - Status screens
+
+/// Consistent full-width status presentation for empty, error, and placeholder
+/// states: tinted icon disc, title, message, and an optional glass action.
+struct FormaStatusView: View {
+    let title: String
+    let message: String
+    var systemImage = "doc.text.magnifyingglass"
+    var tint: Color = .secondary
+    var actionTitle: String? = nil
+    var actionTint: Color? = nil
+    var action: (() -> Void)? = nil
+
+    var body: some View {
+        VStack(spacing: FormaSpacing.lg) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.11))
+                    .frame(width: 64, height: 64)
+
+                Circle()
+                    .strokeBorder(tint.opacity(0.14), lineWidth: 0.5)
+                    .frame(width: 64, height: 64)
+
+                Image(systemName: systemImage)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+
+            VStack(spacing: FormaSpacing.xs) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text(message)
+                    .font(FormaTypography.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let actionTitle, let action {
+                Button(action: action) {
+                    Text(actionTitle)
+                        .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .tint(actionTint ?? tint)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, FormaSpacing.xl)
+        .padding(.vertical, 80)
+    }
+}
+
+// MARK: - Transitions
+
+enum FormaTransition {
+    /// Gentle rise-and-fade used when cards and screens swap content.
+    static let card: AnyTransition = .opacity.combined(with: .offset(y: 10))
+}
+
+// MARK: - Semicircular gauge
+
+/// One colored zone of a semicircular gauge.
+struct FormaGaugeSegment {
+    let color: Color
+    let min: Double
+    let max: Double
+}
+
+/// Shared semicircular gauge: colored zones, tick labels, a value marker that
+/// sweeps in on appear, and a large center readout with a tracked caption.
+struct FormaSemicircularGauge: View {
+    let value: Double
+    var accent: Color
+    let segments: [FormaGaugeSegment]
+    let range: ClosedRange<Double>
+    var tickLabels: [Double] = []
+    var labelSuffix = ""
+    var valueText: String
+    var caption: String
+    var captionColor: Color = .secondary
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var animatedValue: Double?
+
+    private var span: Double { range.upperBound - range.lowerBound }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let height = geometry.size.height
+            let radius = width / 2
+            let strokeWidth = FormaSemicircularGaugeLayout.strokeWidth
+            let presentedValue = animatedValue ?? range.lowerBound
+
+            ZStack {
+                // Colored zones
+                ZStack {
+                    ForEach(0..<segments.count, id: \.self) { index in
+                        let segment = segments[index]
+                        let startTrim = CGFloat((segment.min - range.lowerBound) / span) * 0.5
+                        let endTrim = CGFloat((segment.max - range.lowerBound) / span) * 0.5
+
+                        Circle()
+                            .trim(from: startTrim, to: endTrim)
+                            .stroke(segment.color.gradient, style: StrokeStyle(lineWidth: strokeWidth, lineCap: .butt))
+                            .rotationEffect(.degrees(180))
+                    }
+                }
+                .frame(width: width, height: width)
+                .position(x: width / 2, y: height)
+
+                // Tick labels
+                ForEach(tickLabels, id: \.self) { labelValue in
+                    let t = (labelValue - range.lowerBound) / span
+                    let angle = Angle(degrees: 180 - t * 180)
+                    let labelRadius = radius - FormaSemicircularGaugeLayout.labelInset
+
+                    Text("\(String(format: "%.0f", labelValue))\(labelSuffix)")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .position(
+                            x: width / 2 + labelRadius * CGFloat(cos(angle.radians)),
+                            y: height - labelRadius * CGFloat(sin(angle.radians))
+                        )
+                }
+
+                FormaGaugeMarker(
+                    value: presentedValue,
+                    range: range,
+                    center: CGPoint(x: width / 2, y: height),
+                    radius: radius,
+                    accent: accent
+                )
+
+                // Center readout
+                VStack(spacing: 2) {
+                    Text(valueText)
+                        .font(FormaTypography.gaugeValue)
+                        .foregroundStyle(.primary)
+
+                    Text(caption)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(captionColor)
+                        .tracking(0.6)
+                }
+                .position(x: width / 2, y: height - FormaSemicircularGaugeLayout.scoreOffset)
+            }
+        }
+        .aspectRatio(FormaSemicircularGaugeLayout.aspectRatio, contentMode: .fit)
+        .onAppear { animateToValue() }
+        .onChange(of: value) { _, _ in animateToValue() }
+    }
+
+    private func animateToValue() {
+        let clamped = min(range.upperBound, max(range.lowerBound, value))
+
+        if reduceMotion {
+            animatedValue = clamped
+        } else {
+            withAnimation(.easeOut(duration: 0.7)) {
+                animatedValue = clamped
+            }
+        }
+    }
+}
+
+/// Animates the scalar gauge value instead of its final x/y position. This
+/// recalculates the angle on every frame, keeping the marker on the arc.
+private struct FormaGaugeMarker: View, Animatable {
+    var value: Double
+    let range: ClosedRange<Double>
+    let center: CGPoint
+    let radius: CGFloat
+    let accent: Color
+
+    var animatableData: Double {
+        get { value }
+        set { value = newValue }
+    }
+
+    var body: some View {
+        let span = range.upperBound - range.lowerBound
+        let progress = max(0, min(1, (value - range.lowerBound) / span))
+        let angle = Angle(degrees: 180 - progress * 180)
+
+        Circle()
+            .fill(Color.appSecondaryBackground)
+            .frame(
+                width: FormaSemicircularGaugeLayout.markerDiameter,
+                height: FormaSemicircularGaugeLayout.markerDiameter
+            )
+            .overlay(
+                Circle().stroke(accent, lineWidth: FormaSemicircularGaugeLayout.markerStrokeWidth)
+            )
+            .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 3)
+            .position(
+                x: center.x + radius * CGFloat(cos(angle.radians)),
+                y: center.y - radius * CGFloat(sin(angle.radians))
+            )
+    }
+}
+
+/// One category in a ``FormaCategoryLegend``.
+struct FormaLegendCategory {
+    let name: String
+    let range: String
+    let color: Color
+    let min: Double
+    let max: Double
+}
+
+/// Segmented-bar legend that highlights the category the selected value falls into.
+struct FormaCategoryLegend: View {
+    let categories: [FormaLegendCategory]
+    let selectedValue: Double
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<categories.count, id: \.self) { index in
+                let cat = categories[index]
+                let isSelected = selectedValue >= cat.min && selectedValue < cat.max
+
+                VStack(spacing: 6) {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(isSelected ? AnyShapeStyle(cat.color.gradient) : AnyShapeStyle(cat.color.opacity(0.15)))
+                        .frame(height: 4)
+
+                    Text(cat.name)
+                        .font(.caption2.weight(isSelected ? .bold : .medium))
+                        .foregroundStyle(isSelected ? .primary : .secondary)
+                        .minimumScaleFactor(0.8)
+                        .lineLimit(1)
+
+                    Text(cat.range)
+                        .font(FormaTypography.micro)
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+}
+
+// MARK: - Skeleton loading
+
+struct ShimmerModifier: ViewModifier {
+    @State private var phase: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .modifier(AnimatedShimmerModifier(phase: reduceMotion ? 0.5 : phase))
+            .onAppear {
+                guard !reduceMotion else { return }
+
+                withAnimation(.linear(duration: 1.6).repeatForever(autoreverses: false)) {
+                    phase = 1
+                }
+            }
+    }
+}
+
+struct AnimatedShimmerModifier: AnimatableModifier {
+    var phase: CGFloat
+
+    var animatableData: CGFloat {
+        get { phase }
+        set { phase = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                GeometryReader { geo in
+                    let w = geo.size.width
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.3),
+                            .init(color: .white.opacity(0.22), location: 0.5),
+                            .init(color: .clear, location: 0.7)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: w * 2)
+                    .offset(x: -w + (w * 2 * phase))
+                    .blendMode(.overlay)
+                }
+                .mask(content)
+            )
+    }
+}
+
+extension View {
+    func shimmering() -> some View {
+        self.modifier(ShimmerModifier())
+    }
+}
+
+/// Placeholder block used to compose skeleton layouts.
+struct FormaSkeletonBlock: View {
+    var width: CGFloat? = nil
+    var height: CGFloat = 14
+    var radius: CGFloat = 6
+    var opacity: Double = 0.10
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(Color.secondary.opacity(opacity))
+            .frame(width: width, height: height)
+    }
+}
+
+struct FormaSkeletonCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: FormaSpacing.lg) {
+            VStack(alignment: .leading, spacing: FormaSpacing.xs) {
+                FormaSkeletonBlock(width: 150, height: 18, opacity: 0.14)
+                FormaSkeletonBlock(width: 230, height: 13, opacity: 0.08)
+            }
+
+            FormaSkeletonBlock(height: 150, radius: FormaRadius.inset, opacity: 0.05)
+
+            FormaDivider()
+
+            HStack(spacing: FormaSpacing.sm) {
+                FormaSkeletonBlock(width: 32, height: 32, radius: 9, opacity: 0.10)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    FormaSkeletonBlock(width: 130, height: 13, opacity: 0.10)
+                    FormaSkeletonBlock(width: 200, height: 11, opacity: 0.07)
+                }
+
+                Spacer()
+            }
+        }
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
+        .shimmering()
     }
 }
 
@@ -374,8 +901,8 @@ enum FormaChartStyle {
     static func areaGradient(_ color: Color) -> LinearGradient {
         LinearGradient(
             stops: [
-                .init(color: color.opacity(0.16), location: 0),
-                .init(color: color.opacity(0.055), location: 0.58),
+                .init(color: color.opacity(0.24), location: 0),
+                .init(color: color.opacity(0.08), location: 0.58),
                 .init(color: color.opacity(0), location: 1)
             ],
             startPoint: .top,
@@ -525,18 +1052,14 @@ struct FormaTimeSeriesChart: View {
                 FormaChartEmptyState()
             } else if data.count == 1 {
                 FormaChartEmptyState(hasSinglePoint: true)
-                Rectangle()
-                    .fill(Color.appSeparator)
-                    .frame(height: 0.5)
+                FormaDivider()
                 summaryFooter
             } else {
                 chart
                     .frame(height: height)
                     .padding(.bottom, FormaSpacing.xxs)
 
-                Rectangle()
-                    .fill(Color.appSeparator)
-                    .frame(height: 0.5)
+                FormaDivider()
 
                 summaryFooter
             }
