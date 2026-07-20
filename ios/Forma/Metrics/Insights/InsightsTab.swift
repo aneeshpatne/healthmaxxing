@@ -1,5 +1,4 @@
 import SwiftUI
-import Charts
 
 struct InsightsTab: View {
     @ObservedObject var reportStore: MetricsReportStore
@@ -12,273 +11,290 @@ struct InsightsTab: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: FormaSpacing.cardGap) {
+            if let factor = reportPayload?.factor {
+                PriorityFactorCard(factor: factor)
+            }
+
             if let overview = reportPayload?.overview {
-                // MARK: - Weekly Summary Card
-                VStack(alignment: .leading, spacing: 18) {
-                    FormaCardHeader(overview.title ?? overview.displayTitle)
+                InsightSectionCard(
+                    title: overview.title ?? overview.displayTitle,
+                    headline: overview.headline ?? overview.displayComment,
+                    calloutText: overview.remark?.text ?? overview.displayComment,
+                    calloutIcon: overview.remark?.marker?.iconName ?? "flame.fill",
+                    calloutTint: overview.remark?.marker?.color ?? .formaAmber
+                )
+            }
 
-                    // Insight text
-                    Text(overview.headline ?? overview.displayComment)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
+            if let foundation = reportPayload?.foundation {
+                InsightSectionCard(
+                    title: foundation.title ?? foundation.displayTitle,
+                    headline: foundation.headline ?? foundation.displayComment,
+                    body: foundation.comment ?? foundation.remark?.text,
+                    calloutText: foundation.remark?.text ?? foundation.displayComment,
+                    calloutIcon: foundation.remark?.marker?.iconName ?? "checkmark.circle.fill",
+                    calloutTint: foundation.remark?.marker?.color ?? .formaTeal
+                )
+            }
 
-                    // Subtle separator
-                    Rectangle()
-                        .fill(Color.appSeparator)
-                        .frame(height: 1)
+            if let momentum = reportPayload?.momentum {
+                InsightSectionCard(
+                    title: momentum.title ?? momentum.displayTitle,
+                    headline: momentum.headline ?? momentum.displayComment,
+                    body: momentum.comment ?? momentum.remark?.text,
+                    calloutText: momentum.remark?.text ?? momentum.displayComment,
+                    calloutIcon: momentum.remark?.marker?.iconName ?? "bolt.fill",
+                    calloutTint: momentum.remark?.marker?.color ?? .formaAmber
+                )
+            }
 
-                    // Premium insight row
-                    FormaCallout(
-                        text: overview.remark?.text ?? overview.displayComment,
-                        systemImage: overview.remark?.marker?.iconName ?? "flame.fill",
-                        tint: overview.remark?.marker?.color ?? .orange
-                    )
-                }
-                .insightsCard()
-                }
-
-                if let foundation = reportPayload?.foundation {
-                // MARK: - Strong Base Card
-                VStack(alignment: .leading, spacing: 18) {
-                    FormaCardHeader(foundation.title ?? foundation.displayTitle)
-
-                    // Headline
-                    Text(foundation.headline ?? foundation.displayComment)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    // Body
-                    Text(foundation.comment ?? foundation.remark?.text ?? "")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    // Subtle separator
-                    Rectangle()
-                        .fill(Color.appSeparator)
-                        .frame(height: 1)
-
-                    // Insight row
-                    FormaCallout(
-                        text: foundation.remark?.text ?? foundation.displayComment,
-                        systemImage: foundation.remark?.marker?.iconName ?? "checkmark.circle.fill",
-                        tint: foundation.remark?.marker?.color ?? .green
-                    )
-                }
-                .insightsCard()
-                }
-
-                if let progress = reportPayload?.progress {
-                // MARK: - Progress Trend Card
-                VStack(alignment: .leading, spacing: 18) {
-                    FormaCardHeader(progress.title ?? progress.displayTitle)
-
-                    // Headline
-                    Text(progress.headline ?? progress.displayComment)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    // Body
-                    Text(progress.comment ?? progress.remark?.text ?? "")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    // Chart card
+            if let progress = reportPayload?.progress {
+                InsightSectionCard(
+                    title: progress.title ?? progress.displayTitle,
+                    headline: progress.headline ?? progress.displayComment,
+                    body: progress.comment ?? progress.remark?.text,
+                    calloutText: progress.remark?.text ?? progress.displayComment,
+                    calloutIcon: progress.remark?.marker?.iconName ?? "sparkle",
+                    calloutTint: progress.remark?.marker?.color ?? .formaTeal
+                ) {
                     ProgressTrendChart(trendData: progress.trendData)
-
-                    // Subtle separator
-                    Rectangle()
-                        .fill(Color.appSeparator)
-                        .frame(height: 1)
-
-                    // Insight row
-                    FormaCallout(
-                        text: progress.remark?.text ?? progress.displayComment,
-                        systemImage: progress.remark?.marker?.iconName ?? "sparkle",
-                        tint: progress.remark?.marker?.color ?? .green
-                    )
                 }
-                .insightsCard()
-                }
+            }
 
-                if let lever = reportPayload?.lever {
-                // MARK: - Waist Focus Card
-                VStack(alignment: .leading, spacing: 18) {
-                    FormaCardHeader(lever.title ?? lever.displayTitle)
+            if let lever = reportPayload?.lever {
+                InsightSectionCard(
+                    title: lever.title ?? lever.displayTitle,
+                    headline: lever.headline ?? lever.displayComment,
+                    body: lever.comment ?? lever.remark?.text,
+                    calloutText: lever.remark?.text ?? lever.displayComment,
+                    calloutIcon: lever.remark?.marker?.iconName ?? "arrow.up.forward.circle.fill",
+                    calloutTint: lever.remark?.marker?.color ?? .formaTeal
+                )
+            }
 
-                    // Headline
-                    Text(lever.headline ?? lever.displayComment)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    // Body
-                    Text(lever.comment ?? lever.remark?.text ?? "")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    // Subtle separator
-                    Rectangle()
-                        .fill(Color.appSeparator)
-                        .frame(height: 1)
-
-                    // Insight row
-                    FormaCallout(
-                        text: lever.remark?.text ?? lever.displayComment,
-                        systemImage: lever.remark?.marker?.iconName ?? "arrow.up.forward.circle.fill",
-                        tint: lever.remark?.marker?.color ?? .green
-                    )
-                }
-                .insightsCard()
-                }
-
-                if let physiqueArchetype = reportPayload?.physiqueArchetype {
-                // MARK: - Broad Frame Card
-                VStack(alignment: .leading, spacing: 18) {
-                    FormaCardHeader(physiqueArchetype.title ?? "Physique")
-
-                    // Headline
-                    Text(physiqueArchetype.headline ?? physiqueArchetype.comment ?? "")
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.primary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    // Body
-                    Text(physiqueArchetype.comment ?? "")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(4)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    // Body-shape illustration
-                    Image("body-normal")
+            if let physiqueArchetype = reportPayload?.physiqueArchetype {
+                InsightSectionCard(
+                    title: physiqueArchetype.title ?? "Physique",
+                    headline: physiqueArchetype.headline ?? physiqueArchetype.comment,
+                    body: physiqueArchetype.comment,
+                    calloutText: physiqueArchetype.bodyType.map { "Body type: \($0.displayName)" } ?? physiqueArchetype.comment ?? "",
+                    calloutIcon: "dumbbell.fill",
+                    calloutTint: .formaCyan
+                ) {
+                    Image(physiqueArchetype.bodyType?.imageName ?? "body-normal")
                         .resizable()
                         .scaledToFit()
                         .frame(maxWidth: .infinity)
                         .frame(height: 180)
-                        .background(Color.appTertiaryBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(Color.appSeparator, lineWidth: 0.5)
-                        }
-                        .accessibilityLabel("Broad body frame illustration")
-
-                    // Subtle separator
-                    Rectangle()
-                        .fill(Color.appSeparator)
-                        .frame(height: 1)
-
-                    // Insight row
-                    FormaCallout(
-                        text: physiqueArchetype.bodyType.map { "Body type: \($0.capitalized)" } ?? physiqueArchetype.comment ?? "",
-                        systemImage: "dumbbell.fill",
-                        tint: .blue
-                    )
+                        .formaSurface(.chart, padding: nil)
+                        .accessibilityLabel("\(physiqueArchetype.bodyType?.displayName ?? "Typical") body type illustration")
                 }
-                .insightsCard()
-                }
+            }
 
-                if let effortScore, let effortSection = reportPayload?.effortScore {
-                // MARK: - Effort Score Card
-                VStack(alignment: .leading, spacing: 18) {
-                    FormaCardHeader(effortSection.title ?? "Effort Score") {
-                        Text(String(format: "%.0f", effortScore))
-                            .font(.subheadline.weight(.bold))
-                            .monospacedDigit()
-                            .foregroundStyle(.green)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.green.opacity(0.12), in: Capsule())
-                    }
-
-                    // Low-to-high score range and current position
-                    GeometryReader { geometry in
-                        let markerRadius: CGFloat = 8
-                        let markerX = min(
-                            geometry.size.width - markerRadius,
-                            max(markerRadius, geometry.size.width * CGFloat(effortScore / 100))
-                        )
-
-                        ZStack(alignment: .leading) {
-                            Capsule()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [.red, .orange, .yellow, .green],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .frame(height: 8)
-
-                            Circle()
-                                .fill(Color.appSecondaryBackground)
-                                .frame(width: markerRadius * 2, height: markerRadius * 2)
-                                .overlay {
-                                    Circle()
-                                        .stroke(.green, lineWidth: 3)
-                                }
-                                .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
-                                .position(x: markerX, y: markerRadius)
-                        }
-                    }
-                    .frame(height: 16)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Effort score")
-                    .accessibilityValue("\(String(format: "%.0f", effortScore)) out of 100")
-
-                    // Subtle separator
-                    Rectangle()
-                        .fill(Color.appSeparator)
-                        .frame(height: 1)
-
-                    // Contextual insight
-                    FormaCallout(
-                        text: effortSection.comment ?? effortSection.remark?.text ?? "",
-                        systemImage: effortSection.remark?.marker?.iconName ?? "chart.line.downtrend.xyaxis",
-                        tint: effortSection.remark?.marker?.color ?? .green
-                    )
-                }
-                .insightsCard()
-                }
+            if let effortScore, let effortSection = reportPayload?.effortScore {
+                EffortScoreCard(
+                    score: effortScore,
+                    title: effortSection.title ?? "Effort Score",
+                    calloutText: effortSection.comment ?? effortSection.remark?.text ?? "",
+                    calloutIcon: effortSection.remark?.marker?.iconName ?? "chart.line.downtrend.xyaxis",
+                    calloutTint: effortSection.remark?.marker?.color ?? .formaTeal
+                )
+            }
         }
-        .padding(.top, 4)
-        .padding(.bottom, 24)
+        .padding(.top, FormaSpacing.xxs)
+        .padding(.bottom, FormaSpacing.xl)
         .padding(.horizontal, FormaSpacing.screenGutter)
     }
 }
 
-// MARK: - Insights Card Modifier
+// MARK: - Priority Factor (hero)
 
-private struct InsightsCardModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .formaSurface(.card, padding: FormaSpacing.cardInset)
+/// The leading insight, presented as a hero moment washed in its pastel factor color.
+private struct PriorityFactorCard: View {
+    let factor: InsightReportFactorSection
+
+    private var tint: Color {
+        factor.remark?.marker?.color ?? factor.factorColor?.color ?? .formaAmber
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FormaSpacing.cardContent) {
+            FormaCardHeader(factor.displayTitle) {
+                if let value = factor.value {
+                    FormaValueBadge(
+                        text: factor.formattedValue(value),
+                        tint: factor.factorColor?.color ?? .sleekAccent
+                    )
+                }
+            }
+
+            if let comment = factor.comment, !comment.isEmpty {
+                Text(comment)
+                    .font(FormaTypography.body)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(FormaSpacing.xxs)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            FormaDivider()
+
+            FormaCallout(
+                text: factor.remark?.text ?? factor.comment ?? "",
+                systemImage: factor.remark?.marker?.iconName ?? "target",
+                tint: tint
+            )
+        }
+        .formaSurface(.hero, padding: FormaSpacing.cardInset, tint: tint)
     }
 }
 
-private extension View {
-    func insightsCard() -> some View {
-        modifier(InsightsCardModifier())
+// MARK: - Unified section card
+
+/// One consistent layout for every narrative insight: title, optional headline and
+/// body, optional visual content, then a divider and the pastel callout row.
+private struct InsightSectionCard<Content: View>: View {
+    let title: String
+    var headline: String?
+    var bodyText: String?
+    let calloutText: String
+    var calloutIcon = "sparkles"
+    var calloutTint: Color = .sleekAccent
+    @ViewBuilder var content: Content
+
+    init(
+        title: String,
+        headline: String? = nil,
+        body bodyText: String? = nil,
+        calloutText: String,
+        calloutIcon: String = "sparkles",
+        calloutTint: Color = .sleekAccent,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.headline = headline
+        self.bodyText = bodyText
+        self.calloutText = calloutText
+        self.calloutIcon = calloutIcon
+        self.calloutTint = calloutTint
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FormaSpacing.cardContent) {
+            FormaCardHeader(title)
+
+            if let headline, !headline.isEmpty, headline != calloutText {
+                Text(headline)
+                    .font(FormaTypography.sectionHeadline)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(FormaSpacing.xxs)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let bodyText, !bodyText.isEmpty, bodyText != headline, bodyText != calloutText {
+                Text(bodyText)
+                    .font(FormaTypography.body)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(FormaSpacing.xxs)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if Content.self != EmptyView.self {
+                content
+            }
+
+            FormaDivider()
+
+            FormaCallout(text: calloutText, systemImage: calloutIcon, tint: calloutTint)
+        }
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
+    }
+}
+
+extension InsightSectionCard where Content == EmptyView {
+    init(
+        title: String,
+        headline: String? = nil,
+        body bodyText: String? = nil,
+        calloutText: String,
+        calloutIcon: String = "sparkles",
+        calloutTint: Color = .sleekAccent
+    ) {
+        self.init(
+            title: title,
+            headline: headline,
+            body: bodyText,
+            calloutText: calloutText,
+            calloutIcon: calloutIcon,
+            calloutTint: calloutTint
+        ) { EmptyView() }
+    }
+}
+
+// MARK: - Effort score
+
+private struct EffortScoreCard: View {
+    let score: Double
+    let title: String
+    let calloutText: String
+    var calloutIcon = "chart.line.downtrend.xyaxis"
+    var calloutTint: Color = .formaTeal
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FormaSpacing.cardContent) {
+            FormaCardHeader(title) {
+                FormaValueBadge(text: String(format: "%.0f/100", score), tint: .sleekAccent)
+            }
+
+            // Single-accent progress track with the current position marker.
+            VStack(spacing: FormaSpacing.xs) {
+                GeometryReader { geometry in
+                    let markerRadius: CGFloat = 8
+                    let markerX = min(
+                        geometry.size.width - markerRadius,
+                        max(markerRadius, geometry.size.width * CGFloat(score / 100))
+                    )
+
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.appTertiaryBackground)
+                            .frame(height: 8)
+
+                        Capsule()
+                            .fill(Color.sleekAccent.gradient)
+                            .frame(width: max(markerRadius * 2, markerX), height: 8)
+
+                        Circle()
+                            .fill(Color.appSecondaryBackground)
+                            .frame(width: markerRadius * 2, height: markerRadius * 2)
+                            .overlay {
+                                Circle()
+                                    .stroke(Color.sleekAccent, lineWidth: 3)
+                            }
+                            .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+                            .position(x: markerX, y: markerRadius)
+                    }
+                }
+                .frame(height: 16)
+
+                HStack {
+                    Text("0")
+                    Spacer()
+                    Text("100")
+                }
+                .font(FormaTypography.micro)
+                .foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, FormaSpacing.xxs)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Effort score")
+            .accessibilityValue("\(String(format: "%.0f", score)) out of 100")
+
+            FormaDivider()
+
+            FormaCallout(text: calloutText, systemImage: calloutIcon, tint: calloutTint)
+        }
+        .formaSurface(.card, padding: FormaSpacing.cardInset)
     }
 }
 
@@ -289,6 +305,24 @@ private extension InsightReportSection {
 
     var displayComment: String {
         comment ?? remark?.text ?? headline ?? ""
+    }
+}
+
+private extension InsightReportFactorSection {
+    var displayTitle: String {
+        if let factor {
+            return factor.displayTrendLabel
+        }
+        return "Priority Factor"
+    }
+
+    func formattedValue(_ value: Double) -> String {
+        switch factor {
+        case "body_fat_pct", "fatPercent":
+            return String(format: "%.1f%%", value)
+        default:
+            return String(format: value.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f", value)
+        }
     }
 }
 
@@ -317,46 +351,19 @@ private struct ProgressTrendChart: View {
         }
     }
 
-    private var uniqueMetrics: [String] {
-        var seen = Set<String>()
-        var result = [String]()
-        for item in data {
-            if !seen.contains(item.metric) {
-                seen.insert(item.metric)
-                result.append(item.metric)
-            }
-        }
-        return result
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if uniqueMetrics.count > 1 {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: FormaSpacing.sm) {
-                        ForEach(uniqueMetrics, id: \.self) { metric in
-                            Label {
-                                Text(metric).font(.caption2.weight(.medium))
-                            } icon: {
-                                Circle().fill(colorForMetric(metric)).frame(width: 6, height: 6)
-                            }
-                            .foregroundStyle(.secondary)
-                        }
-                    }
-                }
+        // The chart's summary footer already legends every series; a second
+        // legend above the chart would only repeat it.
+        FormaTimeSeriesChart(
+            points: data.map {
+                FormaChartPoint(
+                    date: $0.date,
+                    value: $0.value,
+                    metric: $0.metric,
+                    color: colorForMetric($0.metric)
+                )
             }
-
-            FormaTimeSeriesChart(
-                points: data.map {
-                    FormaChartPoint(
-                        date: $0.date,
-                        value: $0.value,
-                        metric: $0.metric,
-                        color: colorForMetric($0.metric)
-                    )
-                }
-            )
-        }
+        )
     }
 
     private func colorForMetric(_ metric: String) -> Color {
@@ -372,6 +379,18 @@ private struct FatMetric: Identifiable {
 
     var id: String {
         "\(metric)|\(date.timeIntervalSinceReferenceDate)"
+    }
+}
+
+private extension BodyType {
+    /// Best-matching bundled illustration for the reported body type.
+    var imageName: String {
+        switch self {
+        case .normal:
+            return "body-normal"
+        default:
+            return "body"
+        }
     }
 }
 
