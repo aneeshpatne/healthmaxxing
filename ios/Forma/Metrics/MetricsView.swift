@@ -39,10 +39,12 @@ struct MetricsView: View {
                     .padding(.horizontal, FormaSpacing.screenGutter)
                     .padding(.bottom, FormaSpacing.md)
 
+                // Tab body swaps without a parent animation transaction so Charts
+                // don't interpolate on selection. Gauges still run their own
+                // appear sweep via withAnimation inside FormaSemicircularGauge.
                 Group {
                     if reportStore.isWaitingForReport || (reportStore.isLoading && reportStore.payload == nil) {
                         MetricsSkeletonView(status: reportStore.statusMessage)
-                            .transition(FormaTransition.card)
                     } else if let errorMessage = reportStore.errorMessage {
                         FormaStatusView(
                             title: "Report unavailable",
@@ -50,21 +52,16 @@ struct MetricsView: View {
                             systemImage: "exclamationmark.triangle.fill",
                             tint: .formaCoral
                         )
-                        .transition(FormaTransition.card)
                     } else if let payload = reportStore.payload {
                         switch selectedTab {
                         case .insights:
                             InsightsTab(reportStore: reportStore)
-                                .transition(FormaTransition.card)
                         case .performance:
                             PerformanceTab(payload: payload)
-                                .transition(FormaTransition.card)
                         case .fat:
                             FatTab(payload: payload)
-                                .transition(FormaTransition.card)
                         case .muscle:
                             MuscleTab(payload: payload)
-                                .transition(FormaTransition.card)
                         }
                     } else {
                         FormaStatusView(
@@ -73,7 +70,6 @@ struct MetricsView: View {
                             systemImage: "doc.text.magnifyingglass",
                             tint: .secondary
                         )
-                        .transition(FormaTransition.card)
                     }
                 }
             }
@@ -104,7 +100,6 @@ struct MetricsView: View {
         }
         .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
         .background(FormaBackground())
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: selectedTab)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: reportStore.payload != nil)
     }
 }
@@ -151,17 +146,10 @@ struct MetricsTabBar: View {
                 let tab = MetricsTab.allCases[index]
 
                 Button {
-                    let update = {
-                        selectedTab = tab
-                    }
-
-                    if reduceMotion {
-                        update()
-                    } else {
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                            update()
-                        }
-                    }
+                    // Assign without withAnimation so parent chart content does not
+                    // inherit a spring transaction (that was the main-thread hang).
+                    // The bar's own .animation below still slides the underline.
+                    selectedTab = tab
                 } label: {
                     VStack(spacing: 7) {
                         Text(tab.title)
@@ -201,6 +189,11 @@ struct MetricsTabBar: View {
                 .fill(Color.appSeparator)
                 .frame(height: 0.5)
         }
+        // Scope selection motion to the tab bar only — not the report body.
+        .animation(
+            reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86),
+            value: selectedTab
+        )
     }
 }
 
