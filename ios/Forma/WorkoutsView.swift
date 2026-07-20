@@ -10,7 +10,13 @@ import SwiftUI
 struct WorkoutsView: View {
     var body: some View {
         ScrollView {
-            EmptyView()
+            FormaStatusView(
+                title: "Workouts",
+                message: "Guided strength sessions and training analytics are on the way.",
+                systemImage: "figure.strengthtraining.traditional",
+                tint: .formaTeal
+            )
+            .padding(.top, 120)
         }
         .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
         .background(FormaBackground())

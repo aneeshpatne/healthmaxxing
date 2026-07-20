@@ -10,7 +10,13 @@ import SwiftUI
 struct VitalsView: View {
     var body: some View {
         ScrollView {
-            EmptyView()
+            FormaStatusView(
+                title: "Vitals",
+                message: "Heart-rate history, recovery, and Apple Health trends are on the way.",
+                systemImage: "heart.text.square",
+                tint: .formaCoral
+            )
+            .padding(.top, 120)
         }
         .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
         .background(FormaBackground())

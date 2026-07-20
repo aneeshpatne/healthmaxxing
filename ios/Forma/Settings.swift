@@ -58,10 +58,13 @@ struct Settings: View {
 
     private func rowContent(title: String, subtitle: String, systemImage: String, tint: Color) -> some View {
         HStack(spacing: FormaSpacing.sm) {
-            Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 28, height: 38)
+            FormaIconTile(
+                systemImage: systemImage,
+                tint: tint,
+                size: 34,
+                radius: 10,
+                symbolFont: .system(size: 14, weight: .semibold)
+            )
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -92,19 +95,8 @@ struct Settings: View {
                 .padding(.horizontal, FormaSpacing.xxs)
 
             content()
-                .formaSurface(.card, padding: FormaSpacing.md)
+                .formaSurface(.card, padding: FormaSpacing.cardInset)
         }
-    }
-}
-
-private struct SettingsDetailView: View {
-    let title: String
-
-    var body: some View {
-        Text(title)
-            .font(.title2)
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
     }
 }
 

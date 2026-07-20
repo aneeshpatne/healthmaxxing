@@ -38,7 +38,7 @@ struct ClerkSignInView: View {
                         .frame(minHeight: 54)
                 }
                 .buttonStyle(.glassProminent)
-                .buttonBorderShape(.roundedRectangle(radius: FormaRadius.inset))
+                .buttonBorderShape(.roundedRectangle(radius: FormaRadius.action))
                 .tint(.sleekAccent)
             }
             .formaSurface(.hero, padding: FormaSpacing.xxl)
