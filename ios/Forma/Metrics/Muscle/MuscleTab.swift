@@ -26,7 +26,8 @@ struct MuscleTab: View {
     }
 
     var body: some View {
-        VStack(spacing: FormaSpacing.cardGap) {
+        // Match Fat: only build on-screen metric cards when the tab appears.
+        LazyVStack(spacing: FormaSpacing.cardGap) {
             if !hasContent {
                 MetricsUnavailableContent(message: "Muscle report data is unavailable.")
             }
