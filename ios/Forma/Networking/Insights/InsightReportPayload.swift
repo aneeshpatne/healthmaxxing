@@ -58,10 +58,10 @@ enum FactorColor: String, Codable, Equatable {
 
     var color: Color {
         switch self {
-        case .red: return .red
-        case .orange: return .orange
-        case .yellow: return .yellow
-        case .green: return .green
+        case .red: return .formaCoral
+        case .orange: return .formaAmber
+        case .yellow: return .formaYellow
+        case .green: return .formaTeal
         }
     }
 }
@@ -384,14 +384,17 @@ extension String {
             return "Lean Mass"
         case "muscle_mass_kg", "muscleMassKg", "muscleRatio":
             return "Muscle Mass"
-        case "visceralFatMassKg", "visceralFatPercent":
+        case "visceralFatIndex", "visceralFatMassKg", "visceralFatPercent", "visceral_fat":
             return "Visceral Fat"
-        case "subcutaneousFatMassKg", "subcutaneousFatPercent":
+        case "subcutaneousFatMassKg", "subcutaneousFatPercent", "subcutaneous_fat_mass_kg", "subcutaneous_fat_pct":
             return "Subcutaneous Fat"
-        case "boneMassKg":
-            return "Bone Mass"
-        case "skeletalMuscleMassKg", "skeletalMuscleRatio":
+        case "leanNonMuscleMassKg", "boneMassKg":
+            // Server renamed bone mass → lean non-muscle mass.
+            return "Lean Non-Muscle"
+        case "skeletalMuscleMassKg", "skeletalMuscleRatio", "skeletal_muscle_kg":
             return "Skeletal Muscle"
+        case "muscle_rate_pct":
+            return "Muscle Rate"
         default:
             return displayRemarkMarker
         }

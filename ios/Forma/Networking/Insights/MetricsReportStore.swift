@@ -14,12 +14,13 @@ final class MetricsReportStore: ObservableObject {
     @Published private(set) var activeJob: InsightReportJob?
     @Published private(set) var latestReport: InsightReportJob?
     @Published private(set) var isLoading = false
+    @Published private(set) var isWaitingForReport = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var statusMessage = "Checking for the latest report."
 
     private let apiClient = APIClient()
     private var cachedProfileId: UUID?
-    private var hasCachedSnapshot = false
+    private var pollTask: Task<Void, Never>?
 
     var payload: InsightReportPayload? {
         InsightReportPayload(data: completedReport?.data)
@@ -37,7 +38,32 @@ final class MetricsReportStore: ObservableObject {
         await loadAndPollReport(ignoringCache: true)
     }
 
-    private func loadAndPollReport(ignoringCache: Bool) async {
+    /// Starts the loading flow from the job returned by ingest.
+    /// The server job id is the source of truth for this report generation.
+    func reportQueued(for profileId: UUID, jobId: UUID) {
+        guard PrimaryProfileStore.primaryProfileId == profileId else { return }
+
+        pollTask?.cancel()
+        activeJob = nil
+        isWaitingForReport = true
+        errorMessage = nil
+        statusMessage = "Report queued."
+        isLoading = true
+
+        pollTask = Task { [weak self] in
+            guard let self else { return }
+
+            await self.pollReport(profileId: profileId, jobId: jobId)
+
+            if !Task.isCancelled {
+                self.isLoading = false
+            }
+
+            self.pollTask = nil
+        }
+    }
+
+    private func loadAndPollReport(ignoringCache _: Bool) async {
         guard let profileId = PrimaryProfileStore.primaryProfileId else {
             errorMessage = "Create or select a primary profile to load reports."
             return
@@ -48,17 +74,11 @@ final class MetricsReportStore: ObservableObject {
             restoreCachedReport(for: profileId)
         }
 
-        let queuedJobIds = InsightReportJobStore.jobIds(for: profileId)
-        if !ignoringCache,
-           hasCachedSnapshot,
-           cachedProfileId == profileId,
-           queuedJobIds.isEmpty {
-            return
-        }
-
         guard !isLoading else { return }
 
         isLoading = true
+        activeJob = nil
+        isWaitingForReport = false
         errorMessage = nil
         statusMessage = "Checking for the latest report."
 
@@ -69,9 +89,10 @@ final class MetricsReportStore: ObservableObject {
         do {
             let activeResponse = try await apiClient.send(GetActiveInsightJobsRequest(profileId: profileId))
             let serverJobs = activeResponse.jobs ?? []
-            let jobIdToPoll = serverJobs.sorted { $0.createdAt > $1.createdAt }.first?.jobId ?? queuedJobIds.first
+            let jobIdToPoll = serverJobs.sorted { $0.createdAt > $1.createdAt }.first?.pollId
 
-            activeJob = serverJobs.first(where: { $0.jobId == jobIdToPoll }) ?? serverJobs.first
+            activeJob = serverJobs.first(where: { $0.pollId == jobIdToPoll }) ?? serverJobs.first
+            isWaitingForReport = jobIdToPoll != nil
 
             if let jobIdToPoll {
                 statusMessage = "Waiting for report generation."
@@ -118,6 +139,7 @@ final class MetricsReportStore: ObservableObject {
                 }
 
                 statusMessage = "Report status unavailable."
+                isWaitingForReport = false
                 errorMessage = "Failed to update report status."
                 return
             }
@@ -125,11 +147,13 @@ final class MetricsReportStore: ObservableObject {
             if response.ok == false {
                 InsightReportJobStore.remove(jobId, for: profileId)
                 activeJob = nil
+                isWaitingForReport = false
                 errorMessage = response.error ?? "Report job does not exist."
                 return
             }
 
             guard let generationStatus = response.generationStatus else {
+                isWaitingForReport = false
                 errorMessage = "Report status is unavailable."
                 return
             }
@@ -138,6 +162,7 @@ final class MetricsReportStore: ObservableObject {
             case "completed":
                 InsightReportJobStore.remove(jobId, for: profileId)
                 activeJob = nil
+                isWaitingForReport = false
                 completedReport = response.report
                 statusMessage = "Report completed."
                 errorMessage = nil
@@ -146,9 +171,11 @@ final class MetricsReportStore: ObservableObject {
             case "failed":
                 InsightReportJobStore.remove(jobId, for: profileId)
                 activeJob = nil
+                isWaitingForReport = false
                 errorMessage = response.generationError ?? "Report generation failed."
                 return
             case "pending", "queued", "running":
+                isWaitingForReport = true
                 statusMessage = "Report \(generationStatus)."
                 activeJob = response.report.map {
                     InsightReportJob(
@@ -163,6 +190,7 @@ final class MetricsReportStore: ObservableObject {
                     )
                 } ?? activeJob
             default:
+                isWaitingForReport = false
                 statusMessage = "Report \(generationStatus)."
                 return
             }
@@ -171,7 +199,6 @@ final class MetricsReportStore: ObservableObject {
 
     private func cacheSnapshot(for profileId: UUID) {
         cachedProfileId = profileId
-        hasCachedSnapshot = true
 
         if let completedReport {
             InsightReportCacheStore.save(completedReport, for: profileId)
@@ -185,15 +212,14 @@ final class MetricsReportStore: ObservableObject {
         guard let report = InsightReportCacheStore.load(for: profileId) else { return }
 
         completedReport = report
-        hasCachedSnapshot = true
         statusMessage = "Latest report ready."
     }
 
     private func clearCachedSnapshot() {
         cachedProfileId = nil
-        hasCachedSnapshot = false
         completedReport = nil
         activeJob = nil
+        isWaitingForReport = false
         latestReport = nil
         errorMessage = nil
         statusMessage = "Checking for the latest report."
