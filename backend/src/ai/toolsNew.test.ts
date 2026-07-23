@@ -138,7 +138,7 @@ const sources = {
       fatPercent: 24.5,
       visceralFatIndex: 8,
       fatDistribution30dDelta: {
-        visceralFatIndexDelta: -1,
+        visceralFatIndexDelta: -0.2,
         subcutaneousFatDeltaKg: -0.5,
       },
       fatMassKg: 18,
@@ -167,7 +167,7 @@ const sources = {
       skeletalMuscleRatio: 41,
     },
     last30Days: {
-      leanNonMuscleMassKg: [{ createdAt: "2026-06-01", value: 12 }],
+      leanNonMuscleMassKg: [{ createdAt: "2026-06-01", value: 0.1 }],
       muscleMassKg: [{ createdAt: "2026-06-01", value: 42 }],
       muscleRatio: [{ createdAt: "2026-06-01", value: 0.4 }],
       skeletalMuscleMassKg: [{ createdAt: "2026-06-01", value: 0.2 }],
@@ -266,13 +266,8 @@ test("preprocessProfileAiReportPayload marks fat and muscle with values and tren
     value: 24.5,
     trends: { fatPercent: sources.fatReport.last30Days.fatPercent },
   });
-  expect(preprocessed.fat.fat_distribution_context.preprocess).toEqual({
-    value: {
-      visceralFatIndex: 8,
-      subcutaneousFatMassKg: 13,
-      subcutaneousFatRatio: 0.72,
-      deltas: sources.fatReport.metrics.fatDistribution30dDelta,
-    },
+  expect(preprocessed.fat.visceral_vs_subcutaneous.preprocess).toEqual({
+    value: sources.fatReport.metrics.fatDistribution30dDelta,
     trends: {
       visceralFatIndex: sources.fatReport.last30Days.visceralFatIndex,
       subcutaneousFatMassKg:
