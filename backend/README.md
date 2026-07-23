@@ -182,7 +182,7 @@ healthmaxxing/
 - Bun 1.3; the repository is currently validated with Bun 1.3.14.
 - Docker and Docker Compose for the included PostgreSQL 17 development service.
 - A Clerk application and a valid `CLERK_SECRET_KEY` for authenticated routes.
-- A reachable implementation of `proto/metrics_model.proto`; the default address is `localhost:50058`.
+- A reachable implementation of `proto/metrics_model.proto`; the default address is `localhost:50054`.
 - Redis for report jobs; the default connection is `redis://localhost:6379` and Redis is not defined in the included Compose file.
 - `OPENAI_API_KEY` for the currently configured structured report model.
 - Network access for dependency installation, Clerk verification, and hosted model calls.
@@ -215,7 +215,7 @@ No dedicated hardware or UI simulator is required: clients send measurements ove
    ```dotenv
    DATABASE_URL=postgres://healthmaxxing:healthmaxxing@127.0.0.1:5432/healthmaxxing
    CLERK_SECRET_KEY=replace-with-a-clerk-secret
-   METRICS_MODEL_ADDRESS=localhost:50058
+   METRICS_MODEL_ADDRESS=localhost:50054
    REDIS_URL=redis://localhost:6379
    OPENAI_API_KEY=replace-with-an-openai-key
    PORT=3030
