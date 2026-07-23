@@ -372,16 +372,9 @@ export function preprocessProfileAiReportPayload({
         { fatPercent: fatReport?.last30Days.fatPercent ?? [] },
         evidence,
       ),
-      fat_distribution_context: withValueAndTrends(
-        fat.fat_distribution_context,
-        {
-          visceralFatIndex: fatReport?.metrics.visceralFatIndex ?? null,
-          subcutaneousFatMassKg:
-            fatReport?.metrics.subcutaneousFatMassKg ?? null,
-          subcutaneousFatRatio:
-            fatReport?.metrics.subcutaneousFatRatio ?? null,
-          deltas: fatReport?.metrics.fatDistribution30dDelta ?? null,
-        },
+      visceral_vs_subcutaneous: withValueAndTrends(
+        fat.visceral_vs_subcutaneous,
+        fatReport?.metrics.fatDistribution30dDelta ?? null,
         {
           visceralFatIndex: fatReport?.last30Days.visceralFatIndex ?? [],
           subcutaneousFatMassKg:
@@ -432,11 +425,13 @@ export function preprocessProfileAiReportPayload({
         { muscleMassKg: muscleReport?.last30Days.muscleMassKg ?? [] },
         evidence,
       ),
-      lean_mass_balance: withValueAndTrends(
-        muscle.lean_mass_balance,
+      bone_mass_trend: withValueAndTrends(
+        muscle.bone_mass_trend,
         muscleReport?.metrics.leanNonMuscleMassKg ?? null,
-        { leanNonMuscleMassKg: muscleReport?.last30Days.leanNonMuscleMassKg ?? [] },
-        evidence,
+        {
+          leanNonMuscleMassKg:
+            muscleReport?.last30Days.leanNonMuscleMassKg ?? [],
+        },
       ),
       muscle_ratio_trend: withValueAndTrends(
         muscle.muscle_ratio_trend,
