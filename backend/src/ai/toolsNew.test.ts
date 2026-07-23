@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  formatBoneMassTrendForAgent,
   insights_schema,
   preprocessProfileAiReportPayload,
 } from "./toolsNew";
@@ -318,31 +319,32 @@ test("preprocessProfileAiReportPayload does not emit source keys", () => {
   expect(serialized.includes("trendKeys")).toBe(false);
 });
 
-test("preprocess adds report evidence and computes progress consistency", () => {
-  const preprocessed = preprocessProfileAiReportPayload(payload, {
-    ...sources,
-    evidence: {
-      asOf: "2026-06-01T00:00:00.000Z",
-      readingCount: 4,
-      confidence: "medium",
-    },
-    progressTrends: {
-      body_fat_pct: [
-        { createdAt: "2026-05-01", value: 26 },
-        { createdAt: "2026-06-01", value: 24.5 },
-      ],
-      fat_mass_kg: [
-        { createdAt: "2026-05-01", value: 20 },
-        { createdAt: "2026-06-01", value: 18 },
-      ],
-      muscle_mass_kg: [
-        { createdAt: "2026-05-01", value: 41 },
-        { createdAt: "2026-06-01", value: 42 },
-      ],
+test("formatBoneMassTrendForAgent includes current value and 30-day series", () => {
+  const formatted = formatBoneMassTrendForAgent(sources.muscleReport);
+
+  expect(formatted).toContain("Bone Mass Trend");
+  expect(formatted).toContain("lean non-muscle");
+  expect(formatted).toContain("muscle.bone_mass_trend");
+  expect(formatted).toContain("current_kg\t12");
+  expect(formatted).toContain("created_at\tvalue_kg");
+  expect(formatted).toContain("2026-06-01\t0.1");
+});
+
+test("formatBoneMassTrendForAgent reports empty state when no muscle report", () => {
+  const formatted = formatBoneMassTrendForAgent(null);
+
+  expect(formatted).toContain("no lean non-muscle");
+  expect(formatted).toContain("available yet");
+  expect(formatted.includes("current_kg")).toBe(false);
+});
+
+test("preprocess bone_mass_trend uses lean non-muscle series", () => {
+  const preprocessed = preprocessProfileAiReportPayload(payload, sources);
+
+  expect(preprocessed.muscle.bone_mass_trend.preprocess).toEqual({
+    value: 12,
+    trends: {
+      leanNonMuscleMassKg: sources.muscleReport.last30Days.leanNonMuscleMassKg,
     },
   });
-
-  expect(preprocessed.insights.report_context?.confidence).toBe("medium");
-  expect(preprocessed.insights.effort_score.score).toBe(86);
-  expect(preprocessed.fat.fat_mass_trend.preprocess.evidence?.readingCount).toBe(4);
 });
