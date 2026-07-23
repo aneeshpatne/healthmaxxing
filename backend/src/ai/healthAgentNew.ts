@@ -1,9 +1,19 @@
-import { createAgent, HumanMessage, SystemMessage } from "langchain";
+import {
+  createAgent,
+  HumanMessage,
+  SystemMessage,
+  toolStrategy,
+} from "langchain";
+import { upsertProfileAiReportJsonLd } from "../db/commands";
 import { model } from "./model";
-import { createTools } from "./toolsNew";
+import {
+  getProfileAiReportPreprocessSources,
+  insights_schema,
+  preprocessProfileAiReportPayload,
+} from "./toolsNew";
 
 const systemMsg = new SystemMessage(
-  `You are a calm, observant fitness coach reviewing a person's progress. Call profile_ai_report exactly once with a complete structured report. Field roles and required values are defined in the tool schema.
+  `You are a fitness coach reviewing someone's progress. Return one complete, structured report. Follow the field descriptions in the output schema; they already define what each field should contain.
 
 VOICE
 - Warm and direct. Supportive without empty praise, candid without sounding clinical.
@@ -198,7 +208,7 @@ export async function analyzeHealthDataNew(input: {
 }) {
   const healthAgent = createAgent({
     model,
-    tools: createTools(input.reportId, input.profileId),
+    responseFormat: toolStrategy(insights_schema),
   });
 
   const result = await healthAgent.invoke({
@@ -212,6 +222,17 @@ Units: *_kg=kilograms, *_pct=percent, bmi/fmi/ffmi=kg/m², bmr_kcal=kilocalories
 ${input.userContext}`,
       ),
     ],
+  });
+
+  const sources = await getProfileAiReportPreprocessSources(input.profileId);
+  const report = preprocessProfileAiReportPayload(
+    result.structuredResponse,
+    sources,
+  );
+  await upsertProfileAiReportJsonLd({
+    reportId: input.reportId,
+    profileId: input.profileId,
+    data: report,
   });
 
   const tokenUsage = getTokenUsage(result);
