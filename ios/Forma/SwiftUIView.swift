@@ -19,6 +19,7 @@ struct SwiftUIView: View {
     @State private var selectedMetricsTab: MetricsTab = .insights
     @State private var isMetricsAtTop = true
     @StateObject private var reportStore = MetricsReportStore()
+    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
 
     var body: some View {
         NavigationStack {
@@ -65,6 +66,10 @@ struct SwiftUIView: View {
                 guard activeTab == .metrics else { return }
                 await reportStore.loadAndPollReport()
             }
+            .onChange(of: activeTab) { _, _ in
+                soundPlayer.play(FormaUIFeedback.selection)
+            }
+            .sensoryFeedback(FormaUIFeedback.selection.sensoryFeedback, trigger: activeTab)
         }
     }
 }
@@ -74,6 +79,9 @@ enum FormaLayout {
 }
 
 struct FloatingSettingsButton: View {
+    @State private var openFeedbackNonce = 0
+    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
+
     var body: some View {
         NavigationLink {
             Settings()
@@ -86,9 +94,17 @@ struct FloatingSettingsButton: View {
         .buttonBorderShape(.circle)
         .frame(width: 44, height: 44)
         .accessibilityLabel("Settings")
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                openFeedbackNonce += 1
+                soundPlayer.play(FormaUIFeedback.softImpact)
+            }
+        )
+        .sensoryFeedback(FormaUIFeedback.softImpact.sensoryFeedback, trigger: openFeedbackNonce)
     }
 }
 
 #Preview {
     SwiftUIView()
+        .environmentObject(FormaSoundPlayer())
 }

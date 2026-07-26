@@ -138,6 +138,7 @@ enum MetricsTab: String, CaseIterable {
 struct MetricsTabBar: View {
     @Binding var selectedTab: MetricsTab
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
     @Namespace private var selectionNamespace
 
     var body: some View {
@@ -149,7 +150,9 @@ struct MetricsTabBar: View {
                     // Assign without withAnimation so parent chart content does not
                     // inherit a spring transaction (that was the main-thread hang).
                     // The bar's own .animation below still slides the underline.
+                    guard selectedTab != tab else { return }
                     selectedTab = tab
+                    soundPlayer.play(FormaUIFeedback.selection)
                 } label: {
                     VStack(spacing: 7) {
                         Text(tab.title)
@@ -194,6 +197,7 @@ struct MetricsTabBar: View {
             reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86),
             value: selectedTab
         )
+        .sensoryFeedback(FormaUIFeedback.selection.sensoryFeedback, trigger: selectedTab)
     }
 }
 
@@ -247,6 +251,7 @@ struct MetricsSkeletonView: View {
         reportStore: MetricsReportStore()
     )
         .background(Color.appBackground)
+        .environmentObject(FormaSoundPlayer())
 }
 
 #Preview("Report loading") {

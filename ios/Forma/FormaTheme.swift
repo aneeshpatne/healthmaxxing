@@ -527,6 +527,8 @@ struct FormaStatusView: View {
     var actionTint: Color? = nil
     var action: (() -> Void)? = nil
 
+    @State private var actionFeedbackNonce = 0
+
     var body: some View {
         VStack(spacing: FormaSpacing.lg) {
             ZStack {
@@ -556,7 +558,10 @@ struct FormaStatusView: View {
             }
 
             if let actionTitle, let action {
-                Button(action: action) {
+                Button {
+                    actionFeedbackNonce += 1
+                    action()
+                } label: {
                     Text(actionTitle)
                         .font(.subheadline.weight(.semibold))
                 }
@@ -568,6 +573,7 @@ struct FormaStatusView: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, FormaSpacing.xl)
         .padding(.vertical, 80)
+        .sensoryFeedback(FormaUIFeedback.softImpact.sensoryFeedback, trigger: actionFeedbackNonce)
     }
 }
 

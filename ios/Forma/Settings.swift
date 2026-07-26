@@ -9,6 +9,9 @@ import ClerkKit
 import ClerkKitUI
 
 struct Settings: View {
+    @State private var navigationFeedbackNonce = 0
+    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FormaSpacing.sectionGap) {
@@ -39,6 +42,7 @@ struct Settings: View {
         }
         .background(FormaBackground())
         .navigationTitle("Settings")
+        .sensoryFeedback(FormaUIFeedback.softImpact.sensoryFeedback, trigger: navigationFeedbackNonce)
     }
 
     private func settingsRow<Destination: View>(
@@ -54,6 +58,12 @@ struct Settings: View {
             rowContent(title: title, subtitle: subtitle, systemImage: systemImage, tint: tint)
         }
         .buttonStyle(.plain)
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                navigationFeedbackNonce += 1
+                soundPlayer.play(FormaUIFeedback.softImpact)
+            }
+        )
     }
 
     private func rowContent(title: String, subtitle: String, systemImage: String, tint: Color) -> some View {
@@ -102,4 +112,5 @@ struct Settings: View {
 
 #Preview {
     Settings()
+        .environmentObject(FormaSoundPlayer())
 }

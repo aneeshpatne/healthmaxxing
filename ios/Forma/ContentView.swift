@@ -28,4 +28,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(Clerk.shared)
+        .environmentObject(FormaSoundPlayer())
 }

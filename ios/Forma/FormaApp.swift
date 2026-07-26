@@ -10,6 +10,8 @@ import ClerkKit
 
 @main
 struct FormaApp: App {
+    @StateObject private var soundPlayer = FormaSoundPlayer()
+
     init() {
         Clerk.configure(publishableKey: ClerkConfig.publishableKey)
     }
@@ -20,6 +22,7 @@ struct FormaApp: App {
                 .tint(.sleekAccent)
                 .preferredColorScheme(.dark)
                 .environment(Clerk.shared)
+                .environmentObject(soundPlayer)
         }
     }
 }

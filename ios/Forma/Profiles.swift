@@ -10,6 +10,7 @@ import ClerkKit
 
 struct Profiles: View {
     @Environment(Clerk.self) private var clerk
+    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
 
     @State private var profiles: [ClientProfile] = []
     @State private var errorMessage: String?
@@ -54,6 +55,7 @@ struct Profiles: View {
                         actionTitle: "Try Again",
                         actionTint: .sleekAccent
                     ) {
+                        soundPlayer.play(FormaUIFeedback.softImpact)
                         Task {
                             await loadProfiles()
                         }
@@ -88,6 +90,7 @@ struct Profiles: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
+                    soundPlayer.play(FormaUIFeedback.softImpact)
                     isShowingAddProfile = true
                 } label: {
                     Image(systemName: "plus")
@@ -96,6 +99,9 @@ struct Profiles: View {
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
                 .accessibilityLabel("Add Profile")
+                .sensoryFeedback(FormaUIFeedback.softImpact.sensoryFeedback, trigger: isShowingAddProfile) { _, shown in
+                    shown
+                }
             }
         }
         .sheet(isPresented: $isShowingAddProfile) {
@@ -117,6 +123,9 @@ struct Profiles: View {
         }
         .task {
             await loadProfiles()
+        }
+        .sensoryFeedback(FormaUIFeedback.error.sensoryFeedback, trigger: errorMessage) { _, message in
+            message != nil
         }
     }
 
@@ -295,6 +304,9 @@ private struct ProfileFormView: View {
     @State private var profileImage = ""
     @State private var errorMessage: String?
     @State private var isSaving = false
+    @State private var saveSuccessNonce = 0
+    @State private var saveErrorNonce = 0
+    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
 
     init(
         apiClient: APIClient,
@@ -403,6 +415,7 @@ private struct ProfileFormView: View {
             ToolbarItem(placement: .cancellationAction) {
                 if allowsCancel {
                     Button("Cancel") {
+                        soundPlayer.play(FormaUIFeedback.softImpact)
                         dismiss()
                     }
                     .disabled(isSaving)
@@ -424,6 +437,11 @@ private struct ProfileFormView: View {
                 .disabled(!canSave)
             }
         }
+        .sensoryFeedback(FormaUIFeedback.success.sensoryFeedback, trigger: saveSuccessNonce)
+        .sensoryFeedback(FormaUIFeedback.error.sensoryFeedback, trigger: saveErrorNonce)
+        .sensoryFeedback(FormaUIFeedback.selection.sensoryFeedback, trigger: peopleType)
+        .sensoryFeedback(FormaUIFeedback.selection.sensoryFeedback, trigger: gender)
+        .sensoryFeedback(FormaUIFeedback.selection.sensoryFeedback, trigger: isPrimary)
     }
 
     private func saveProfile() async {
@@ -473,19 +491,29 @@ private struct ProfileFormView: View {
                 }
             }
 
+            saveSuccessNonce += 1
+            soundPlayer.play(FormaUIFeedback.success)
             await onProfileSaved()
             dismiss()
         } catch APIError.missingAuthToken {
             errorMessage = "Missing auth token."
+            registerSaveError()
         } catch APIError.serverError(let statusCode, _) {
             if statusCode == 404 {
                 errorMessage = "Profile not found for this account."
             } else {
                 errorMessage = "Server returned \(statusCode)."
             }
+            registerSaveError()
         } catch {
             errorMessage = isEditing ? "Failed to update profile." : "Failed to add profile."
+            registerSaveError()
         }
+    }
+
+    private func registerSaveError() {
+        saveErrorNonce += 1
+        soundPlayer.play(FormaUIFeedback.error)
     }
 
     private static func parseDate(_ value: String?) -> Date? {
@@ -734,5 +762,6 @@ private struct SkeletonCardView: View {
     NavigationStack {
         Profiles()
             .environment(Clerk.shared)
+            .environmentObject(FormaSoundPlayer())
     }
 }

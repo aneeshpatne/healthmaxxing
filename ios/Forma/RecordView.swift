@@ -100,6 +100,7 @@ struct RecordView: View {
     let reportStore: MetricsReportStore
 
     @StateObject private var scaleManager = ScaleBLEManager()
+    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
 
     @State private var isSubmittingMeasurement = false
     @State private var submittedMeasurement: ScaleMeasurement?
@@ -143,14 +144,38 @@ struct RecordView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.top, FormaLayout.floatingSettingsClearance)
         }
-        .onChange(of: scaleManager.isReading, initial: true) { _, isReading in
+        .onChange(of: scaleManager.isReading, initial: true) { wasReading, isReading in
             updateIdleTimer(isReading: isReading)
+            if isReading, !wasReading {
+                soundPlayer.play(RecordFeedbackEvent.start)
+            }
         }
         .onChange(of: scaleManager.latestMeasurement) { _, measurement in
             handleMeasurementUpdate(measurement)
         }
         .onChange(of: scaleManager.state) { _, state in
             handleScaleStateChange(state)
+        }
+        .onChange(of: cancelFeedbackNonce) { _, _ in
+            soundPlayer.play(RecordFeedbackEvent.cancel)
+        }
+        .onChange(of: retryFeedbackNonce) { _, _ in
+            soundPlayer.play(RecordFeedbackEvent.retry)
+        }
+        .onChange(of: displayedMetricStage) { _, stage in
+            if let stage {
+                soundPlayer.play(RecordFeedbackEvent.metric(stage))
+            }
+        }
+        .onChange(of: circleState) { _, state in
+            switch state {
+            case .saved:
+                soundPlayer.play(RecordFeedbackEvent.success)
+            case .recordingFailed, .submissionFailed:
+                soundPlayer.play(RecordFeedbackEvent.error)
+            default:
+                break
+            }
         }
         .onDisappear {
             if !scaleManager.isReading {
