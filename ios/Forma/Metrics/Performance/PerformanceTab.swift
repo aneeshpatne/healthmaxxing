@@ -78,6 +78,7 @@ struct PerformanceTab: View {
             }
             if let section = payload?.performance["ffmi_gauge"], section.numberValue != nil {
                 FFMIGaugeCard(section: section)
+                    .formaEntrance()
             }
             if let section = payload?.performance["fmi_vs_ffmi"],
                (section.nestedNumber("ffmi") ?? section.nestedNumber("ffmiVal")) != nil,
@@ -1019,23 +1020,31 @@ struct ExcessFatGaugeCard: View {
                     .padding(.top, FormaSpacing.xs)
 
                 // Legend
-                HStack(spacing: FormaSpacing.xl) {
-                    HStack(spacing: 8) {
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(Color.performancePositive)
-                            .frame(width: 14, height: 4)
-                        Text("Target — \(String(format: "%.1f", targetFat)) kg")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: FormaSpacing.xl) {
+                        legendItem(
+                            "Target — \(String(format: "%.1f", targetFat)) kg",
+                            color: .performancePositive,
+                            isEmphasized: false
+                        )
+                        legendItem(
+                            "Excess — \(String(format: "%.1f", excessFat)) kg",
+                            color: .performanceCaution,
+                            isEmphasized: true
+                        )
                     }
 
-                    HStack(spacing: 8) {
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(Color.performanceCaution)
-                            .frame(width: 14, height: 4)
-                        Text("Excess — \(String(format: "%.1f", excessFat)) kg")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.primary)
+                    VStack(alignment: .leading, spacing: FormaSpacing.xs) {
+                        legendItem(
+                            "Target — \(String(format: "%.1f", targetFat)) kg",
+                            color: .performancePositive,
+                            isEmphasized: false
+                        )
+                        legendItem(
+                            "Excess — \(String(format: "%.1f", excessFat)) kg",
+                            color: .performanceCaution,
+                            isEmphasized: true
+                        )
                     }
                 }
             }
@@ -1051,6 +1060,17 @@ struct ExcessFatGaugeCard: View {
             }
         }
         .formaSurface(.card, padding: FormaSpacing.cardInset)
+    }
+
+    private func legendItem(_ text: String, color: Color, isEmphasized: Bool) -> some View {
+        HStack(spacing: FormaSpacing.xs) {
+            Image(systemName: isEmphasized ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(color)
+            Text(text)
+                .font(.caption.weight(isEmphasized ? .bold : .medium))
+                .foregroundStyle(isEmphasized ? .primary : .secondary)
+        }
     }
 }
 
@@ -1119,6 +1139,11 @@ struct ExcessFatSemicircularGauge: View {
             }
         }
         .aspectRatio(FormaSemicircularGaugeLayout.aspectRatio, contentMode: .fit)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Excess fat gauge")
+        .accessibilityValue(
+            "Current fat \(String(format: "%.1f", current)) kilograms, target \(String(format: "%.1f", target)) kilograms, excess \(String(format: "%.1f", max(0, current - target))) kilograms"
+        )
     }
 }
 

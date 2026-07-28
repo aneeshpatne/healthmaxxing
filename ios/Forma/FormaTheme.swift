@@ -46,18 +46,70 @@ enum FormaTypography {
     static let eyebrow = Font.caption.weight(.bold)
     static let cardTitle = Font.system(.headline, design: .rounded).weight(.semibold)
     static let body = Font.subheadline
-    static let metricSmall = Font.system(size: 20, weight: .bold, design: .rounded)
-    static let metric = Font.system(size: 34, weight: .semibold, design: .rounded)
-    static let heroMetric = Font.system(size: 64, weight: .semibold, design: .rounded)
+    static let metricSmall = Font.system(.title3, design: .rounded).weight(.bold)
+    static let metric = Font.system(.largeTitle, design: .rounded).weight(.semibold)
+    static let heroMetric = Font.system(.largeTitle, design: .rounded).weight(.semibold)
     static let unit = Font.subheadline.weight(.semibold)
     static let chartLabel = Font.caption2.weight(.medium)
 
-    /// 40pt rounded — the large readout centered in semicircular gauges.
-    static let gaugeValue = Font.system(size: 40, weight: .bold, design: .rounded)
-    /// 10pt — the smallest legible label in the app (legend ranges, dense annotations).
-    static let micro = Font.system(size: 10, weight: .medium)
+    /// Dynamic Type-aware rounded readout centered in semicircular gauges.
+    static let gaugeValue = Font.system(.largeTitle, design: .rounded).weight(.bold)
+    /// Smallest semantic label in the app (legend ranges, dense annotations).
+    static let micro = Font.caption2.weight(.medium)
     /// Medium-strength headline used inside cards beneath the card title.
     static let sectionHeadline = Font.body.weight(.medium)
+}
+
+// MARK: - Motion
+
+/// A small, shared motion language. Keep everyday interactions quick; reserve
+/// the longer choreography for the once-per-launch brand moment.
+enum FormaMotion {
+    static let press = Animation.easeOut(duration: 0.14)
+    static let enter = Animation.timingCurve(0.23, 1, 0.32, 1, duration: 0.22)
+    static let move = Animation.timingCurve(0.77, 0, 0.175, 1, duration: 0.24)
+    static let selection = Animation.spring(duration: 0.22, bounce: 0.12)
+}
+
+struct FormaPressableButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(reduceMotion ? nil : FormaMotion.press, value: configuration.isPressed)
+    }
+}
+
+private struct FormaEntranceModifier: ViewModifier {
+    let order: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isVisible = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isVisible ? 1 : 0)
+            .offset(y: isVisible || reduceMotion ? 0 : 8)
+            .onAppear {
+                guard !isVisible else { return }
+                if reduceMotion {
+                    isVisible = true
+                } else {
+                    withAnimation(FormaMotion.enter.delay(Double(order) * 0.05)) {
+                        isVisible = true
+                    }
+                }
+            }
+    }
+}
+
+extension View {
+    /// One-shot entrance for the small number of elements initially visible on
+    /// a screen. Do not attach this to recycling rows or long lazy lists.
+    func formaEntrance(order: Int = 0) -> some View {
+        modifier(FormaEntranceModifier(order: order))
+    }
 }
 
 // MARK: - Palette
@@ -89,13 +141,13 @@ extension Color {
 
     static let appSeparator = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 0.065)
+            ? UIColor(white: 1, alpha: 0.10)
             : UIColor(red: 0.08, green: 0.14, blue: 0.11, alpha: 0.07)
     })
 
     static let appSurfaceHighlight = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 0.055)
+            ? UIColor(white: 1, alpha: 0.075)
             : UIColor(white: 1, alpha: 0.75)
     })
 
@@ -400,6 +452,7 @@ struct FormaCardHeader<Trailing: View>: View {
     let title: String
     var subtitle: String?
     let trailing: Trailing
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(
         _ title: String,
@@ -412,24 +465,36 @@ struct FormaCardHeader<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: subtitle == nil ? .center : .top, spacing: FormaSpacing.sm) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .font(FormaTypography.cardTitle)
-                    .tracking(-0.2)
-                    .foregroundStyle(.primary)
-
-                if let subtitle, !subtitle.isEmpty, subtitle != title {
-                    Text(subtitle)
-                        .font(FormaTypography.body)
-                        .foregroundStyle(.secondary)
-                        .lineSpacing(2)
-                        .fixedSize(horizontal: false, vertical: true)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: FormaSpacing.sm) {
+                    titleContent
+                    trailing
+                }
+            } else {
+                HStack(alignment: subtitle == nil ? .center : .top, spacing: FormaSpacing.sm) {
+                    titleContent
+                    Spacer(minLength: FormaSpacing.xs)
+                    trailing
                 }
             }
+        }
+    }
 
-            Spacer(minLength: FormaSpacing.xs)
-            trailing
+    private var titleContent: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(FormaTypography.cardTitle)
+                .tracking(-0.2)
+                .foregroundStyle(.primary)
+
+            if let subtitle, !subtitle.isEmpty, subtitle != title {
+                Text(subtitle)
+                    .font(FormaTypography.body)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
@@ -458,6 +523,8 @@ struct FormaValueBadge: View {
         Text(text)
             .font(.subheadline.weight(.bold))
             .monospacedDigit()
+            .lineLimit(2)
+            .minimumScaleFactor(0.8)
             .foregroundStyle(tint)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -568,12 +635,87 @@ struct FormaStatusView: View {
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
                 .tint(actionTint ?? tint)
+                .frame(minHeight: 44)
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, FormaSpacing.xl)
         .padding(.vertical, 80)
+        .accessibilityElement(children: .contain)
         .sensoryFeedback(FormaUIFeedback.softImpact.sensoryFeedback, trigger: actionFeedbackNonce)
+    }
+}
+
+/// A richer empty state for modules that intentionally remain in the app shell
+/// while their functionality is still being built.
+struct FormaFeaturePreviewView: View {
+    let title: String
+    let message: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        VStack(spacing: FormaSpacing.xl) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.08))
+                    .frame(width: 104, height: 104)
+
+                Circle()
+                    .strokeBorder(tint.opacity(0.16), lineWidth: 0.75)
+                    .frame(width: 82, height: 82)
+
+                Image(systemName: systemImage)
+                    .font(.system(.largeTitle, design: .rounded, weight: .semibold))
+                    .foregroundStyle(tint.gradient)
+                    .symbolEffect(.appear, options: .nonRepeating)
+            }
+            .accessibilityHidden(true)
+
+            VStack(spacing: FormaSpacing.sm) {
+                FormaValueBadge(text: "COMING SOON", tint: tint)
+
+                Text(title)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.primary)
+
+                Text(message)
+                    .font(FormaTypography.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: 420)
+        .padding(FormaSpacing.xxl)
+        .formaSurface(.hero, padding: nil, tint: tint)
+        .padding(.horizontal, FormaSpacing.screenGutter)
+        .accessibilityElement(children: .combine)
+        .formaEntrance()
+    }
+}
+
+/// Lightweight status shown above cached report content while a newer report is
+/// loading. Existing content remains readable and interactive.
+struct FormaRefreshStatus: View {
+    let message: String
+
+    var body: some View {
+        HStack(spacing: FormaSpacing.sm) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(.sleekAccent)
+
+            Text(message)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, FormaSpacing.md)
+        .padding(.vertical, FormaSpacing.sm)
+        .background(Color.appTertiaryBackground, in: Capsule())
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -584,45 +726,223 @@ enum FormaTransition {
     static let card: AnyTransition = .opacity.combined(with: .offset(y: 10))
 }
 
-/// One-time app entry reveal. The small lift and scale settle make the first
-/// frame feel intentional without turning launch into a splash screen.
+/// One-time, silent cold-launch sequence. The real destination renders behind
+/// the overlay so authentication/profile/report loading proceeds immediately.
 struct FormaLaunchReveal: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isPresented = false
-    @State private var logoOpacity = 1.0
-    @State private var logoScale = 0.94
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @State private var hasStarted = false
+    @State private var isShowingOverlay = true
+    @State private var revealsMark = false
+    @State private var revealsWordmark = false
+    @State private var revealsTagline = false
+    @State private var revealsContent = false
+    @State private var exitsOverlay = false
 
     func body(content: Content) -> some View {
         ZStack {
             content
-                .opacity(isPresented || reduceMotion ? 1 : 0)
-                .scaleEffect(isPresented || reduceMotion ? 1 : 0.975)
-                .offset(y: isPresented || reduceMotion ? 0 : 14)
+                .opacity(revealsContent || reduceMotion ? 1 : 0)
+                .scaleEffect(revealsContent || reduceMotion ? 1 : 0.985)
+                .offset(y: revealsContent || reduceMotion ? 0 : 8)
 
-            if !reduceMotion {
-                FormaBrandLockup(variant: .hero, wordmarkColor: .white)
-                    .scaleEffect(logoScale)
-                    .opacity(logoOpacity)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+            if isShowingOverlay {
+                FormaLaunchSequence(
+                    revealsMark: revealsMark,
+                    revealsWordmark: revealsWordmark,
+                    revealsTagline: revealsTagline,
+                    isExiting: exitsOverlay,
+                    reduceMotion: reduceMotion,
+                    reduceTransparency: reduceTransparency
+                )
+                .transition(.opacity)
+                .zIndex(10)
+                .allowsHitTesting(true)
+                .accessibilityHidden(true)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onAppear {
-                guard !reduceMotion else {
-                    isPresented = true
-                    return
-                }
+        .task {
+            guard !hasStarted else { return }
+            hasStarted = true
 
-                withAnimation(.spring(response: 0.62, dampingFraction: 0.88)) {
-                    isPresented = true
+            if reduceMotion {
+                revealsMark = true
+                revealsWordmark = true
+                try? await Task.sleep(for: .milliseconds(180))
+                revealsContent = true
+                withAnimation(.easeOut(duration: 0.2)) {
+                    exitsOverlay = true
                 }
-
-                withAnimation(.easeOut(duration: 0.38).delay(0.24)) {
-                    logoOpacity = 0
-                    logoScale = 1.04
-                }
+                try? await Task.sleep(for: .milliseconds(200))
+                isShowingOverlay = false
+                return
             }
+
+            withAnimation(.timingCurve(0.23, 1, 0.32, 1, duration: 0.52)) {
+                revealsMark = true
+            }
+            try? await Task.sleep(for: .milliseconds(520))
+
+            withAnimation(.timingCurve(0.23, 1, 0.32, 1, duration: 0.4)) {
+                revealsWordmark = true
+            }
+            try? await Task.sleep(for: .milliseconds(260))
+
+            withAnimation(FormaMotion.enter) {
+                revealsTagline = true
+            }
+            try? await Task.sleep(for: .milliseconds(280))
+
+            withAnimation(.timingCurve(0.23, 1, 0.32, 1, duration: 0.3)) {
+                revealsContent = true
+                exitsOverlay = true
+            }
+            try? await Task.sleep(for: .milliseconds(320))
+            isShowingOverlay = false
+        }
+    }
+}
+
+private struct FormaLaunchSequence: View {
+    let revealsMark: Bool
+    let revealsWordmark: Bool
+    let revealsTagline: Bool
+    let isExiting: Bool
+    let reduceMotion: Bool
+    let reduceTransparency: Bool
+
+    var body: some View {
+        ZStack {
+            Color.appBackground
+
+            if !reduceTransparency {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.sleekAccent.opacity(revealsMark ? 0.20 : 0),
+                                Color.formaCyan.opacity(revealsMark ? 0.06 : 0),
+                                .clear
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 250
+                        )
+                    )
+                    .frame(width: 520, height: 520)
+                    .scaleEffect(isExiting ? 1.45 : (revealsMark ? 1 : 0.82))
+                    .opacity(isExiting ? 0 : 1)
+            }
+
+            VStack(spacing: FormaSpacing.lg) {
+                HStack(spacing: FormaSpacing.sm) {
+                    FormaAnimatedMark(progress: revealsMark ? 1 : 0, reduceMotion: reduceMotion)
+                        .frame(width: 62, height: 82)
+
+                    Text("Forma")
+                        .font(FormaTypography.wordmark(size: 54))
+                        .tracking(revealsWordmark ? -1 : 4)
+                        .foregroundStyle(.white)
+                        .mask(alignment: .leading) {
+                            Rectangle()
+                                .scaleEffect(x: revealsWordmark ? 1 : 0, anchor: .leading)
+                        }
+                        .opacity(revealsWordmark ? 1 : 0.01)
+                }
+                .fixedSize()
+
+                Text("Your body, understood over time.")
+                    .font(.subheadline.weight(.semibold))
+                    .tracking(0.2)
+                    .foregroundStyle(.secondary)
+                    .opacity(revealsTagline && !isExiting ? 1 : 0)
+                    .offset(y: revealsTagline && !isExiting ? 0 : 6)
+            }
+            .scaleEffect(isExiting ? 1.025 : 1)
+            .opacity(isExiting ? 0 : 1)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+private struct FormaAnimatedMark: View {
+    let progress: CGFloat
+    let reduceMotion: Bool
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { index in
+                FormaMarkContour(index: index)
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        LinearGradient(
+                            colors: [.formaCyan, .sleekAccent, .formaTeal],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        style: StrokeStyle(
+                            lineWidth: index == 0 ? 5.5 : 3.5,
+                            lineCap: .round,
+                            lineJoin: .round
+                        )
+                    )
+                    .shadow(color: .sleekAccent.opacity(0.32), radius: 8)
+                    .animation(
+                        reduceMotion
+                            ? nil
+                            : .timingCurve(0.23, 1, 0.32, 1, duration: 0.43)
+                                .delay(Double(index) * 0.045),
+                        value: progress
+                    )
+            }
+        }
+        .scaleEffect(progress > 0 ? 1 : 0.94)
+        .opacity(progress > 0 ? 1 : 0)
+    }
+}
+
+/// Normalized contours derived from the Forma body mark. Keeping these as
+/// Shapes lets the launch animation draw the identity instead of fading in a
+/// raster asset.
+private struct FormaMarkContour: Shape {
+    let index: Int
+
+    func path(in rect: CGRect) -> Path {
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: rect.minX + rect.width * x, y: rect.minY + rect.height * y)
+        }
+
+        var path = Path()
+        switch index {
+        case 0:
+            path.move(to: point(0.79, 0.94))
+            path.addCurve(to: point(0.84, 0.71), control1: point(0.76, 0.84), control2: point(0.88, 0.80))
+            path.addCurve(to: point(0.94, 0.50), control1: point(0.91, 0.64), control2: point(0.96, 0.59))
+            path.addCurve(to: point(0.71, 0.27), control1: point(0.94, 0.38), control2: point(0.82, 0.34))
+            path.addCurve(to: point(0.61, 0.08), control1: point(0.62, 0.22), control2: point(0.69, 0.11))
+            path.addCurve(to: point(0.31, 0.12), control1: point(0.49, 0.00), control2: point(0.37, 0.05))
+            path.addCurve(to: point(0.23, 0.37), control1: point(0.19, 0.20), control2: point(0.15, 0.28))
+            path.addCurve(to: point(0.12, 0.60), control1: point(0.30, 0.46), control2: point(0.12, 0.49))
+            path.addCurve(to: point(0.61, 0.98), control1: point(0.08, 0.80), control2: point(0.35, 0.92))
+        case 1:
+            path.move(to: point(0.70, 0.95))
+            path.addCurve(to: point(0.69, 0.70), control1: point(0.63, 0.83), control2: point(0.75, 0.79))
+            path.addCurve(to: point(0.78, 0.47), control1: point(0.76, 0.62), control2: point(0.82, 0.56))
+            path.addCurve(to: point(0.59, 0.27), control1: point(0.76, 0.37), control2: point(0.63, 0.35))
+            path.addCurve(to: point(0.49, 0.12), control1: point(0.50, 0.22), control2: point(0.57, 0.14))
+            path.addCurve(to: point(0.27, 0.18), control1: point(0.40, 0.07), control2: point(0.30, 0.11))
+            path.addCurve(to: point(0.29, 0.42), control1: point(0.19, 0.28), control2: point(0.21, 0.34))
+            path.addCurve(to: point(0.20, 0.66), control1: point(0.39, 0.51), control2: point(0.19, 0.53))
+            path.addCurve(to: point(0.54, 0.96), control1: point(0.18, 0.80), control2: point(0.38, 0.91))
+        default:
+            path.move(to: point(0.52, 0.93))
+            path.addCurve(to: point(0.41, 0.70), control1: point(0.38, 0.84), control2: point(0.35, 0.76))
+            path.addCurve(to: point(0.54, 0.51), control1: point(0.48, 0.62), control2: point(0.61, 0.60))
+            path.addCurve(to: point(0.42, 0.34), control1: point(0.50, 0.43), control2: point(0.34, 0.43))
+            path.addCurve(to: point(0.35, 0.20), control1: point(0.50, 0.28), control2: point(0.45, 0.18))
+        }
+        return path
     }
 }
 
@@ -722,8 +1042,15 @@ struct FormaSemicircularGauge: View {
             }
         }
         .aspectRatio(FormaSemicircularGaugeLayout.aspectRatio, contentMode: .fit)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(caption)
+        .accessibilityValue("\(valueText), range \(formatted(range.lowerBound)) to \(formatted(range.upperBound))\(labelSuffix)")
         .onAppear { animateToValue() }
         .onChange(of: value) { _, _ in animateToValue() }
+    }
+
+    private func formatted(_ value: Double) -> String {
+        value.rounded() == value ? String(format: "%.0f", value) : String(format: "%.1f", value)
     }
 
     private func animateToValue() {
@@ -792,31 +1119,71 @@ struct FormaLegendCategory {
 struct FormaCategoryLegend: View {
     let categories: [FormaLegendCategory]
     let selectedValue: Double
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<categories.count, id: \.self) { index in
-                let cat = categories[index]
-                let isSelected = selectedValue >= cat.min && selectedValue < cat.max
+        Group {
+            if dynamicTypeSize.isAccessibilitySize, let selectedCategory {
+                HStack(alignment: .top, spacing: FormaSpacing.sm) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(selectedCategory.color)
 
-                VStack(spacing: 6) {
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(isSelected ? AnyShapeStyle(cat.color.gradient) : AnyShapeStyle(cat.color.opacity(0.15)))
-                        .frame(height: 4)
-
-                    Text(cat.name)
-                        .font(.caption2.weight(isSelected ? .bold : .medium))
-                        .foregroundStyle(isSelected ? .primary : .secondary)
-                        .minimumScaleFactor(0.8)
-                        .lineLimit(1)
-
-                    Text(cat.range)
-                        .font(FormaTypography.micro)
-                        .foregroundStyle(.tertiary)
+                    VStack(alignment: .leading, spacing: FormaSpacing.xxs) {
+                        Text(selectedCategory.name)
+                            .font(.body.weight(.semibold))
+                        Text("Selected range \(selectedCategory.range)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 6) {
+                    ForEach(0..<categories.count, id: \.self) { index in
+                        category(categories[index], isSelected: isSelected(index))
+                    }
+                }
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Category")
+        .accessibilityValue(selectedCategory.map { "\($0.name), \($0.range)" } ?? "Not available")
+    }
+
+    private var selectedCategory: FormaLegendCategory? {
+        categories.first {
+            selectedValue >= $0.min
+                && (selectedValue < $0.max || ($0.max == categories.last?.max && selectedValue == $0.max))
+        }
+    }
+
+    private func isSelected(_ index: Int) -> Bool {
+        let category = categories[index]
+        return selectedValue >= category.min
+            && (selectedValue < category.max || (index == categories.indices.last && selectedValue == category.max))
+    }
+
+    private func category(_ category: FormaLegendCategory, isSelected: Bool) -> some View {
+        VStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(
+                    isSelected
+                        ? AnyShapeStyle(category.color.gradient)
+                        : AnyShapeStyle(category.color.opacity(0.18))
+                )
+                .frame(height: 4)
+
+            Text(category.name)
+                .font(.caption2.weight(isSelected ? .bold : .medium))
+                .foregroundStyle(isSelected ? .primary : .secondary)
+                .minimumScaleFactor(0.8)
+                .lineLimit(1)
+
+            Text(category.range)
+                .font(FormaTypography.micro)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -890,7 +1257,15 @@ struct FormaSkeletonBlock: View {
     }
 }
 
+enum FormaSkeletonCardKind {
+    case gauge
+    case narrative
+    case chart
+}
+
 struct FormaSkeletonCard: View {
+    var kind: FormaSkeletonCardKind = .chart
+
     var body: some View {
         VStack(alignment: .leading, spacing: FormaSpacing.lg) {
             VStack(alignment: .leading, spacing: FormaSpacing.xs) {
@@ -898,7 +1273,7 @@ struct FormaSkeletonCard: View {
                 FormaSkeletonBlock(width: 230, height: 13, opacity: 0.08)
             }
 
-            FormaSkeletonBlock(height: 150, radius: FormaRadius.inset, opacity: 0.05)
+            skeletonContent
 
             FormaDivider()
 
@@ -915,6 +1290,62 @@ struct FormaSkeletonCard: View {
         }
         .formaSurface(.card, padding: FormaSpacing.cardInset)
         .shimmering()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading report content")
+    }
+
+    @ViewBuilder
+    private var skeletonContent: some View {
+        switch kind {
+        case .gauge:
+            ZStack(alignment: .bottom) {
+                Circle()
+                    .trim(from: 0, to: 0.5)
+                    .stroke(
+                        Color.secondary.opacity(0.08),
+                        style: StrokeStyle(lineWidth: 18, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(180))
+                    .frame(maxWidth: 260)
+                    .aspectRatio(1, contentMode: .fit)
+
+                VStack(spacing: FormaSpacing.xs) {
+                    FormaSkeletonBlock(width: 88, height: 34, radius: 10, opacity: 0.14)
+                    FormaSkeletonBlock(width: 64, height: 11, opacity: 0.08)
+                }
+                .padding(.bottom, FormaSpacing.sm)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 145)
+            .clipped()
+
+        case .narrative:
+            VStack(alignment: .leading, spacing: FormaSpacing.sm) {
+                FormaSkeletonBlock(width: 210, height: 18, opacity: 0.12)
+                FormaSkeletonBlock(height: 13, opacity: 0.08)
+                FormaSkeletonBlock(height: 13, opacity: 0.08)
+                FormaSkeletonBlock(width: 180, height: 13, opacity: 0.08)
+            }
+            .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+            .padding(FormaSpacing.md)
+            .background(Color.appSubtleFill, in: RoundedRectangle(cornerRadius: FormaRadius.inset))
+
+        case .chart:
+            VStack(alignment: .leading, spacing: FormaSpacing.xs) {
+                Spacer()
+                HStack(alignment: .bottom, spacing: FormaSpacing.xs) {
+                    ForEach([0.34, 0.56, 0.44, 0.76, 0.64, 0.88], id: \.self) { height in
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color.secondary.opacity(0.08))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 110 * height)
+                    }
+                }
+            }
+            .frame(height: 150)
+            .padding(.horizontal, FormaSpacing.sm)
+            .background(Color.appSubtleFill, in: RoundedRectangle(cornerRadius: FormaRadius.inset))
+        }
     }
 }
 
@@ -1127,6 +1558,30 @@ struct FormaTimeSeriesChart: View {
     private var latestDateByMetric: [String: Date] {
         Dictionary(grouping: data, by: \.metric).compactMapValues { $0.map(\.date).max() }
     }
+    private var accessibilitySummary: String {
+        let groups = Dictionary(grouping: data, by: \.metric)
+        return groups.keys.sorted().compactMap { metric in
+            guard let values = groups[metric]?.sorted(by: { $0.date < $1.date }),
+                  let first = values.first,
+                  let last = values.last else {
+                return nil
+            }
+
+            let direction: String
+            if values.count == 1 {
+                direction = "one reading"
+            } else if last.value > first.value {
+                direction = "trending up"
+            } else if last.value < first.value {
+                direction = "trending down"
+            } else {
+                direction = "unchanged"
+            }
+
+            return "\(metric), latest \(formatted(last.value)), \(direction)"
+        }
+        .joined(separator: ". ")
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: FormaSpacing.sm) {
@@ -1234,6 +1689,9 @@ struct FormaTimeSeriesChart: View {
                     .foregroundStyle(Color.secondary.opacity(FormaChartStyle.axisLabelOpacity))
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Measurement trend chart")
+        .accessibilityValue(accessibilitySummary)
     }
 
     private var summaryFooter: some View {

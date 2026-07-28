@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-enum AppTab {
+enum AppTab: String {
     case metrics
     case workouts
     case record
@@ -20,6 +20,26 @@ struct SwiftUIView: View {
     @State private var isMetricsAtTop = true
     @StateObject private var reportStore = MetricsReportStore()
     @EnvironmentObject private var soundPlayer: FormaSoundPlayer
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init() {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if let markerIndex = arguments.firstIndex(of: "-FormaUITestTab"),
+           arguments.indices.contains(markerIndex + 1),
+           let requestedTab = AppTab(rawValue: arguments[markerIndex + 1]) {
+            _activeTab = State(initialValue: requestedTab)
+        }
+        #endif
+    }
+
+    private var isUITestShell: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-FormaUITestShell")
+        #else
+        false
+        #endif
+    }
 
     var body: some View {
         NavigationStack {
@@ -28,7 +48,12 @@ struct SwiftUIView: View {
                     MetricsView(
                         selectedTab: $selectedMetricsTab,
                         isAtTop: $isMetricsAtTop,
-                        reportStore: reportStore
+                        reportStore: reportStore,
+                        onRecordRequested: {
+                            withAnimation(FormaMotion.selection) {
+                                activeTab = .record
+                            }
+                        }
                     )
                 }
 
@@ -45,6 +70,7 @@ struct SwiftUIView: View {
                 }
             }
             .tabBarMinimizeBehavior(.onScrollDown)
+            .tint(.sleekAccent)
             .background(FormaBackground())
             .overlay(alignment: .top) {
                 HStack {
@@ -57,13 +83,17 @@ struct SwiftUIView: View {
 
                     FloatingSettingsButton()
                 }
+                .frame(maxWidth: 760)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, FormaSpacing.screenGutter)
                 .safeAreaPadding(.top, FormaSpacing.xs)
-                .animation(.easeOut(duration: 0.22), value: activeTab != .metrics || isMetricsAtTop)
+                .animation(
+                    reduceMotion ? nil : .easeOut(duration: 0.22),
+                    value: activeTab != .metrics || isMetricsAtTop
+                )
             }
             .task(id: activeTab) {
-                guard activeTab == .metrics else { return }
+                guard activeTab == .metrics, !isUITestShell else { return }
                 await reportStore.loadAndPollReport()
             }
             .onChange(of: activeTab) { _, _ in

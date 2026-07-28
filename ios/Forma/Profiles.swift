@@ -81,6 +81,8 @@ struct Profiles: View {
                     }
                 }
             }
+            .frame(maxWidth: 760)
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, FormaSpacing.screenGutter)
             .padding(.vertical, FormaSpacing.lg)
         }
@@ -306,6 +308,7 @@ private struct ProfileFormView: View {
     @State private var isSaving = false
     @State private var saveSuccessNonce = 0
     @State private var saveErrorNonce = 0
+    @State private var hasEditedName = false
     @EnvironmentObject private var soundPlayer: FormaSoundPlayer
 
     init(
@@ -332,24 +335,54 @@ private struct ProfileFormView: View {
     }
 
     private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSaving
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && profileImageError == nil
+            && !isSaving
     }
 
     private var isEditing: Bool {
         profile != nil
     }
 
+    private var profileImageError: String? {
+        let trimmed = profileImage.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host != nil else {
+            return "Enter a complete http or https image URL."
+        }
+        return nil
+    }
+
     var body: some View {
         Form {
-            Section("Profile") {
+            Section {
                 TextField("Name", text: $name)
                     .textContentType(.name)
+                    .onChange(of: name) { _, _ in
+                        hasEditedName = true
+                    }
 
                 Toggle("Primary profile", isOn: $isPrimary)
                     .disabled(requiresPrimaryProfile)
+            } header: {
+                Text("Profile")
+            } footer: {
+                Text(
+                    hasEditedName && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? "A profile name is required."
+                        : "The primary profile receives new scale measurements by default."
+                )
+                .foregroundStyle(
+                    hasEditedName && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? Color.formaCoral
+                        : Color.secondary
+                )
             }
 
-            Section("Details") {
+            Section {
                 Stepper(value: $heightCm, in: 80...260, step: 1) {
                     HStack {
                         Text("Height")
@@ -377,9 +410,13 @@ private struct ProfileFormView: View {
                         Text(gender.title).tag(gender)
                     }
                 }
+            } header: {
+                Text("Details")
+            } footer: {
+                Text(peopleType.guidance)
             }
 
-            Section("Preferences") {
+            Section {
                 Stepper(value: $preferredBodyFatPct, in: 3...60, step: 1) {
                     HStack {
                         Text("Body Fat")
@@ -394,6 +431,11 @@ private struct ProfileFormView: View {
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+            } header: {
+                Text("Preferences")
+            } footer: {
+                Text(profileImageError ?? "Body-fat preference personalizes targets. The profile image is optional.")
+                    .foregroundStyle(profileImageError == nil ? Color.secondary : Color.formaCoral)
             }
 
             if let errorMessage {
@@ -406,6 +448,8 @@ private struct ProfileFormView: View {
                 }
             }
         }
+        .frame(maxWidth: 760)
+        .frame(maxWidth: .infinity)
         .scrollContentBackground(.hidden)
         .background(FormaBackground())
         .tint(.sleekAccent)
@@ -546,6 +590,15 @@ private enum ProfilePeopleType: String, CaseIterable, Identifiable {
     var title: String {
         rawValue.capitalized
     }
+
+    var guidance: String {
+        switch self {
+        case .standard:
+            return "Standard uses general body-composition ranges."
+        case .athlete:
+            return "Athlete is intended for consistently high-volume training and adjusts body-composition interpretation."
+        }
+    }
 }
 
 private enum ProfileGender: String, CaseIterable, Identifiable {
@@ -590,7 +643,9 @@ private struct ProfileRow: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     if profile.isPrimary {
-                        FormaValueBadge(text: "Primary Profile", tint: .sleekAccent)
+                        Label("Primary profile", systemImage: "checkmark.seal.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.sleekAccent)
                     }
                 }
 
@@ -600,17 +655,11 @@ private struct ProfileRow: View {
                     Image(systemName: "pencil")
                         .font(.body.weight(.semibold))
                         .foregroundStyle(Color.sleekAccent)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                         .background(Color.sleekAccent.opacity(0.12), in: Circle())
                 }
+                .buttonStyle(FormaPressableButtonStyle())
                 .accessibilityLabel("Edit \(profile.displayName)")
-
-                if profile.isPrimary {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.title2)
-                        .foregroundStyle(Color.sleekAccent)
-                        .padding(.top, 6)
-                }
             }
 
             FormaDivider()
@@ -649,7 +698,12 @@ private struct ProfileRow: View {
                 .padding(.top, 4)
             }
         }
-        .formaSurface(.card, padding: FormaSpacing.cardInset)
+        .formaSurface(
+            .card,
+            padding: FormaSpacing.cardInset,
+            tint: profile.isPrimary ? .sleekAccent : nil
+        )
+        .accessibilityValue(profile.isPrimary ? "Primary profile" : "")
     }
 
     private func initialsView(for name: String) -> some View {

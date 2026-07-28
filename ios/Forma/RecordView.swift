@@ -125,20 +125,30 @@ struct RecordView: View {
             ZStack {
                 FormaBackground()
 
-                VStack(spacing: FormaSpacing.xl) {
-                    RecordCircle(
-                        state: circleState,
-                        diameter: diameter,
-                        isEnabled: circleIsEnabled,
-                        showsActivityRing: scaleManager.isReading,
-                        action: handleCircleAction
-                    )
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: FormaSpacing.xl) {
+                        RecordCircle(
+                            state: circleState,
+                            diameter: diameter,
+                            isEnabled: circleIsEnabled,
+                            showsActivityRing: scaleManager.isReading,
+                            action: handleCircleAction
+                        )
 
-                    RecordFlowFooter(
-                        state: circleState,
-                        measurement: scaleManager.latestMeasurement,
-                        isReading: scaleManager.isReading
+                        RecordFlowFooter(
+                            state: circleState,
+                            measurement: scaleManager.latestMeasurement,
+                            isReading: scaleManager.isReading
+                        )
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(
+                        minHeight: max(
+                            0,
+                            proxy.size.height - FormaLayout.floatingSettingsClearance
+                        )
                     )
+                    .padding(.horizontal, FormaSpacing.screenGutter)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -495,6 +505,7 @@ private struct RecordCircle: View {
     let action: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .largeTitle) private var metricValueSize: CGFloat = 54
 
     var body: some View {
         Button(action: action) {
@@ -608,7 +619,7 @@ private struct RecordCircle: View {
                 .opacity(0.72)
 
             Text(value)
-                .font(.system(size: 54, weight: .semibold, design: .rounded))
+                .font(.system(size: metricValueSize, weight: .semibold, design: .rounded))
                 .contentTransition(.numericText())
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
@@ -623,6 +634,7 @@ private struct RecordCircle: View {
         VStack(spacing: FormaSpacing.sm) {
             Image(systemName: systemImage)
                 .font(.system(size: 32, weight: .bold))
+                .symbolEffect(.appear, options: .nonRepeating)
             Text(title)
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
@@ -743,31 +755,193 @@ private struct RecordFlowFooter: View {
     var body: some View {
         Group {
             switch state {
-            case .recordingFailed(let message), .submissionFailed(let message):
-                Text(message)
-                    .font(FormaTypography.body)
-                    .foregroundStyle(Color.formaCoral)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, FormaSpacing.xxl)
+            case .recordingFailed(let message):
+                VStack(spacing: FormaSpacing.xs) {
+                    Text(message)
+                        .font(FormaTypography.body)
+                        .foregroundStyle(Color.formaCoral)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(recoveryGuidance(for: message))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Text(state.actionGuidance)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+                .padding(.horizontal, FormaSpacing.xxl)
+                .transition(.opacity.combined(with: .offset(y: 6)))
+
+            case .submissionFailed(let message):
+                VStack(spacing: FormaSpacing.xs) {
+                    Text(message)
+                        .font(FormaTypography.body)
+                        .foregroundStyle(Color.formaCoral)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("Check your connection. The captured values are still ready to save.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Text(state.actionGuidance)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+                .padding(.horizontal, FormaSpacing.xxl)
+                .transition(.opacity.combined(with: .offset(y: 6)))
+
+            case .connecting(let label) where isReading:
+                VStack(spacing: FormaSpacing.sm) {
+                    RecordStageTracker(measurement: measurement)
+                    Text(connectingGuidance(for: label))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .transition(.opacity)
+
+            case .weight, .impedance, .heartRate:
+                if isReading {
+                    VStack(spacing: FormaSpacing.sm) {
+                        RecordStageTracker(measurement: measurement)
+                        Text("Stay still on the scale. Tap the circle to cancel.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .transition(.opacity)
+                } else {
+                    Text(state.actionGuidance)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+            case .saved:
+                RecordMeasurementSummary(measurement: measurement)
+                    .transition(.opacity.combined(with: .offset(y: 6)))
+
+            case .ready:
+                Text(state.actionGuidance)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
                     .transition(.opacity)
 
-            case .connecting, .weight, .impedance, .heartRate where isReading:
-                RecordStageTracker(measurement: measurement)
-                    .transition(.opacity)
-
-            case .ready, .saved, .connecting, .weight, .impedance, .heartRate:
-                EmptyView()
+            case .connecting:
+                Text(state.actionGuidance)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
         }
-        .frame(minHeight: 44, alignment: .top)
-        .animation(.easeOut(duration: 0.22), value: state)
+        .frame(minHeight: 60, alignment: .top)
+        .animation(FormaMotion.enter, value: state)
+    }
+
+    private func connectingGuidance(for label: String) -> String {
+        switch label {
+        case "Turn on Bluetooth":
+            return "Enable Bluetooth in Control Center, then keep Forma open."
+        case "Finding your scale":
+            return "Wake the scale and keep your phone nearby. Tap the circle to cancel."
+        case "Step on your scale":
+            return "Step on barefoot and remain still. Tap the circle to cancel."
+        default:
+            return "Keep your phone near the scale. Tap the circle to cancel."
+        }
+    }
+
+    private func recoveryGuidance(for message: String) -> String {
+        let normalized = message.lowercased()
+        if normalized.contains("bluetooth") {
+            return "Turn on Bluetooth, keep your phone nearby, and wake the scale."
+        }
+        if normalized.contains("scale") || normalized.contains("connect") {
+            return "Wake the scale and try again with your phone nearby."
+        }
+        if normalized.contains("complete") {
+            return "Stay on the scale until weight, impedance, and heart rate are all captured."
+        }
+        return "Check the scale, keep your phone nearby, and try once more."
+    }
+}
+
+private extension RecordCircleState {
+    var actionGuidance: String {
+        switch self {
+        case .ready:
+            return "Tap the circle to begin"
+        case .connecting, .weight, .impedance:
+            return "Tap to cancel"
+        case .heartRate(_, let isSubmitting):
+            return isSubmitting ? "Saving your measurement…" : "Tap to cancel"
+        case .saved:
+            return "Tap to record another"
+        case .recordingFailed:
+            return "Tap the circle to try again"
+        case .submissionFailed:
+            return "Tap the circle to retry saving"
+        }
+    }
+}
+
+private struct RecordMeasurementSummary: View {
+    let measurement: ScaleMeasurement
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        VStack(spacing: FormaSpacing.sm) {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: FormaSpacing.xs) {
+                    summaryItems
+                }
+            } else {
+                HStack(spacing: FormaSpacing.xl) {
+                    summaryItems
+                }
+            }
+
+            Text("Tap the circle to record another")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+        .formaEntrance()
+    }
+
+    @ViewBuilder
+    private var summaryItems: some View {
+        if let weight = measurement.weightKg {
+            summaryItem(String(format: "%.1f kg", weight), label: "Weight")
+        }
+        if let impedance = measurement.impedanceOhms {
+            summaryItem(String(format: "%.0f Ω", impedance), label: "Impedance")
+        }
+        if let heartRate = measurement.heartRate {
+            summaryItem("\(heartRate) bpm", label: "Heart rate")
+        }
+    }
+
+    private func summaryItem(_ value: String, label: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.caption.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+            Text(label)
+                .font(FormaTypography.micro)
+                .foregroundStyle(.tertiary)
+        }
     }
 }
 
 /// Three-stage progress indicator for the measurement ritual.
 private struct RecordStageTracker: View {
     let measurement: ScaleMeasurement
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var stages: [(title: String, isComplete: Bool)] {
         [
@@ -778,22 +952,95 @@ private struct RecordStageTracker: View {
     }
 
     var body: some View {
-        HStack(spacing: FormaSpacing.lg) {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: FormaSpacing.xs) {
+                    compactProgress
+                    Text(accessibleProgressLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+            } else {
+                fullProgress
+            }
+        }
+        .animation(FormaMotion.selection, value: measurement)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Measurement progress")
+        .accessibilityValue(accessibleProgressLabel)
+    }
+
+    private var fullProgress: some View {
+        HStack(spacing: FormaSpacing.xs) {
             ForEach(0..<stages.count, id: \.self) { index in
                 let stage = stages[index]
+                let isActive = !stage.isComplete
+                    && stages.prefix(index).allSatisfy { $0.isComplete }
 
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(stage.isComplete ? Color.formaTeal : Color.appTertiaryBackground)
-                        .frame(width: 6, height: 6)
+                HStack(spacing: FormaSpacing.xs) {
+                    ZStack {
+                        Circle()
+                            .fill(stage.isComplete ? Color.formaTeal : Color.appTertiaryBackground)
+                            .frame(width: 20, height: 20)
+
+                        if stage.isComplete {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(Color.actionForeground)
+                                .transition(.scale.combined(with: .opacity))
+                        } else if isActive {
+                            Circle()
+                                .fill(Color.sleekAccent)
+                                .frame(width: 6, height: 6)
+                        }
+                    }
 
                     Text(stage.title)
-                        .font(FormaTypography.micro)
-                        .foregroundStyle(stage.isComplete ? .primary : .secondary)
+                        .font(.caption2.weight(stage.isComplete || isActive ? .semibold : .medium))
+                        .foregroundStyle(stage.isComplete || isActive ? .primary : .secondary)
+                }
+
+                if index < stages.count - 1 {
+                    Capsule()
+                        .fill(stage.isComplete ? Color.formaTeal.opacity(0.65) : Color.appTertiaryBackground)
+                        .frame(maxWidth: 24)
+                        .frame(height: 2)
                 }
             }
         }
-        .accessibilityElement(children: .combine)
+    }
+
+    private var compactProgress: some View {
+        HStack(spacing: FormaSpacing.xs) {
+            ForEach(0..<stages.count, id: \.self) { index in
+                let stage = stages[index]
+                let isActive = !stage.isComplete
+                    && stages.prefix(index).allSatisfy { $0.isComplete }
+
+                Image(systemName: stage.isComplete ? "checkmark.circle.fill" : "\(index + 1).circle.fill")
+                    .foregroundStyle(
+                        stage.isComplete
+                            ? Color.formaTeal
+                            : (isActive ? Color.sleekAccent : Color.secondary)
+                    )
+
+                if index < stages.count - 1 {
+                    Capsule()
+                        .fill(stage.isComplete ? Color.formaTeal.opacity(0.65) : Color.appTertiaryBackground)
+                        .frame(width: 24, height: 2)
+                }
+            }
+        }
+    }
+
+    private var accessibleProgressLabel: String {
+        let completedCount = stages.filter(\.isComplete).count
+        if completedCount == stages.count {
+            return "All three stages complete"
+        }
+
+        let activeStage = stages.first(where: { !$0.isComplete })?.title ?? "Complete"
+        return "\(completedCount) of \(stages.count) complete. Current stage: \(activeStage)"
     }
 }
 

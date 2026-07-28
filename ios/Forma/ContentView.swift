@@ -13,6 +13,17 @@ struct ContentView: View {
 
     var body: some View {
         Group {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-FormaUITestShell") {
+                SwiftUIView()
+            } else if clerk.user != nil {
+                PrimaryProfileGate()
+                    .transition(.opacity)
+            } else {
+                ClerkSignInView()
+                    .transition(.opacity)
+            }
+            #else
             if clerk.user != nil {
                 PrimaryProfileGate()
                     .transition(.opacity)
@@ -20,6 +31,7 @@ struct ContentView: View {
                 ClerkSignInView()
                     .transition(.opacity)
             }
+            #endif
         }
         .animation(.easeInOut(duration: 0.3), value: clerk.user != nil)
         .formaLaunchReveal()

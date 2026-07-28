@@ -34,6 +34,7 @@ struct MuscleTab: View {
 
             if let section = gaugeSection, section.numberValue != nil {
                 SkeletalMuscleGaugeCard(section: section)
+                    .formaEntrance()
             }
 
             ForEach(Array(trendSections.enumerated()), id: \.offset) { _, section in

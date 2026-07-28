@@ -24,13 +24,43 @@ final class FormaUITests: XCTestCase {
 
     @MainActor
     func testExample() throws {
-        // UI tests must launch the application that they test.
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchShell(tab: "metrics")
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // XCUIAutomation Documentation
-        // https://developer.apple.com/documentation/xcuiautomation
+        XCTAssertTrue(app.staticTexts["No report yet"].waitForExistence(timeout: 8))
+
+        let recordMeasurement = app.buttons["Record Measurement"]
+        XCTAssertTrue(recordMeasurement.exists)
+        recordMeasurement.tap()
+
+        XCTAssertTrue(app.buttons["Record"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testFeaturePreviewTabs() throws {
+        let workouts = launchShell(tab: "workouts")
+        XCTAssertTrue(workouts.staticTexts["COMING SOON"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            workouts.staticTexts[
+                "Guided strength sessions and training analytics are being shaped for a future update."
+            ].exists
+        )
+        workouts.terminate()
+
+        let vitals = launchShell(tab: "vitals")
+        XCTAssertTrue(vitals.staticTexts["COMING SOON"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            vitals.staticTexts[
+                "Heart-rate history, recovery, and Apple Health trends are being prepared for a future update."
+            ].exists
+        )
+    }
+
+    @MainActor
+    func testRecordTabShowsExplicitAction() throws {
+        let app = launchShell(tab: "record")
+
+        XCTAssertTrue(app.buttons["Record"].waitForExistence(timeout: 8))
+        XCTAssertEqual(app.buttons["Record"].value as? String, "Ready")
     }
 
     @MainActor
@@ -39,5 +69,13 @@ final class FormaUITests: XCTestCase {
         measure(metrics: [XCTApplicationLaunchMetric()]) {
             XCUIApplication().launch()
         }
+    }
+
+    @MainActor
+    private func launchShell(tab: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-FormaUITestShell", "-FormaUITestTab", tab]
+        app.launch()
+        return app
     }
 }

@@ -36,12 +36,37 @@ struct Settings: View {
                         UserProfileView()
                     }
                 }
+
+                settingsSection("About") {
+                    HStack(spacing: FormaSpacing.sm) {
+                        FormaIconTile(
+                            systemImage: "app.badge",
+                            tint: .formaCyan,
+                            size: 34,
+                            radius: 10
+                        )
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Forma")
+                                .font(.body.weight(.semibold))
+                            Text("Version \(appVersion)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+                    }
+                    .accessibilityElement(children: .combine)
+                }
             }
+            .frame(maxWidth: 680)
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, FormaSpacing.screenGutter)
             .padding(.vertical, FormaSpacing.lg)
         }
         .background(FormaBackground())
         .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
         .sensoryFeedback(FormaUIFeedback.softImpact.sensoryFeedback, trigger: navigationFeedbackNonce)
     }
 
@@ -57,13 +82,27 @@ struct Settings: View {
         } label: {
             rowContent(title: title, subtitle: subtitle, systemImage: systemImage, tint: tint)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FormaPressableButtonStyle())
         .simultaneousGesture(
             TapGesture().onEnded {
                 navigationFeedbackNonce += 1
                 soundPlayer.play(FormaUIFeedback.softImpact)
             }
         )
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+
+        switch (version, build) {
+        case let (.some(version), .some(build)):
+            return "\(version) (\(build))"
+        case let (.some(version), nil):
+            return version
+        default:
+            return "Development"
+        }
     }
 
     private func rowContent(title: String, subtitle: String, systemImage: String, tint: Color) -> some View {
@@ -91,6 +130,7 @@ struct Settings: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.tertiary)
         }
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
     }
 

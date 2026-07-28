@@ -14,6 +14,7 @@ struct InsightsTab: View {
         VStack(spacing: FormaSpacing.cardGap) {
             if let factor = reportPayload?.factor {
                 PriorityFactorCard(factor: factor)
+                    .formaEntrance(order: 0)
             }
 
             if let overview = reportPayload?.overview {
@@ -24,6 +25,7 @@ struct InsightsTab: View {
                     calloutIcon: overview.remark?.marker?.iconName ?? "flame.fill",
                     calloutTint: overview.remark?.marker?.color ?? .formaAmber
                 )
+                .formaEntrance(order: 1)
             }
 
             if let foundation = reportPayload?.foundation {
@@ -35,6 +37,7 @@ struct InsightsTab: View {
                     calloutIcon: foundation.remark?.marker?.iconName ?? "checkmark.circle.fill",
                     calloutTint: foundation.remark?.marker?.color ?? .formaTeal
                 )
+                .formaEntrance(order: 2)
             }
 
             if let momentum = reportPayload?.momentum {
@@ -116,6 +119,9 @@ private struct PriorityFactorCard: View {
     private var tint: Color {
         factor.remark?.marker?.color ?? factor.factorColor?.color ?? .formaAmber
     }
+    private var calloutText: String {
+        factor.remark?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: FormaSpacing.cardContent) {
@@ -136,13 +142,15 @@ private struct PriorityFactorCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            FormaDivider()
+            if !calloutText.isEmpty, calloutText != factor.comment {
+                FormaDivider()
 
-            FormaCallout(
-                text: factor.remark?.text ?? factor.comment ?? "",
-                systemImage: factor.remark?.marker?.iconName ?? "target",
-                tint: tint
-            )
+                FormaCallout(
+                    text: calloutText,
+                    systemImage: factor.remark?.marker?.iconName ?? "target",
+                    tint: tint
+                )
+            }
         }
         .formaSurface(.hero, padding: FormaSpacing.cardInset, tint: tint)
     }
@@ -203,11 +211,18 @@ private struct InsightSectionCard<Content: View>: View {
                 content
             }
 
-            FormaDivider()
+            if shouldShowCallout {
+                FormaDivider()
 
-            FormaCallout(text: calloutText, systemImage: calloutIcon, tint: calloutTint)
+                FormaCallout(text: calloutText, systemImage: calloutIcon, tint: calloutTint)
+            }
         }
         .formaSurface(.card, padding: FormaSpacing.cardInset)
+    }
+
+    private var shouldShowCallout: Bool {
+        let trimmed = calloutText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed != headline && trimmed != bodyText
     }
 }
 

@@ -11,6 +11,7 @@ struct MetricsView: View {
     @Binding var selectedTab: MetricsTab
     @Binding var isAtTop: Bool
     @ObservedObject var reportStore: MetricsReportStore
+    var onRecordRequested: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var pageAccent: Color {
@@ -39,19 +40,37 @@ struct MetricsView: View {
                     .padding(.horizontal, FormaSpacing.screenGutter)
                     .padding(.bottom, FormaSpacing.md)
 
+                if reportStore.payload != nil,
+                   reportStore.isWaitingForReport || reportStore.isLoading {
+                    FormaRefreshStatus(
+                        message: reportStore.statusMessage
+                    )
+                    .padding(.horizontal, FormaSpacing.screenGutter)
+                    .padding(.bottom, FormaSpacing.md)
+                    .transition(.opacity.combined(with: .offset(y: -6)))
+                }
+
                 // Tab body swaps without a parent animation transaction so Charts
                 // don't interpolate on selection. Gauges still run their own
                 // appear sweep via withAnimation inside FormaSemicircularGauge.
                 Group {
-                    if reportStore.isWaitingForReport || (reportStore.isLoading && reportStore.payload == nil) {
+                    if reportStore.payload == nil,
+                       reportStore.isWaitingForReport || reportStore.isLoading {
                         MetricsSkeletonView(status: reportStore.statusMessage)
-                    } else if let errorMessage = reportStore.errorMessage {
+                    } else if reportStore.payload == nil,
+                              let errorMessage = reportStore.errorMessage {
                         FormaStatusView(
                             title: "Report unavailable",
                             message: errorMessage,
                             systemImage: "exclamationmark.triangle.fill",
-                            tint: .formaCoral
-                        )
+                            tint: .formaCoral,
+                            actionTitle: "Try Again",
+                            actionTint: .sleekAccent
+                        ) {
+                            Task {
+                                await reportStore.refreshReport()
+                            }
+                        }
                     } else if let payload = reportStore.payload {
                         switch selectedTab {
                         case .insights:
@@ -68,11 +87,17 @@ struct MetricsView: View {
                             title: "No report yet",
                             message: "Record a measurement to generate your first report.",
                             systemImage: "doc.text.magnifyingglass",
-                            tint: .secondary
+                            tint: .sleekAccent,
+                            actionTitle: "Record Measurement",
+                            actionTint: .sleekAccent,
+                            action: onRecordRequested
                         )
+                        .formaEntrance()
                     }
                 }
             }
+            .frame(maxWidth: 760)
+            .frame(maxWidth: .infinity)
             .background(alignment: .top) {
                 // Keep the wash above the viewport during pull-to-refresh while
                 // still letting it leave naturally when the page scrolls up.
@@ -100,7 +125,11 @@ struct MetricsView: View {
         }
         .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
         .background(FormaBackground())
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: reportStore.payload != nil)
+        .animation(reduceMotion ? nil : FormaMotion.enter, value: reportStore.payload != nil)
+        .animation(
+            reduceMotion ? nil : FormaMotion.enter,
+            value: reportStore.isWaitingForReport || reportStore.isLoading
+        )
     }
 }
 
@@ -138,51 +167,26 @@ enum MetricsTab: String, CaseIterable {
 struct MetricsTabBar: View {
     @Binding var selectedTab: MetricsTab
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @EnvironmentObject private var soundPlayer: FormaSoundPlayer
     @Namespace private var selectionNamespace
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(MetricsTab.allCases.indices, id: \.self) { index in
-                let tab = MetricsTab.allCases[index]
-
-                Button {
-                    // Assign without withAnimation so parent chart content does not
-                    // inherit a spring transaction (that was the main-thread hang).
-                    // The bar's own .animation below still slides the underline.
-                    guard selectedTab != tab else { return }
-                    selectedTab = tab
-                    soundPlayer.play(FormaUIFeedback.selection)
-                } label: {
-                    VStack(spacing: 7) {
-                        Text(tab.title)
-                            .font(.subheadline.weight(selectedTab == tab ? .semibold : .medium))
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .foregroundStyle(selectedTab == tab ? .primary : .secondary)
-
-                        ZStack {
-                            Capsule()
-                                .fill(.clear)
-                                .frame(height: 2)
-
-                            if selectedTab == tab {
-                                Capsule()
-                                    .fill(Color.sleekAccent)
-                                    .frame(width: 24, height: 2)
-                                    .matchedGeometryEffect(id: "metrics-selection", in: selectionNamespace)
-                            }
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: FormaSpacing.xs) {
+                        ForEach(MetricsTab.allCases, id: \.self) { tab in
+                            tabButton(tab, expands: false)
                         }
                     }
-                    .padding(.horizontal, FormaSpacing.xxs)
-                    .frame(minWidth: 44, minHeight: 48)
-                    .contentShape(Rectangle())
+                    .padding(.vertical, FormaSpacing.xxs)
                 }
-                .buttonStyle(MetricTabButtonStyle())
-                .accessibilityValue(selectedTab == tab ? "Selected" : "")
-
-                if index < MetricsTab.allCases.count - 1 {
-                    Spacer(minLength: FormaSpacing.xxs)
+            } else {
+                HStack(spacing: FormaSpacing.xs) {
+                    ForEach(MetricsTab.allCases, id: \.self) { tab in
+                        tabButton(tab, expands: true)
+                    }
                 }
             }
         }
@@ -193,11 +197,52 @@ struct MetricsTabBar: View {
                 .frame(height: 0.5)
         }
         // Scope selection motion to the tab bar only — not the report body.
-        .animation(
-            reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86),
-            value: selectedTab
-        )
+        .animation(reduceMotion ? nil : FormaMotion.selection, value: selectedTab)
         .sensoryFeedback(FormaUIFeedback.selection.sensoryFeedback, trigger: selectedTab)
+    }
+
+    private func tabButton(_ tab: MetricsTab, expands: Bool) -> some View {
+        let isSelected = selectedTab == tab
+
+        return Button {
+            // Assign without withAnimation so chart content never inherits the
+            // selector's spring transaction.
+            guard !isSelected else { return }
+            selectedTab = tab
+            soundPlayer.play(FormaUIFeedback.selection)
+        } label: {
+            VStack(spacing: 7) {
+                Text(tab.title)
+                    .font(.subheadline.weight(isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+
+                ZStack {
+                    Capsule()
+                        .fill(.clear)
+                        .frame(height: 3)
+
+                    if isSelected {
+                        Capsule()
+                            .fill(Color.sleekAccent)
+                            .frame(width: 24, height: 3)
+                            .matchedGeometryEffect(id: "metrics-selection", in: selectionNamespace)
+                    }
+                }
+            }
+            .padding(.horizontal, FormaSpacing.sm)
+            .frame(maxWidth: expands ? .infinity : nil)
+            .frame(minWidth: 64, minHeight: 48)
+            .background(
+                isSelected ? Color.sleekAccent.opacity(0.10) : Color.clear,
+                in: RoundedRectangle(cornerRadius: FormaRadius.badge, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MetricTabButtonStyle())
+        .accessibilityLabel(tab.title)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -234,9 +279,9 @@ struct MetricsSkeletonView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            FormaSkeletonCard()
-            FormaSkeletonCard()
-            FormaSkeletonCard()
+            FormaSkeletonCard(kind: .gauge)
+            FormaSkeletonCard(kind: .narrative)
+            FormaSkeletonCard(kind: .chart)
         }
         .padding(.horizontal, FormaSpacing.screenGutter)
         .padding(.top, FormaSpacing.xxs)

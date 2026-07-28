@@ -73,6 +73,7 @@ struct FatTab: View {
                     comment: section.comment,
                     remark: section.remark
                 )
+                .formaEntrance()
             }
 
             if let section = payload?.fat["visceral_vs_subcutaneous"],
