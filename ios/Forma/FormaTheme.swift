@@ -40,12 +40,15 @@ enum FormaRadius {
 
 enum FormaTypography {
     static func wordmark(size: CGFloat) -> Font {
-        .system(size: size, weight: .medium, design: .default)
+        .custom("CormorantGaramond-Light", size: size, relativeTo: .title)
     }
 
     static let eyebrow = Font.caption.weight(.bold)
     static let cardTitle = Font.system(.headline, design: .rounded).weight(.semibold)
+    static let sectionTitle = Font.system(.title3, design: .rounded).weight(.semibold)
+    static let action = Font.subheadline.weight(.semibold)
     static let body = Font.subheadline
+    static let supporting = Font.caption
     static let metricSmall = Font.system(.title3, design: .rounded).weight(.bold)
     static let metric = Font.system(.largeTitle, design: .rounded).weight(.semibold)
     static let heroMetric = Font.system(.largeTitle, design: .rounded).weight(.semibold)
@@ -71,14 +74,51 @@ enum FormaMotion {
     static let selection = Animation.spring(duration: 0.22, bounce: 0.12)
 }
 
+enum FormaPressDepth {
+    case subtle
+    case standard
+    case prominent
+
+    fileprivate var scale: CGFloat {
+        switch self {
+        case .subtle: 0.985
+        case .standard: 0.97
+        case .prominent: 0.96
+        }
+    }
+
+    fileprivate var pressedOpacity: Double {
+        switch self {
+        case .subtle: 0.94
+        case .standard: 0.90
+        case .prominent: 0.92
+        }
+    }
+}
+
 struct FormaPressableButtonStyle: ButtonStyle {
+    var depth: FormaPressDepth = .standard
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-            .opacity(configuration.isPressed ? 0.9 : 1)
+            .scaleEffect(configuration.isPressed && isEnabled && !reduceMotion ? depth.scale : 1)
+            .opacity(isEnabled ? (configuration.isPressed ? depth.pressedOpacity : 1) : 0.48)
             .animation(reduceMotion ? nil : FormaMotion.press, value: configuration.isPressed)
+            .formaHoverEffect()
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func formaHoverEffect() -> some View {
+        #if os(iOS)
+        hoverEffect(.highlight)
+        #else
+        self
+        #endif
     }
 }
 
@@ -354,6 +394,8 @@ private struct FormaSurfaceModifier: ViewModifier {
     let padding: CGFloat?
     let tint: Color?
 
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: style.radius, style: .continuous)
 
@@ -366,7 +408,19 @@ private struct FormaSurfaceModifier: ViewModifier {
         }
         .background {
             if style == .inset || style == .chart {
-                shape.fill(style.fill)
+                shape
+                    .fill(style.fill)
+                    .overlay {
+                        if let tint {
+                            shape.fill(
+                                LinearGradient(
+                                    colors: [tint.opacity(0.08), tint.opacity(0.02), .clear],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                        }
+                    }
             } else {
                 let base = shape
                     .fill(style.fill)
@@ -426,7 +480,7 @@ private struct FormaSurfaceModifier: ViewModifier {
                     startPoint: .top,
                     endPoint: .bottom
                 ),
-                lineWidth: 0.5
+                lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
             )
         }
     }
@@ -642,7 +696,7 @@ struct FormaStatusView: View {
         .padding(.horizontal, FormaSpacing.xl)
         .padding(.vertical, 80)
         .accessibilityElement(children: .contain)
-        .sensoryFeedback(FormaUIFeedback.softImpact.sensoryFeedback, trigger: actionFeedbackNonce)
+        .formaFeedback(.softImpact, trigger: actionFeedbackNonce)
     }
 }
 
@@ -653,6 +707,8 @@ struct FormaFeaturePreviewView: View {
     let message: String
     let systemImage: String
     let tint: Color
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: FormaSpacing.xl) {
@@ -668,7 +724,7 @@ struct FormaFeaturePreviewView: View {
                 Image(systemName: systemImage)
                     .font(.system(.largeTitle, design: .rounded, weight: .semibold))
                     .foregroundStyle(tint.gradient)
-                    .symbolEffect(.appear, options: .nonRepeating)
+                    .symbolEffect(.appear, options: .nonRepeating, isActive: !reduceMotion)
             }
             .accessibilityHidden(true)
 
@@ -695,6 +751,75 @@ struct FormaFeaturePreviewView: View {
     }
 }
 
+enum FormaLoadingIndicatorSize: Equatable {
+    case compact
+    case medium
+
+    fileprivate var frame: CGSize {
+        switch self {
+        case .compact: CGSize(width: 22, height: 28)
+        case .medium: CGSize(width: 42, height: 54)
+        }
+    }
+
+    fileprivate var lineWidth: CGFloat {
+        switch self {
+        case .compact: 1.8
+        case .medium: 2.8
+        }
+    }
+}
+
+/// A small animated expression of the Forma mark used consistently for loading.
+/// Loading copy belongs to the parent so VoiceOver hears one useful status.
+struct FormaLoadingIndicator: View {
+    var size: FormaLoadingIndicatorSize = .compact
+    var tint: Color = .sleekAccent
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isAnimating = false
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { index in
+                FormaMarkContour(index: index)
+                    .trim(from: 0, to: reduceMotion || isAnimating ? 1 : 0.22)
+                    .stroke(
+                        LinearGradient(
+                            colors: [Color.formaCyan, tint, Color.formaTeal],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        style: StrokeStyle(
+                            lineWidth: index == 0 ? size.lineWidth : size.lineWidth * 0.72,
+                            lineCap: .round,
+                            lineJoin: .round
+                        )
+                    )
+                    .opacity(reduceMotion ? 0.88 : (isAnimating ? 1 : 0.38))
+                    .animation(
+                        reduceMotion
+                            ? nil
+                            : .timingCurve(0.23, 1, 0.32, 1, duration: 0.82)
+                                .repeatForever(autoreverses: true)
+                                .delay(Double(index) * 0.09),
+                        value: isAnimating
+                    )
+            }
+        }
+        .frame(width: size.frame.width, height: size.frame.height)
+        .shadow(color: tint.opacity(reduceMotion ? 0.12 : 0.28), radius: size == .compact ? 4 : 8)
+        .accessibilityHidden(true)
+        .onAppear {
+            guard !reduceMotion else { return }
+            isAnimating = true
+        }
+        .onChange(of: reduceMotion) { _, shouldReduceMotion in
+            isAnimating = !shouldReduceMotion
+        }
+    }
+}
+
 /// Lightweight status shown above cached report content while a newer report is
 /// loading. Existing content remains readable and interactive.
 struct FormaRefreshStatus: View {
@@ -702,12 +827,10 @@ struct FormaRefreshStatus: View {
 
     var body: some View {
         HStack(spacing: FormaSpacing.sm) {
-            ProgressView()
-                .controlSize(.small)
-                .tint(.sleekAccent)
+            FormaLoadingIndicator()
 
             Text(message)
-                .font(.caption.weight(.medium))
+                .font(FormaTypography.supporting.weight(.medium))
                 .foregroundStyle(.secondary)
 
             Spacer(minLength: 0)
@@ -769,12 +892,8 @@ struct FormaLaunchReveal: ViewModifier {
             if reduceMotion {
                 revealsMark = true
                 revealsWordmark = true
-                try? await Task.sleep(for: .milliseconds(180))
                 revealsContent = true
-                withAnimation(.easeOut(duration: 0.2)) {
-                    exitsOverlay = true
-                }
-                try? await Task.sleep(for: .milliseconds(200))
+                exitsOverlay = true
                 isShowingOverlay = false
                 return
             }
@@ -1290,8 +1409,7 @@ struct FormaSkeletonCard: View {
         }
         .formaSurface(.card, padding: FormaSpacing.cardInset)
         .shimmering()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Loading report content")
+        .accessibilityHidden(true)
     }
 
     @ViewBuilder
@@ -1425,6 +1543,14 @@ enum FormaChartStyle {
         guard let selection else { return dates.max() }
         return dates.min { abs($0.timeIntervalSince(selection)) < abs($1.timeIntervalSince(selection)) }
     }
+
+    static func steppedDate(from current: Date?, offset: Int, in dates: [Date]) -> Date? {
+        let samples = Array(Set(dates)).sorted()
+        guard !samples.isEmpty else { return nil }
+        let currentDate = nearestDate(to: current, in: samples) ?? samples[samples.count - 1]
+        let currentIndex = samples.firstIndex(of: currentDate) ?? (samples.count - 1)
+        return samples[min(max(currentIndex + offset, 0), samples.count - 1)]
+    }
 }
 
 struct FormaChartSummaryItem: Identifiable {
@@ -1446,43 +1572,61 @@ struct FormaChartFooter: View {
     let items: [FormaChartSummaryItem]
     var prefix = "Latest"
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(spacing: FormaSpacing.sm) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(prefix)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .textCase(.uppercase)
-                    .tracking(0.4)
-
-                if let date {
-                    Text(date.formatted(.dateTime.month(.abbreviated).day()))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: FormaSpacing.xs) {
+                    dateLabel
+                    itemScroll
                 }
-            }
-            .frame(width: 58, alignment: .leading)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: FormaSpacing.xs) {
-                    ForEach(items) { item in
-                        HStack(spacing: 5) {
-                            Circle().fill(item.color).frame(width: 6, height: 6)
-                            Text(item.label)
-                                .foregroundStyle(.secondary)
-                            Text(item.value)
-                                .foregroundStyle(.primary)
-                                .fontWeight(.semibold)
-                        }
-                        .font(.caption)
-                        .padding(.horizontal, 9)
-                        .frame(height: 30)
-                        .background(Color.appSubtleFill, in: Capsule())
-                    }
+            } else {
+                HStack(spacing: FormaSpacing.sm) {
+                    dateLabel
+                        .frame(width: 58, alignment: .leading)
+                    itemScroll
                 }
             }
         }
         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+    }
+
+    private var dateLabel: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(prefix)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .textCase(.uppercase)
+                .tracking(0.4)
+
+            if let date {
+                Text(date.formatted(.dateTime.month(.abbreviated).day()))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+            }
+        }
+    }
+
+    private var itemScroll: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: FormaSpacing.xs) {
+                ForEach(items) { item in
+                    HStack(spacing: 5) {
+                        Circle().fill(item.color).frame(width: 6, height: 6)
+                        Text(item.label)
+                            .foregroundStyle(.secondary)
+                        Text(item.value)
+                            .foregroundStyle(.primary)
+                            .fontWeight(.semibold)
+                    }
+                    .font(.caption)
+                    .padding(.horizontal, 9)
+                    .frame(minHeight: 30)
+                    .background(Color.appSubtleFill, in: Capsule())
+                }
+            }
+        }
     }
 }
 
@@ -1530,6 +1674,8 @@ struct FormaTimeSeriesChart: View {
     var height = FormaChartStyle.compactHeight
 
     @State private var selectedDate: Date?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage(FormaFeedbackPreferences.hapticsKey) private var hapticsEnabled = true
 
     /// Prefer caller-provided order; only sort when samples arrive out of order.
     private var data: [FormaChartPoint] {
@@ -1551,7 +1697,8 @@ struct FormaTimeSeriesChart: View {
     }
 
     private var dates: [Date] { data.map(\.date) }
-    private var activeDate: Date? { FormaChartStyle.nearestDate(to: selectedDate, in: dates) }
+    private var sampleDates: [Date] { Array(Set(dates)).sorted() }
+    private var activeDate: Date? { FormaChartStyle.nearestDate(to: selectedDate, in: sampleDates) }
     private var domain: ClosedRange<Double> {
         FormaChartStyle.paddedDomain(values: data.map(\.value), includeZero: includeZero)
     }
@@ -1583,6 +1730,14 @@ struct FormaTimeSeriesChart: View {
         .joined(separator: ". ")
     }
 
+    private var accessibilityActiveSummary: String {
+        guard let activeDate else { return accessibilitySummary }
+        let values = items(on: activeDate)
+            .map { "\($0.metric) \(formatted($0.value))" }
+            .joined(separator: ", ")
+        return "\(activeDate.formatted(.dateTime.month(.wide).day().year())), \(values)"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: FormaSpacing.sm) {
             if data.isEmpty {
@@ -1593,7 +1748,7 @@ struct FormaTimeSeriesChart: View {
                 summaryFooter
             } else {
                 chart
-                    .frame(height: height)
+                    .frame(height: dynamicTypeSize.isAccessibilitySize ? max(height, FormaChartStyle.expandedHeight) : height)
                     .padding(.bottom, FormaSpacing.xxs)
 
                 FormaDivider()
@@ -1610,6 +1765,9 @@ struct FormaTimeSeriesChart: View {
             if newPoints.isEmpty || !newPoints.contains(where: { $0.date == selectedDate }) {
                 self.selectedDate = nil
             }
+        }
+        .sensoryFeedback(.selection, trigger: activeDate) { oldDate, newDate in
+            hapticsEnabled && newDate != nil && oldDate != newDate
         }
     }
 
@@ -1645,7 +1803,7 @@ struct FormaTimeSeriesChart: View {
                             Circle()
                                 .fill(item.color)
                                 .frame(width: FormaChartStyle.endpointSize, height: FormaChartStyle.endpointSize)
-                                .overlay(Circle().stroke(Color.appTertiaryBackground, lineWidth: 2))
+                                .overlay(Circle().stroke(Color.appChartBackground, lineWidth: 2))
                         }
                 }
             }
@@ -1691,7 +1849,11 @@ struct FormaTimeSeriesChart: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Measurement trend chart")
-        .accessibilityValue(accessibilitySummary)
+        .accessibilityValue(selectedDate == nil ? accessibilitySummary : accessibilityActiveSummary)
+        .accessibilityHint("Swipe up or down to inspect readings by date")
+        .accessibilityAdjustableAction { direction in
+            adjustSelection(direction)
+        }
     }
 
     private var summaryFooter: some View {
@@ -1714,6 +1876,17 @@ struct FormaTimeSeriesChart: View {
     private func items(on date: Date) -> [FormaChartPoint] {
         let calendar = Calendar.current
         return data.filter { calendar.isDate($0.date, inSameDayAs: date) }
+    }
+
+    private func adjustSelection(_ direction: AccessibilityAdjustmentDirection) {
+        switch direction {
+        case .increment:
+            selectedDate = FormaChartStyle.steppedDate(from: activeDate, offset: 1, in: sampleDates)
+        case .decrement:
+            selectedDate = FormaChartStyle.steppedDate(from: activeDate, offset: -1, in: sampleDates)
+        @unknown default:
+            break
+        }
     }
 
     private func formatted(_ value: Double) -> String {

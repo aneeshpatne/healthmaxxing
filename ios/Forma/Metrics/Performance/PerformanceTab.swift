@@ -72,7 +72,8 @@ struct PerformanceTab: View {
     }
 
     var body: some View {
-        VStack(spacing: FormaSpacing.cardGap) {
+        // Match Fat and Muscle: only build performance cards as they approach the viewport.
+        LazyVStack(spacing: FormaSpacing.cardGap) {
             if payload?.performance.isEmpty != false {
                 MetricsUnavailableContent(message: "Performance report data is unavailable.")
             }
@@ -177,6 +178,7 @@ struct FFMIGaugeCard: View {
 
 struct CompositionMapCard: View {
     let section: InsightReportMetricSection?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var ffmi: Double {
         section?.nestedNumber("ffmi") ?? section?.nestedNumber("ffmiVal") ?? 19.52
@@ -190,6 +192,23 @@ struct CompositionMapCard: View {
         section?.remark?.text ?? section?.displayComment ?? ""
     }
 
+    private var compositionChart: some View {
+        CompositionQuadrantChart(ffmi: ffmi, fmi: fmi)
+            .formaSurface(.chart, padding: nil)
+    }
+
+    private var positionMarker: some View {
+        Circle()
+            .fill(Color.performancePrimary.gradient)
+            .frame(width: 10, height: 10)
+    }
+
+    private var positionText: some View {
+        Text("Your Position (\(String(format: "%.2f", ffmi)), \(String(format: "%.2f", fmi)))")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.primary)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: FormaSpacing.cardContent) {
             FormaCardHeader(
@@ -197,36 +216,57 @@ struct CompositionMapCard: View {
                 subtitle: section?.title ?? "Compare your Fat-Free Mass Index (muscle) against your Fat Mass Index (fat)."
             )
 
-            // Main chart area with labeled axes
-            VStack(spacing: FormaSpacing.xs) {
-                HStack(spacing: 12) {
+            // Main chart area with labeled axes. At accessibility sizes the
+            // vertical label moves above the plot instead of clipping beside it.
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: FormaSpacing.xs) {
                     Text("FMI — Fat Mass")
                         .font(FormaTypography.chartLabel)
                         .foregroundStyle(.secondary)
-                        .fixedSize()
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                    CompositionQuadrantChart(ffmi: ffmi, fmi: fmi)
+                    compositionChart
+
+                    Text("FFMI — Fat-Free Mass")
+                        .font(FormaTypography.chartLabel)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 }
+            } else {
+                VStack(spacing: FormaSpacing.xs) {
+                    HStack(spacing: 12) {
+                        Text("FMI — Fat Mass")
+                            .font(FormaTypography.chartLabel)
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 16)
 
-                Text("FFMI — Fat-Free Mass")
-                    .font(FormaTypography.chartLabel)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.leading, 28)
+                        compositionChart
+                    }
+
+                    Text("FFMI — Fat-Free Mass")
+                        .font(FormaTypography.chartLabel)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.leading, 28)
+                }
             }
-            .padding(.vertical, FormaSpacing.xs)
 
             // Legend
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(Color.performancePrimary.gradient)
-                    .frame(width: 10, height: 10)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: FormaSpacing.xs) {
+                    positionMarker
+                    positionText
+                        .lineLimit(1)
+                }
+                .fixedSize(horizontal: true, vertical: false)
 
-                Text("Your Position (\(String(format: "%.2f", ffmi)), \(String(format: "%.2f", fmi)))")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.primary)
+                VStack(spacing: FormaSpacing.xs) {
+                    positionMarker
+                    positionText
+                        .multilineTextAlignment(.center)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .center)
 
@@ -334,7 +374,7 @@ struct CompositionQuadrantChart: View {
                     .fill(Color.performancePrimary.gradient)
                     .frame(width: 14, height: 14)
                     .overlay(
-                        Circle().stroke(Color.appMarkerRing, lineWidth: 2)
+                        Circle().stroke(Color.appChartBackground, lineWidth: 2)
                     )
                     .shadow(color: Color.performancePrimary.opacity(0.4), radius: 4, x: 0, y: 2)
                     .position(x: userX, y: userY)
@@ -342,10 +382,6 @@ struct CompositionQuadrantChart: View {
         }
         .frame(height: 220)
         .clipShape(RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Body composition quadrant")
         .accessibilityValue("Your position is FFMI \(String(format: "%.1f", ffmi)), FMI \(String(format: "%.1f", fmi))")
@@ -356,6 +392,7 @@ struct CompositionQuadrantChart: View {
 
 struct BodyCompositionFlowCard: View {
     let section: InsightReportMetricSection?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var leanMass: Double {
         section?.nestedNumber("leanMassKg") ?? section?.nestedNumber("leanMass") ?? 0
@@ -385,6 +422,55 @@ struct BodyCompositionFlowCard: View {
         section?.remark?.text ?? section?.displayComment ?? ""
     }
 
+    private func flowNode(
+        title: String,
+        value: Double,
+        percentage: Double? = nil,
+        tint: Color,
+        width: CGFloat? = nil,
+        height: CGFloat? = nil
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(tint)
+
+            if let percentage {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 4) {
+                        flowValue(value)
+                        flowPercentage(percentage)
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        flowValue(value)
+                        flowPercentage(percentage)
+                    }
+                }
+            } else {
+                flowValue(value)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, height == nil ? FormaSpacing.md : 0)
+        .frame(width: width, height: height, alignment: .leading)
+        .frame(maxWidth: width == nil ? .infinity : nil, alignment: .leading)
+        .formaSurface(.inset, padding: nil, tint: tint)
+    }
+
+    private func flowValue(_ value: Double) -> some View {
+        Text(String(format: "%.2f kg", value))
+            .font(.subheadline.weight(.bold))
+            .foregroundStyle(.primary)
+    }
+
+    private func flowPercentage(_ percentage: Double) -> some View {
+        Text(String(format: "%.1f%%", percentage))
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: FormaSpacing.cardContent) {
             FormaCardHeader(
@@ -392,136 +478,126 @@ struct BodyCompositionFlowCard: View {
                 subtitle: section?.title ?? "Breaks down your total body weight into lean mass and fat mass."
             )
 
-            // Flow Diagram
-            HStack(spacing: 0) {
-                // Source Node
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Total Weight")
-                        .font(.caption2.weight(.semibold))
+            // Flow Diagram. Preserve the Sankey at standard sizes, then stack
+            // the same source and destination values for accessibility sizes.
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: FormaSpacing.md) {
+                    flowNode(
+                        title: "Total Weight",
+                        value: totalWeight,
+                        tint: Color.performancePrimary
+                    )
+
+                    Image(systemName: "arrow.down")
+                        .font(.headline.weight(.bold))
                         .foregroundStyle(Color.performancePrimary)
-                    Text(String(format: "%.2f kg", totalWeight))
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(.primary)
-                }
-                .padding(.horizontal, 14)
-                .frame(width: 115, height: 76, alignment: .leading)
-                .background(Color.performancePrimary.opacity(0.12), in: RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous)
-                        .stroke(Color.performancePrimary.opacity(0.2), lineWidth: 0.5)
-                )
-                .zIndex(1)
+                        .accessibilityHidden(true)
 
-                // Flow Connections
-                GeometryReader { geo in
-                    let h = geo.size.height
-
-                    let boxHeight: CGFloat = 76
-                    let spacing: CGFloat = 12
-
-                    // Left Node is vertically centered in the HStack
-                    let centerY = h / 2
-                    let leftTopY = centerY - (boxHeight / 2)
-                    let leftBottomY = centerY + (boxHeight / 2)
-                    let leanRatio = totalWeight > 0 ? CGFloat(leanMass / totalWeight) : 0.75
-                    let leftSplitY = leftTopY + (boxHeight * leanRatio)
-
-                    // Right nodes are stacked with 12pt spacing and exactly span 0...164
-                    let rightLeanTopY: CGFloat = 0
-                    let rightLeanBottomY = boxHeight
-
-                    let rightFatTopY = boxHeight + spacing
-                    let rightFatBottomY = rightFatTopY + boxHeight
-
-                    ZStack {
-                        // Lean Flow Ribbon
-                        SankeyRibbon(
-                            startY1: leftTopY,
-                            startY2: leftSplitY,
-                            endY1: rightLeanTopY,
-                            endY2: rightLeanBottomY
-                        )
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.performancePrimary.opacity(0.4), Color.performancePositive.opacity(0.5)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-
-                        // Fat Flow Ribbon
-                        SankeyRibbon(
-                            startY1: leftSplitY + 1.5, // Tiny gap for visual separation
-                            startY2: leftBottomY,
-                            endY1: rightFatTopY,
-                            endY2: rightFatBottomY
-                        )
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.performancePrimary.opacity(0.4), Color.performanceNegative.opacity(0.5)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                    }
-                }
-                .frame(width: 60)
-
-                // Destination Nodes
-                VStack(spacing: 12) {
-                    // Lean Mass
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Lean Mass")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(Color.performancePositive)
-
-                        HStack(spacing: 4) {
-                            Text(String(format: "%.2f kg", leanMass))
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(.primary)
-                            Text(String(format: "%.1f%%", leanPct))
-                                .font(.caption2.weight(.medium))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.horizontal, 14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(height: 76)
-                    .background(Color.performancePositive.opacity(0.12), in: RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous)
-                            .stroke(Color.performancePositive.opacity(0.2), lineWidth: 0.5)
+                    flowNode(
+                        title: "Lean Mass",
+                        value: leanMass,
+                        percentage: leanPct,
+                        tint: Color.performancePositive
                     )
 
-                    // Fat Mass
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Fat Mass")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(Color.performanceNegative)
+                    flowNode(
+                        title: "Fat Mass",
+                        value: fatMass,
+                        percentage: fatPct,
+                        tint: Color.performanceNegative
+                    )
+                }
+                .padding(.top, FormaSpacing.xs)
+            } else {
+                HStack(spacing: 0) {
+                    flowNode(
+                        title: "Total Weight",
+                        value: totalWeight,
+                        tint: Color.performancePrimary,
+                        width: 115,
+                        height: 76
+                    )
+                    .zIndex(1)
 
-                        HStack(spacing: 4) {
-                            Text(String(format: "%.2f kg", fatMass))
-                                .font(.subheadline.weight(.bold))
-                                .foregroundStyle(.primary)
-                            Text(String(format: "%.1f%%", fatPct))
-                                .font(.caption2.weight(.medium))
-                                .foregroundStyle(.secondary)
+                    // Flow Connections
+                    GeometryReader { geo in
+                        let h = geo.size.height
+
+                        let boxHeight: CGFloat = 76
+                        let spacing: CGFloat = 12
+
+                        // Left Node is vertically centered in the HStack
+                        let centerY = h / 2
+                        let leftTopY = centerY - (boxHeight / 2)
+                        let leftBottomY = centerY + (boxHeight / 2)
+                        let leanRatio = totalWeight > 0 ? CGFloat(leanMass / totalWeight) : 0.75
+                        let leftSplitY = leftTopY + (boxHeight * leanRatio)
+
+                        // Right nodes are stacked with 12pt spacing and exactly span 0...164
+                        let rightLeanTopY: CGFloat = 0
+                        let rightLeanBottomY = boxHeight
+
+                        let rightFatTopY = boxHeight + spacing
+                        let rightFatBottomY = rightFatTopY + boxHeight
+
+                        ZStack {
+                            // Lean Flow Ribbon
+                            SankeyRibbon(
+                                startY1: leftTopY,
+                                startY2: leftSplitY,
+                                endY1: rightLeanTopY,
+                                endY2: rightLeanBottomY
+                            )
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.performancePrimary.opacity(0.4), Color.performancePositive.opacity(0.5)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+
+                            // Fat Flow Ribbon
+                            SankeyRibbon(
+                                startY1: leftSplitY + 1.5, // Tiny gap for visual separation
+                                startY2: leftBottomY,
+                                endY1: rightFatTopY,
+                                endY2: rightFatBottomY
+                            )
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.performancePrimary.opacity(0.4), Color.performanceNegative.opacity(0.5)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
                         }
                     }
-                    .padding(.horizontal, 14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(height: 76)
-                    .background(Color.performanceNegative.opacity(0.12), in: RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous)
-                            .stroke(Color.performanceNegative.opacity(0.2), lineWidth: 0.5)
-                    )
+                    .frame(width: 60)
+
+                    // Destination Nodes
+                    VStack(spacing: 12) {
+                        flowNode(
+                            title: "Lean Mass",
+                            value: leanMass,
+                            percentage: leanPct,
+                            tint: Color.performancePositive,
+                            height: 76
+                        )
+
+                        flowNode(
+                            title: "Fat Mass",
+                            value: fatMass,
+                            percentage: fatPct,
+                            tint: Color.performanceNegative,
+                            height: 76
+                        )
+                    }
+                    .frame(height: 164)
+                    .zIndex(1)
                 }
                 .frame(height: 164)
-                .zIndex(1)
+                .padding(.top, FormaSpacing.xs)
             }
-            .frame(height: 164)
-            .padding(.top, FormaSpacing.xs)
 
             if !calloutText.isEmpty {
                 FormaDivider()
@@ -618,9 +694,6 @@ struct CompositionTrendsCard: View {
                 unit: "kg",
                 includeZero: true
             )
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Composition trends chart")
-            .accessibilityValue("Shows lean mass and fat mass changes over time")
 
             if !calloutText.isEmpty {
                 FormaDivider()
@@ -811,15 +884,7 @@ struct RecompVectorPlotCard: View {
                         Spacer()
                     }
                 }
-                .padding(FormaSpacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous)
-                        .fill(Color.appChartBackground)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous)
-                        .stroke(Color.appSeparator, lineWidth: 0.5)
-                )
+                .formaSurface(.chart, padding: FormaSpacing.md)
             }
 
             // Weight Summary
@@ -861,29 +926,33 @@ private struct RecompWeightSummary: View {
     let targetWeight: Double
 
     var body: some View {
-        HStack {
-            Spacer()
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: FormaSpacing.md) {
+                weight(label: "Current Weight", value: String(format: "%.1f kg", currentWeight))
+                    .fixedSize(horizontal: true, vertical: false)
 
-            weight(label: "Current Weight", value: String(format: "%.1f kg", currentWeight))
-            Spacer()
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color.performancePositive)
+                    .accessibilityHidden(true)
 
-            Image(systemName: "arrow.right")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Color.performancePositive)
+                weight(label: "Target Weight", value: String(format: "%.1f kg", targetWeight))
+                    .fixedSize(horizontal: true, vertical: false)
+            }
 
-            Spacer()
-            weight(label: "Target Weight", value: String(format: "%.1f kg", targetWeight))
-            Spacer()
+            VStack(spacing: FormaSpacing.md) {
+                weight(label: "Current Weight", value: String(format: "%.1f kg", currentWeight))
+
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color.performancePositive)
+                    .accessibilityHidden(true)
+
+                weight(label: "Target Weight", value: String(format: "%.1f kg", targetWeight))
+            }
         }
-        .padding(.vertical, FormaSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous)
-                .fill(Color.performancePositive.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous)
-                .stroke(Color.performancePositive.opacity(0.2), lineWidth: 0.5)
-        )
+        .frame(maxWidth: .infinity)
+        .formaSurface(.inset, padding: FormaSpacing.md, tint: Color.performancePositive)
     }
 
     private func weight(label: String, value: String) -> some View {
@@ -925,7 +994,7 @@ private struct RecompArrowMark: ChartContent {
                 Image(systemName: "arrow.left")
                     .font(.system(size: 16, weight: .heavy))
                     .foregroundStyle(Color.performancePositive)
-                    .background(Circle().fill(Color.appTertiaryBackground).frame(width: 20, height: 20))
+                    .background(Circle().fill(Color.appChartBackground).frame(width: 20, height: 20))
             }
     }
 }
@@ -958,7 +1027,7 @@ private struct RecompCurrentMark: ChartContent {
                 Circle()
                     .fill(Color.performancePrimary)
                     .frame(width: 12, height: 12)
-                    .overlay(Circle().stroke(Color.appMarkerRing, lineWidth: 2))
+                    .overlay(Circle().stroke(Color.appChartBackground, lineWidth: 2))
                     .shadow(color: Color.performancePrimary.opacity(0.3), radius: 3)
             }
             .annotation(position: .topTrailing) {
@@ -981,7 +1050,7 @@ private struct RecompTargetMark: ChartContent {
                 Circle()
                     .fill(Color.performancePositive)
                     .frame(width: 12, height: 12)
-                    .overlay(Circle().stroke(Color.appMarkerRing, lineWidth: 2))
+                    .overlay(Circle().stroke(Color.appChartBackground, lineWidth: 2))
                     .shadow(color: Color.performancePositive.opacity(0.3), radius: 3)
             }
             .annotation(position: .topLeading) {

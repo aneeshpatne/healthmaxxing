@@ -363,6 +363,8 @@ struct VisceralSubcutaneousDonutChart: View {
 }
 
 struct VisceralSubcutaneousCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let visceralFat: Double
     let subcutaneousFat: Double
     /// Unit label for visceral (server now sends index deltas as `idx`, legacy was `kg`).
@@ -393,67 +395,103 @@ struct VisceralSubcutaneousCard: View {
         String(format: "%.0f%%", subcutaneousFraction * 100)
     }
 
+    private func comparisonMetric(
+        title: String,
+        value: Double,
+        unit: String,
+        percentage: String,
+        tint: Color
+    ) -> some View {
+        VStack(alignment: .center, spacing: 2) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.center)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 1) {
+                    metricValue(value, tint: tint)
+                    metricUnit(unit)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+
+                VStack(spacing: 1) {
+                    metricValue(value, tint: tint)
+                    metricUnit(unit)
+                }
+            }
+
+            Text(percentage)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func metricValue(_ value: Double, tint: Color) -> some View {
+        Text(String(format: "%.1f", value))
+            .font(FormaTypography.metricSmall)
+            .foregroundStyle(tint)
+    }
+
+    private func metricUnit(_ unit: String) -> some View {
+        Text(unit)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: FormaSpacing.cardContent) {
             FormaCardHeader("Visceral vs Subcutaneous", subtitle: comment)
 
             // Comparison panel
-            HStack(spacing: FormaSpacing.md) {
-                // Left Metric: Visceral Fat
-                VStack(alignment: .center, spacing: 2) {
-                    Text(visceralUnit == "idx" ? "Visceral Index" : "Visceral Fat")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: FormaSpacing.md) {
+                        comparisonMetric(
+                            title: visceralUnit == "idx" ? "Visceral Index" : "Visceral Fat",
+                            value: visceralFat,
+                            unit: visceralUnit,
+                            percentage: visceralPercentageText,
+                            tint: Color.formaAmber
+                        )
 
-                    HStack(alignment: .firstTextBaseline, spacing: 1) {
-                        Text(String(format: "%.1f", visceralFat))
-                            .font(FormaTypography.metricSmall)
-                            .foregroundStyle(Color.formaAmber)
-                        Text(visceralUnit)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
+                        VisceralSubcutaneousDonutChart(visceralFraction: visceralFraction)
+
+                        comparisonMetric(
+                            title: "Subcutaneous Fat",
+                            value: subcutaneousFat,
+                            unit: "kg",
+                            percentage: subcutaneousPercentageText,
+                            tint: Color.formaCyan
+                        )
                     }
+                } else {
+                    HStack(spacing: FormaSpacing.md) {
+                        comparisonMetric(
+                            title: visceralUnit == "idx" ? "Visceral Index" : "Visceral Fat",
+                            value: visceralFat,
+                            unit: visceralUnit,
+                            percentage: visceralPercentageText,
+                            tint: Color.formaAmber
+                        )
 
-                    Text(visceralPercentageText)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
+                        VisceralSubcutaneousDonutChart(visceralFraction: visceralFraction)
 
-                // Center Donut Chart
-                VisceralSubcutaneousDonutChart(visceralFraction: visceralFraction)
-
-                // Right Metric: Subcutaneous Fat
-                VStack(alignment: .center, spacing: 2) {
-                    Text("Subcutaneous Fat")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    HStack(alignment: .firstTextBaseline, spacing: 1) {
-                        Text(String(format: "%.1f", subcutaneousFat))
-                            .font(FormaTypography.metricSmall)
-                            .foregroundStyle(Color.formaCyan)
-                        Text("kg")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
+                        comparisonMetric(
+                            title: "Subcutaneous Fat",
+                            value: subcutaneousFat,
+                            unit: "kg",
+                            percentage: subcutaneousPercentageText,
+                            tint: Color.formaCyan
+                        )
                     }
-
-                    Text(subcutaneousPercentageText)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: .infinity)
             }
             .padding(.vertical, 12)
             .padding(.horizontal, FormaSpacing.xs)
-            .background(
-                RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous)
-                    .fill(Color.appChartBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous)
-                    .stroke(Color.appSeparator, lineWidth: 0.5)
-            )
+            .formaSurface(.chart, padding: nil)
 
             if let text = remark?.text ?? comment,
                !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

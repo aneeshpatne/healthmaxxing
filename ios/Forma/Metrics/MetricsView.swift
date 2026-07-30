@@ -168,7 +168,6 @@ struct MetricsTabBar: View {
     @Binding var selectedTab: MetricsTab
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
     @Namespace private var selectionNamespace
 
     var body: some View {
@@ -191,6 +190,15 @@ struct MetricsTabBar: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .focusable()
+        .onKeyPress(.leftArrow) {
+            moveSelection(by: -1)
+            return .handled
+        }
+        .onKeyPress(.rightArrow) {
+            moveSelection(by: 1)
+            return .handled
+        }
         .background(alignment: .bottom) {
             Rectangle()
                 .fill(Color.appSeparator)
@@ -198,7 +206,14 @@ struct MetricsTabBar: View {
         }
         // Scope selection motion to the tab bar only — not the report body.
         .animation(reduceMotion ? nil : FormaMotion.selection, value: selectedTab)
-        .sensoryFeedback(FormaUIFeedback.selection.sensoryFeedback, trigger: selectedTab)
+        .formaFeedback(.selection, trigger: selectedTab)
+        .accessibilityIdentifier("metrics-tab-bar")
+    }
+
+    private func moveSelection(by offset: Int) {
+        guard let currentIndex = MetricsTab.allCases.firstIndex(of: selectedTab) else { return }
+        let nextIndex = min(max(currentIndex + offset, 0), MetricsTab.allCases.count - 1)
+        selectedTab = MetricsTab.allCases[nextIndex]
     }
 
     private func tabButton(_ tab: MetricsTab, expands: Bool) -> some View {
@@ -209,7 +224,6 @@ struct MetricsTabBar: View {
             // selector's spring transaction.
             guard !isSelected else { return }
             selectedTab = tab
-            soundPlayer.play(FormaUIFeedback.selection)
         } label: {
             VStack(spacing: 7) {
                 Text(tab.title)
@@ -239,24 +253,11 @@ struct MetricsTabBar: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(MetricTabButtonStyle())
+        .buttonStyle(FormaPressableButtonStyle(depth: .standard))
+        .accessibilityIdentifier("metrics-tab-\(tab.rawValue)")
         .accessibilityLabel(tab.title)
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
-private struct MetricTabButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-            .opacity(configuration.isPressed ? 0.9 : 1)
-            .animation(
-                reduceMotion ? nil : .easeOut(duration: 0.12),
-                value: configuration.isPressed
-            )
     }
 }
 
@@ -268,9 +269,7 @@ struct MetricsSkeletonView: View {
         VStack(spacing: FormaSpacing.cardGap) {
             if let status, !status.isEmpty {
                 HStack(spacing: FormaSpacing.xs) {
-                    Image(systemName: "sparkles")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.sleekAccent)
+                    FormaLoadingIndicator()
 
                     Text(status)
                         .font(.caption.weight(.medium))
@@ -286,6 +285,9 @@ struct MetricsSkeletonView: View {
         .padding(.horizontal, FormaSpacing.screenGutter)
         .padding(.top, FormaSpacing.xxs)
         .padding(.bottom, FormaSpacing.xl)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(status.flatMap { $0.isEmpty ? nil : $0 } ?? "Preparing your report")
+        .accessibilityIdentifier("metrics-loading")
     }
 }
 

@@ -11,7 +11,8 @@ struct InsightsTab: View {
     }
 
     var body: some View {
-        VStack(spacing: FormaSpacing.cardGap) {
+        // Match Fat and Muscle: defer off-screen narrative cards and charts.
+        LazyVStack(spacing: FormaSpacing.cardGap) {
             if let factor = reportPayload?.factor {
                 PriorityFactorCard(factor: factor)
                     .formaEntrance(order: 0)
@@ -25,7 +26,6 @@ struct InsightsTab: View {
                     calloutIcon: overview.remark?.marker?.iconName ?? "flame.fill",
                     calloutTint: overview.remark?.marker?.color ?? .formaAmber
                 )
-                .formaEntrance(order: 1)
             }
 
             if let foundation = reportPayload?.foundation {
@@ -37,7 +37,6 @@ struct InsightsTab: View {
                     calloutIcon: foundation.remark?.marker?.iconName ?? "checkmark.circle.fill",
                     calloutTint: foundation.remark?.marker?.color ?? .formaTeal
                 )
-                .formaEntrance(order: 2)
             }
 
             if let momentum = reportPayload?.momentum {
