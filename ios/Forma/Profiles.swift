@@ -10,100 +10,30 @@ import ClerkKit
 
 struct Profiles: View {
     @Environment(Clerk.self) private var clerk
-    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
 
     @State private var profiles: [ClientProfile] = []
     @State private var errorMessage: String?
     @State private var isLoading = false
     @State private var isShowingAddProfile = false
     @State private var editingProfile: ClientProfile?
+    @State private var editFeedbackNonce = 0
 
     private let apiClient = APIClient()
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 16) {
-                if let errorMessage, !profiles.isEmpty {
-                    // Inline warning banner
-                    HStack(spacing: FormaSpacing.sm) {
-                        FormaIconTile(systemImage: "exclamationmark.triangle.fill", tint: .formaCoral)
-
-                        Text(errorMessage)
-                            .font(FormaTypography.body)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(nil)
-
-                        Spacer()
-
-                        Button {
-                            self.errorMessage = nil
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.tertiary)
-                        }
-                        .accessibilityLabel("Dismiss")
-                    }
-                    .formaSurface(.card, padding: FormaSpacing.md, tint: .formaCoral)
-                }
-
-                if let errorMessage, profiles.isEmpty {
-                    FormaStatusView(
-                        title: "Couldn't Load Profiles",
-                        message: errorMessage,
-                        systemImage: "exclamationmark.triangle.fill",
-                        tint: .formaCoral,
-                        actionTitle: "Try Again",
-                        actionTint: .sleekAccent
-                    ) {
-                        soundPlayer.play(FormaUIFeedback.softImpact)
-                        Task {
-                            await loadProfiles()
-                        }
-                    }
-                } else if isLoading && profiles.isEmpty {
-                    VStack(spacing: 16) {
-                        ForEach(0..<3, id: \.self) { _ in
-                            SkeletonCardView()
-                        }
-                    }
-                } else if profiles.isEmpty {
-                    FormaStatusView(
-                        title: "No Profiles Yet",
-                        message: "Create or connect a client profile to get started with tracking.",
-                        systemImage: "person.2.crop.horizontal",
-                        tint: .sleekAccent
-                    )
-                } else {
-                    ForEach(profiles) { profile in
-                        ProfileRow(profile: profile) {
-                            editingProfile = profile
-                        }
-                    }
-                }
-            }
-            .frame(maxWidth: 760)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, FormaSpacing.screenGutter)
-            .padding(.vertical, FormaSpacing.lg)
+            profileContent
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, FormaSpacing.screenGutter)
+                .padding(.vertical, FormaSpacing.lg)
         }
         .background(FormaBackground())
         .navigationTitle("Profiles")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    soundPlayer.play(FormaUIFeedback.softImpact)
-                    isShowingAddProfile = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 15, weight: .semibold))
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .accessibilityLabel("Add Profile")
-                .sensoryFeedback(FormaUIFeedback.softImpact.sensoryFeedback, trigger: isShowingAddProfile) { _, shown in
-                    shown
-                }
+                addProfileButton
             }
         }
         .sheet(isPresented: $isShowingAddProfile) {
@@ -126,9 +56,111 @@ struct Profiles: View {
         .task {
             await loadProfiles()
         }
-        .sensoryFeedback(FormaUIFeedback.error.sensoryFeedback, trigger: errorMessage) { _, message in
-            message != nil
+        .formaFeedback(FormaUIFeedback.softImpact, trigger: isShowingAddProfile) { wasShown, isShown in
+            !wasShown && isShown
         }
+        .formaFeedback(FormaUIFeedback.softImpact, trigger: editFeedbackNonce)
+        .formaFeedback(FormaUIFeedback.error, trigger: errorMessage) { oldMessage, newMessage in
+            oldMessage != newMessage && newMessage != nil
+        }
+    }
+
+    private var addProfileButton: some View {
+        Button {
+            isShowingAddProfile = true
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 15, weight: .semibold))
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel("Add Profile")
+        .accessibilityIdentifier("profiles-add-button")
+    }
+
+    @ViewBuilder
+    private var profileContent: some View {
+        LazyVStack(spacing: FormaSpacing.md) {
+            if let errorMessage, !profiles.isEmpty {
+                inlineErrorBanner(errorMessage)
+            }
+
+            if let errorMessage, profiles.isEmpty {
+                FormaStatusView(
+                    title: "Couldn't Load Profiles",
+                    message: errorMessage,
+                    systemImage: "exclamationmark.triangle.fill",
+                    tint: .formaCoral,
+                    actionTitle: "Try Again",
+                    actionTint: .sleekAccent
+                ) {
+                    Task {
+                        await loadProfiles()
+                    }
+                }
+            } else if isLoading && profiles.isEmpty {
+                loadingProfilesView
+            } else if profiles.isEmpty {
+                FormaStatusView(
+                    title: "No Profiles Yet",
+                    message: "Create or connect a client profile to get started with tracking.",
+                    systemImage: "person.2.crop.horizontal",
+                    tint: .sleekAccent
+                )
+            } else {
+                ForEach(profiles) { profile in
+                    ProfileRow(profile: profile, onEdit: {
+                        editProfile(profile)
+                    })
+                }
+            }
+        }
+    }
+
+    private var loadingProfilesView: some View {
+        VStack(spacing: FormaSpacing.cardGap) {
+            HStack(spacing: FormaSpacing.sm) {
+                FormaLoadingIndicator()
+                Text("Loading profiles")
+                    .font(FormaTypography.supporting.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+
+            ForEach(0..<3, id: \.self) { _ in
+                SkeletonCardView()
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading profiles")
+        .accessibilityIdentifier("profiles-loading")
+    }
+
+    private func inlineErrorBanner(_ message: String) -> some View {
+        HStack(spacing: FormaSpacing.sm) {
+            FormaIconTile(systemImage: "exclamationmark.triangle.fill", tint: .formaCoral)
+
+            Text(message)
+                .font(FormaTypography.body)
+                .foregroundStyle(.secondary)
+                .lineLimit(nil)
+
+            Spacer()
+
+            Button {
+                errorMessage = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.tertiary)
+            }
+            .accessibilityLabel("Dismiss")
+        }
+        .formaSurface(.card, padding: FormaSpacing.md, tint: .formaCoral)
+    }
+
+    private func editProfile(_ profile: ClientProfile) {
+        editFeedbackNonce += 1
+        editingProfile = profile
     }
 
     private func loadProfiles() async {
@@ -196,6 +228,14 @@ struct PrimaryProfileGate: View {
             switch loadState {
             case .checking:
                 VStack(spacing: FormaSpacing.cardGap) {
+                    HStack(spacing: FormaSpacing.sm) {
+                        FormaLoadingIndicator()
+                        Text("Checking your profile")
+                            .font(FormaTypography.supporting.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
+
                     FormaSkeletonCard()
                     FormaSkeletonCard()
                     FormaSkeletonCard()
@@ -203,6 +243,9 @@ struct PrimaryProfileGate: View {
                 .padding(.horizontal, FormaSpacing.screenGutter)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(FormaBackground())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Checking your profile")
+                .accessibilityIdentifier("primary-profile-loading")
 
             case .ready:
                 SwiftUIView()
@@ -210,19 +253,19 @@ struct PrimaryProfileGate: View {
             case .requiresProfile:
                 NavigationStack {
                     VStack(spacing: 0) {
-                        VStack(spacing: 8) {
+                        VStack(spacing: FormaSpacing.xs) {
                             Text("Create Your Primary Profile")
-                                .font(.title2.bold())
+                                .font(FormaTypography.sectionTitle)
                                 .foregroundStyle(.primary)
 
                             Text("A primary profile is required before using Forma.")
-                                .font(.subheadline)
+                                .font(FormaTypography.body)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 24)
-                        .padding(.bottom, 8)
+                        .padding(.horizontal, FormaSpacing.xl)
+                        .padding(.top, FormaSpacing.xl)
+                        .padding(.bottom, FormaSpacing.xs)
 
                         ProfileFormView(
                             apiClient: apiClient,
@@ -308,8 +351,8 @@ private struct ProfileFormView: View {
     @State private var isSaving = false
     @State private var saveSuccessNonce = 0
     @State private var saveErrorNonce = 0
+    @State private var cancelFeedbackNonce = 0
     @State private var hasEditedName = false
-    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
 
     init(
         apiClient: APIClient,
@@ -344,6 +387,17 @@ private struct ProfileFormView: View {
         profile != nil
     }
 
+    private var saveButtonTitle: String {
+        isEditing ? "Save" : "Add"
+    }
+
+    private var saveAccessibilityLabel: String {
+        if isSaving {
+            return "Saving profile"
+        }
+        return isEditing ? "Save profile" : "Add profile"
+    }
+
     private var profileImageError: String? {
         let trimmed = profileImage.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -354,6 +408,14 @@ private struct ProfileFormView: View {
             return "Enter a complete http or https image URL."
         }
         return nil
+    }
+
+    private var profileImageFooterMessage: String {
+        profileImageError ?? "Body-fat preference personalizes targets. The profile image is optional."
+    }
+
+    private var profileImageFooterColor: Color {
+        profileImageError == nil ? .secondary : .formaCoral
     }
 
     var body: some View {
@@ -368,19 +430,23 @@ private struct ProfileFormView: View {
                 Toggle("Primary profile", isOn: $isPrimary)
                     .disabled(requiresPrimaryProfile)
             } header: {
-                Text("Profile")
+                formSectionHeader("Profile")
             } footer: {
                 Text(
                     hasEditedName && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         ? "A profile name is required."
                         : "The primary profile receives new scale measurements by default."
                 )
+                .font(FormaTypography.supporting)
                 .foregroundStyle(
                     hasEditedName && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         ? Color.formaCoral
                         : Color.secondary
                 )
             }
+            .font(FormaTypography.body)
+            .listRowBackground(Color.appSecondaryBackground)
+            .listRowSeparatorTint(Color.appSeparator)
 
             Section {
                 Stepper(value: $heightCm, in: 80...260, step: 1) {
@@ -411,10 +477,14 @@ private struct ProfileFormView: View {
                     }
                 }
             } header: {
-                Text("Details")
+                formSectionHeader("Details")
             } footer: {
                 Text(peopleType.guidance)
+                    .font(FormaTypography.supporting)
             }
+            .font(FormaTypography.body)
+            .listRowBackground(Color.appSecondaryBackground)
+            .listRowSeparatorTint(Color.appSeparator)
 
             Section {
                 Stepper(value: $preferredBodyFatPct, in: 3...60, step: 1) {
@@ -432,11 +502,15 @@ private struct ProfileFormView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             } header: {
-                Text("Preferences")
+                formSectionHeader("Preferences")
             } footer: {
-                Text(profileImageError ?? "Body-fat preference personalizes targets. The profile image is optional.")
-                    .foregroundStyle(profileImageError == nil ? Color.secondary : Color.formaCoral)
+                Text(profileImageFooterMessage)
+                    .font(FormaTypography.supporting)
+                    .foregroundStyle(profileImageFooterColor)
             }
+            .font(FormaTypography.body)
+            .listRowBackground(Color.appSecondaryBackground)
+            .listRowSeparatorTint(Color.appSeparator)
 
             if let errorMessage {
                 Section {
@@ -446,11 +520,15 @@ private struct ProfileFormView: View {
                         tint: .formaCoral
                     )
                 }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
         }
         .frame(maxWidth: 760)
         .frame(maxWidth: .infinity)
         .scrollContentBackground(.hidden)
+        .contentMargins(.horizontal, FormaSpacing.screenGutter, for: .scrollContent)
+        .listSectionSpacing(FormaSpacing.lg)
         .background(FormaBackground())
         .tint(.sleekAccent)
         .navigationTitle(isEditing ? "Edit Profile" : "Add Profile")
@@ -459,10 +537,11 @@ private struct ProfileFormView: View {
             ToolbarItem(placement: .cancellationAction) {
                 if allowsCancel {
                     Button("Cancel") {
-                        soundPlayer.play(FormaUIFeedback.softImpact)
+                        cancelFeedbackNonce += 1
                         dismiss()
                     }
                     .disabled(isSaving)
+                    .accessibilityIdentifier("profile-form-cancel-button")
                 }
             }
 
@@ -472,20 +551,33 @@ private struct ProfileFormView: View {
                         await saveProfile()
                     }
                 } label: {
-                    if isSaving {
-                        ProgressView()
-                    } else {
-                        Text(isEditing ? "Save" : "Add")
-                    }
+                    saveButtonLabel
                 }
                 .disabled(!canSave)
+                .accessibilityLabel(saveAccessibilityLabel)
+                .accessibilityValue(isSaving ? "In progress" : "")
+                .accessibilityIdentifier("profile-form-save-button")
             }
         }
-        .sensoryFeedback(FormaUIFeedback.success.sensoryFeedback, trigger: saveSuccessNonce)
-        .sensoryFeedback(FormaUIFeedback.error.sensoryFeedback, trigger: saveErrorNonce)
-        .sensoryFeedback(FormaUIFeedback.selection.sensoryFeedback, trigger: peopleType)
-        .sensoryFeedback(FormaUIFeedback.selection.sensoryFeedback, trigger: gender)
-        .sensoryFeedback(FormaUIFeedback.selection.sensoryFeedback, trigger: isPrimary)
+        .formaFeedback(FormaUIFeedback.softImpact, trigger: cancelFeedbackNonce)
+        .formaFeedback(FormaUIFeedback.success, trigger: saveSuccessNonce)
+        .formaFeedback(FormaUIFeedback.error, trigger: saveErrorNonce)
+        .formaFeedback(FormaUIFeedback.selection, trigger: peopleType)
+        .formaFeedback(FormaUIFeedback.selection, trigger: gender)
+        .formaFeedback(FormaUIFeedback.selection, trigger: isPrimary)
+    }
+
+    @ViewBuilder
+    private var saveButtonLabel: some View {
+        if isSaving {
+            HStack(spacing: FormaSpacing.xs) {
+                FormaLoadingIndicator()
+                Text("Saving")
+            }
+            .accessibilityIdentifier("profile-save-loading")
+        } else {
+            Text(saveButtonTitle)
+        }
     }
 
     private func saveProfile() async {
@@ -536,7 +628,6 @@ private struct ProfileFormView: View {
             }
 
             saveSuccessNonce += 1
-            soundPlayer.play(FormaUIFeedback.success)
             await onProfileSaved()
             dismiss()
         } catch APIError.missingAuthToken {
@@ -557,7 +648,14 @@ private struct ProfileFormView: View {
 
     private func registerSaveError() {
         saveErrorNonce += 1
-        soundPlayer.play(FormaUIFeedback.error)
+    }
+
+    private func formSectionHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(FormaTypography.eyebrow)
+            .tracking(0.7)
+            .foregroundStyle(Color.sleekAccent)
+            .accessibilityLabel(title)
     }
 
     private static func parseDate(_ value: String?) -> Date? {
@@ -616,72 +714,35 @@ private struct ProfileRow: View {
     let profile: ClientProfile
     let onEdit: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var scaledAvatarSize: CGFloat = 60
+
+    private var avatarSize: CGFloat {
+        min(scaledAvatarSize, dynamicTypeSize.isAccessibilitySize ? 84 : 72)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 16) {
-                // Avatar
-                if let imageUrlString = profile.profileImage, let url = URL(string: imageUrlString) {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Circle()
-                            .fill(Color.appTertiaryBackground)
-                            .shimmering()
-                    }
-                    .frame(width: 60, height: 60)
-                    .clipShape(Circle())
-                } else {
-                    initialsView(for: profile.displayName)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(profile.displayName)
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if profile.isPrimary {
-                        Label("Primary profile", systemImage: "checkmark.seal.fill")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Color.sleekAccent)
-                    }
-                }
-
-                Spacer()
-
-                Button(action: onEdit) {
-                    Image(systemName: "pencil")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(Color.sleekAccent)
-                        .frame(width: 44, height: 44)
-                        .background(Color.sleekAccent.opacity(0.12), in: Circle())
-                }
-                .buttonStyle(FormaPressableButtonStyle())
-                .accessibilityLabel("Edit \(profile.displayName)")
-            }
+        VStack(alignment: .leading, spacing: FormaSpacing.md) {
+            profileHeader
 
             FormaDivider()
 
-            // Role / Category Field
             if let peopleType = profile.peopleType, !peopleType.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: FormaSpacing.xxs) {
                     Text("Role")
-                        .font(.subheadline)
+                        .font(FormaTypography.supporting)
                         .foregroundStyle(.secondary)
                     Text(peopleType)
-                        .font(.body)
+                        .font(FormaTypography.body)
                         .foregroundStyle(.primary)
                         .lineLimit(nil)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            // Stats / Metrics Fields
             let hasStats = profile.heightCm != nil || profile.preferredBodyFatPct != nil || profile.gender != nil || profile.dateOfBirth != nil
             if hasStats {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: FormaSpacing.sm) {
                     if let height = profile.heightCm {
                         metadataRow(systemImage: "ruler", label: "Height", value: String(format: "%.0f cm", height))
                     }
@@ -695,7 +756,7 @@ private struct ProfileRow: View {
                         metadataRow(systemImage: "person.fill", label: "Gender", value: gender.capitalized)
                     }
                 }
-                .padding(.top, 4)
+                .padding(.top, FormaSpacing.xxs)
             }
         }
         .formaSurface(
@@ -706,6 +767,75 @@ private struct ProfileRow: View {
         .accessibilityValue(profile.isPrimary ? "Primary profile" : "")
     }
 
+    @ViewBuilder
+    private var profileHeader: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: FormaSpacing.sm) {
+                avatarView
+                profileIdentity
+                editButton(expanded: true)
+            }
+        } else {
+            HStack(alignment: .top, spacing: FormaSpacing.md) {
+                avatarView
+                profileIdentity
+                Spacer(minLength: FormaSpacing.xs)
+                editButton(expanded: false)
+            }
+        }
+    }
+
+    private var profileIdentity: some View {
+        VStack(alignment: .leading, spacing: FormaSpacing.xs) {
+            Text(profile.displayName)
+                .font(FormaTypography.cardTitle)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if profile.isPrimary {
+                Label("Primary profile", systemImage: "checkmark.seal.fill")
+                    .font(FormaTypography.supporting.weight(.semibold))
+                    .foregroundStyle(Color.sleekAccent)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var avatarView: some View {
+        Group {
+            if let imageUrlString = profile.profileImage, let url = URL(string: imageUrlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    case .empty:
+                        ZStack {
+                            Circle()
+                                .fill(Color.appTertiaryBackground)
+                            FormaLoadingIndicator(tint: .formaTeal)
+                        }
+                    case .failure:
+                        initialsView(for: profile.displayName)
+                    @unknown default:
+                        initialsView(for: profile.displayName)
+                    }
+                }
+            } else {
+                initialsView(for: profile.displayName)
+            }
+        }
+        .frame(width: avatarSize, height: avatarSize)
+        .clipShape(Circle())
+        .overlay {
+            Circle()
+                .strokeBorder(Color.sleekAccent.opacity(0.20), lineWidth: 0.75)
+        }
+        .shadow(color: Color.sleekAccent.opacity(0.12), radius: 8, y: 4)
+        .accessibilityHidden(true)
+    }
+
     private func initialsView(for name: String) -> some View {
         let initials = name.split(separator: " ")
             .prefix(2)
@@ -714,32 +844,83 @@ private struct ProfileRow: View {
             .uppercased()
 
         return Circle()
-            .fill(Color.sleekAccent.opacity(0.12))
+            .fill(
+                LinearGradient(
+                    colors: [Color.sleekAccent.opacity(0.18), Color.formaTeal.opacity(0.08)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .overlay {
                 Text(initials.isEmpty ? "?" : initials)
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(.title3, design: .rounded).weight(.bold))
                     .foregroundStyle(Color.sleekAccent)
+                    .minimumScaleFactor(0.75)
             }
-            .frame(width: 60, height: 60)
     }
 
-    private func metadataRow(systemImage: String, label: String, value: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: systemImage)
-                .font(.body)
-                .foregroundStyle(Color.sleekAccent)
-                .frame(width: 20, alignment: .leading)
-
-            Text(label + ":")
-                .font(.body)
-                .foregroundStyle(.secondary)
-
-            Text(value)
-                .font(.body.weight(.medium))
-                .foregroundStyle(.primary)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
+    private func editButton(expanded: Bool) -> some View {
+        Button(action: onEdit) {
+            HStack(spacing: FormaSpacing.xs) {
+                Image(systemName: "pencil")
+                    .font(FormaTypography.action)
+                if expanded {
+                    Text("Edit Profile")
+                        .font(FormaTypography.action)
+                }
+            }
+            .foregroundStyle(Color.sleekAccent)
+            .frame(maxWidth: expanded ? .infinity : nil)
+            .frame(minWidth: 44, minHeight: 44)
+            .padding(.horizontal, expanded ? FormaSpacing.sm : 0)
+            .background(
+                Color.sleekAccent.opacity(0.12),
+                in: expanded ? AnyShape(Capsule()) : AnyShape(Circle())
+            )
         }
+        .buttonStyle(FormaPressableButtonStyle())
+        .accessibilityLabel("Edit \(profile.displayName)")
+        .accessibilityIdentifier("profile-edit-\(profile.id)")
+    }
+
+    @ViewBuilder
+    private func metadataRow(systemImage: String, label: String, value: String) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            HStack(alignment: .top, spacing: FormaSpacing.sm) {
+                metadataIcon(systemImage)
+                VStack(alignment: .leading, spacing: FormaSpacing.xxs) {
+                    Text(label)
+                        .font(FormaTypography.supporting)
+                        .foregroundStyle(.secondary)
+                    Text(value)
+                        .font(FormaTypography.sectionHeadline)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityElement(children: .combine)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: FormaSpacing.xs) {
+                metadataIcon(systemImage)
+                Text(label + ":")
+                    .font(FormaTypography.body)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(FormaTypography.sectionHeadline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private func metadataIcon(_ systemImage: String) -> some View {
+        Image(systemName: systemImage)
+            .font(FormaTypography.body)
+            .foregroundStyle(Color.sleekAccent)
+            .frame(width: 20, alignment: .leading)
+            .accessibilityHidden(true)
     }
 
     private func age(from dobString: String) -> Int? {
@@ -793,7 +974,7 @@ private struct SkeletonCardView: View {
 
             FormaDivider()
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: FormaSpacing.xs) {
                 FormaSkeletonBlock(width: 100, height: 12, opacity: 0.08)
                 FormaSkeletonBlock(width: 200, height: 16, opacity: 0.10)
             }

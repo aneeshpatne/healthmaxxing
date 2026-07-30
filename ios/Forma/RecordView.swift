@@ -58,6 +58,11 @@ private enum RecordOutcome: Equatable {
     case submissionFailed(String)
 }
 
+private struct RecordFeedbackSignal: Equatable {
+    let sequence: Int
+    let event: RecordFeedbackEvent
+}
+
 @MainActor
 protocol IdleTimerControlling: AnyObject {
     var isIdleTimerDisabled: Bool { get set }
@@ -100,7 +105,6 @@ struct RecordView: View {
     let reportStore: MetricsReportStore
 
     @StateObject private var scaleManager = ScaleBLEManager()
-    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
 
     @State private var isSubmittingMeasurement = false
     @State private var submittedMeasurement: ScaleMeasurement?
@@ -111,8 +115,7 @@ struct RecordView: View {
     @State private var metricAdvanceTask: Task<Void, Never>?
     @State private var outcomeRevealTask: Task<Void, Never>?
     @State private var idleTimerLease: IdleTimerLease?
-    @State private var cancelFeedbackNonce = 0
-    @State private var retryFeedbackNonce = 0
+    @State private var feedbackSignal = RecordFeedbackSignal(sequence: 0, event: .start)
 
     private let apiClient = APIClient()
     private let clock = ContinuousClock()
@@ -156,8 +159,8 @@ struct RecordView: View {
         }
         .onChange(of: scaleManager.isReading, initial: true) { wasReading, isReading in
             updateIdleTimer(isReading: isReading)
-            if isReading, !wasReading {
-                soundPlayer.play(RecordFeedbackEvent.start)
+            if !wasReading && isReading {
+                emitFeedback(.start)
             }
         }
         .onChange(of: scaleManager.latestMeasurement) { _, measurement in
@@ -166,25 +169,16 @@ struct RecordView: View {
         .onChange(of: scaleManager.state) { _, state in
             handleScaleStateChange(state)
         }
-        .onChange(of: cancelFeedbackNonce) { _, _ in
-            soundPlayer.play(RecordFeedbackEvent.cancel)
-        }
-        .onChange(of: retryFeedbackNonce) { _, _ in
-            soundPlayer.play(RecordFeedbackEvent.retry)
-        }
         .onChange(of: displayedMetricStage) { _, stage in
             if let stage {
-                soundPlayer.play(RecordFeedbackEvent.metric(stage))
+                emitFeedback(.metric(stage))
             }
         }
-        .onChange(of: circleState) { _, state in
-            switch state {
-            case .saved:
-                soundPlayer.play(RecordFeedbackEvent.success)
-            case .recordingFailed, .submissionFailed:
-                soundPlayer.play(RecordFeedbackEvent.error)
-            default:
-                break
+        .onChange(of: circleState) { previousState, state in
+            if previousState != .saved && state == .saved {
+                emitFeedback(.success)
+            } else if !previousState.isFailure && state.isFailure {
+                emitFeedback(.error)
             }
         }
         .onDisappear {
@@ -192,22 +186,7 @@ struct RecordView: View {
                 releaseIdleTimerLease()
             }
         }
-        .sensoryFeedback(RecordFeedbackEvent.start.sensoryFeedback, trigger: scaleManager.isReading) { _, isReading in
-            isReading
-        }
-        .sensoryFeedback(RecordFeedbackEvent.cancel.sensoryFeedback, trigger: cancelFeedbackNonce)
-        .sensoryFeedback(RecordFeedbackEvent.retry.sensoryFeedback, trigger: retryFeedbackNonce)
-        .sensoryFeedback(RecordFeedbackEvent.metric(.weight).sensoryFeedback, trigger: displayedMetricStage) { _, stage in
-            stage != nil
-        }
-        .sensoryFeedback(RecordFeedbackEvent.success.sensoryFeedback, trigger: circleState) { _, state in
-            state == .saved
-        }
-        .sensoryFeedback(RecordFeedbackEvent.error.sensoryFeedback, trigger: circleState) { _, state in
-            if case .recordingFailed = state { return true }
-            if case .submissionFailed = state { return true }
-            return false
-        }
+        .recordFeedback(signal: feedbackSignal)
     }
 
     private var circleState: RecordCircleState {
@@ -288,14 +267,14 @@ struct RecordView: View {
             resetToReady()
 
         case .submissionFailed:
-            retryFeedbackNonce += 1
+            emitFeedback(.retry)
             Task {
                 await submitLatestMeasurement()
             }
 
         case .connecting, .weight, .impedance, .heartRate:
             guard scaleManager.isReading else { return }
-            cancelFeedbackNonce += 1
+            emitFeedback(.cancel)
             cancelReading()
         }
     }
@@ -471,6 +450,10 @@ struct RecordView: View {
         }
     }
 
+    private func emitFeedback(_ event: RecordFeedbackEvent) {
+        feedbackSignal = RecordFeedbackSignal(sequence: feedbackSignal.sequence + 1, event: event)
+    }
+
     private func updateIdleTimer(isReading: Bool) {
         if isReading {
             if idleTimerLease == nil {
@@ -494,6 +477,29 @@ struct RecordView: View {
         }
 
         return "Server returned \(statusCode): \(trimmedBody)"
+    }
+}
+
+private struct RecordFeedbackSignalModifier: ViewModifier {
+    let signal: RecordFeedbackSignal
+
+    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
+    @AppStorage(FormaFeedbackPreferences.hapticsKey) private var hapticsEnabled = true
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: signal) { _, signal in
+                soundPlayer.play(signal.event)
+            }
+            .sensoryFeedback(signal.event.sensoryFeedback, trigger: signal.sequence) { previous, current in
+                hapticsEnabled && previous != current
+            }
+    }
+}
+
+private extension View {
+    func recordFeedback(signal: RecordFeedbackSignal) -> some View {
+        modifier(RecordFeedbackSignalModifier(signal: signal))
     }
 }
 
@@ -526,12 +532,13 @@ private struct RecordCircle: View {
                 }
             }
         }
-        .buttonStyle(RecordCircleButtonStyle(isEnabled: isEnabled))
+        .buttonStyle(FormaPressableButtonStyle(depth: .prominent))
         .disabled(!isEnabled)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(accessibilityValue)
         .accessibilityHint(accessibilityHint)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: state)
+        .accessibilityIdentifier("record-primary-control")
+        .animation(reduceMotion ? nil : FormaMotion.enter, value: state)
     }
 
     @ViewBuilder
@@ -594,8 +601,7 @@ private struct RecordCircle: View {
                 metricContent(title: "Heart Rate", value: String(value), unit: "bpm")
 
                 if isSubmitting {
-                    ProgressView()
-                        .controlSize(.small)
+                    FormaLoadingIndicator(tint: .formaTeal)
                         .transition(.opacity)
                 }
             }
@@ -620,7 +626,7 @@ private struct RecordCircle: View {
 
             Text(value)
                 .font(.system(size: metricValueSize, weight: .semibold, design: .rounded))
-                .contentTransition(.numericText())
+                .contentTransition(reduceMotion ? .identity : .numericText())
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
 
@@ -632,14 +638,24 @@ private struct RecordCircle: View {
 
     private func resultContent(title: String, systemImage: String) -> some View {
         VStack(spacing: FormaSpacing.sm) {
-            Image(systemName: systemImage)
-                .font(.system(size: 32, weight: .bold))
-                .symbolEffect(.appear, options: .nonRepeating)
+            resultSymbol(systemImage)
             Text(title)
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
         }
         .foregroundStyle(Color.actionForeground)
+    }
+
+    @ViewBuilder
+    private func resultSymbol(_ systemImage: String) -> some View {
+        let symbol = Image(systemName: systemImage)
+            .font(.system(size: 32, weight: .bold))
+
+        if reduceMotion {
+            symbol
+        } else {
+            symbol.symbolEffect(.appear, options: .nonRepeating)
+        }
     }
 
     private var backgroundFill: Color {
@@ -752,6 +768,8 @@ private struct RecordFlowFooter: View {
     let measurement: ScaleMeasurement
     let isReading: Bool
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         Group {
             switch state {
@@ -838,7 +856,8 @@ private struct RecordFlowFooter: View {
             }
         }
         .frame(minHeight: 60, alignment: .top)
-        .animation(FormaMotion.enter, value: state)
+        .animation(reduceMotion ? nil : FormaMotion.enter, value: state)
+        .accessibilityIdentifier(state.accessibilityIdentifier)
     }
 
     private func connectingGuidance(for label: String) -> String {
@@ -870,6 +889,36 @@ private struct RecordFlowFooter: View {
 }
 
 private extension RecordCircleState {
+    var isFailure: Bool {
+        switch self {
+        case .recordingFailed, .submissionFailed:
+            return true
+        case .ready, .connecting, .weight, .impedance, .heartRate, .saved:
+            return false
+        }
+    }
+
+    var accessibilityIdentifier: String {
+        switch self {
+        case .ready:
+            return "record-state-ready"
+        case .connecting:
+            return "record-state-connecting"
+        case .weight:
+            return "record-state-weight"
+        case .impedance:
+            return "record-state-impedance"
+        case .heartRate(_, let isSubmitting):
+            return isSubmitting ? "record-state-submitting" : "record-state-heart-rate"
+        case .saved:
+            return "record-state-saved"
+        case .recordingFailed:
+            return "record-state-recording-failed"
+        case .submissionFailed:
+            return "record-state-submission-failed"
+        }
+    }
+
     var actionGuidance: String {
         switch self {
         case .ready:
@@ -941,7 +990,9 @@ private struct RecordMeasurementSummary: View {
 /// Three-stage progress indicator for the measurement ritual.
 private struct RecordStageTracker: View {
     let measurement: ScaleMeasurement
+
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var stages: [(title: String, isComplete: Bool)] {
         [
@@ -964,7 +1015,7 @@ private struct RecordStageTracker: View {
                 fullProgress
             }
         }
-        .animation(FormaMotion.selection, value: measurement)
+        .animation(reduceMotion ? nil : FormaMotion.selection, value: measurement)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Measurement progress")
         .accessibilityValue(accessibleProgressLabel)
@@ -987,7 +1038,7 @@ private struct RecordStageTracker: View {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 9, weight: .bold))
                                 .foregroundStyle(Color.actionForeground)
-                                .transition(.scale.combined(with: .opacity))
+                                .transition(reduceMotion ? .identity : .scale.combined(with: .opacity))
                         } else if isActive {
                             Circle()
                                 .fill(Color.sleekAccent)
@@ -1224,18 +1275,6 @@ private struct OrbitingRecordRing: View {
         }
         .frame(width: diameter, height: diameter)
         .accessibilityHidden(true)
-    }
-}
-
-private struct RecordCircleButtonStyle: ButtonStyle {
-    let isEnabled: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed && isEnabled && !reduceMotion ? 0.96 : 1)
-            .opacity(configuration.isPressed && isEnabled ? 0.92 : 1)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: configuration.isPressed)
     }
 }
 

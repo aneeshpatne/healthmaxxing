@@ -8,6 +8,21 @@ import Combine
 import Foundation
 import SwiftUI
 
+// MARK: - Feedback preferences
+
+enum FormaFeedbackPreferences {
+    static let soundEffectsKey = "forma.soundEffectsEnabled"
+    static let hapticsKey = "forma.hapticsEnabled"
+
+    static var soundEffectsEnabled: Bool {
+        UserDefaults.standard.object(forKey: soundEffectsKey) as? Bool ?? true
+    }
+
+    static var hapticsEnabled: Bool {
+        UserDefaults.standard.object(forKey: hapticsKey) as? Bool ?? true
+    }
+}
+
 // MARK: - Record ritual feedback
 
 enum RecordFeedbackEvent: Hashable {
@@ -34,42 +49,8 @@ enum RecordFeedbackEvent: Hashable {
             return .error
         }
     }
-}
 
-enum RecordFeedbackCue: Equatable {
-    case metric(RecordMetricStage)
-    case success
-    case error
-
-    var event: RecordFeedbackEvent {
-        switch self {
-        case .metric(let stage):
-            return .metric(stage)
-        case .success:
-            return .success
-        case .error:
-            return .error
-        }
-    }
-}
-
-extension RecordCircleState {
-    var feedbackCue: RecordFeedbackCue? {
-        switch self {
-        case .weight:
-            return .metric(.weight)
-        case .impedance:
-            return .metric(.impedance)
-        case .heartRate:
-            return .metric(.heartRate)
-        case .saved:
-            return .success
-        case .recordingFailed, .submissionFailed:
-            return .error
-        case .ready, .connecting:
-            return nil
-        }
-    }
+    var playsSound: Bool { true }
 }
 
 // MARK: - App-wide UI feedback
@@ -96,6 +77,15 @@ enum FormaUIFeedback: Hashable {
             return .error
         }
     }
+
+    var playsSound: Bool {
+        switch self {
+        case .selection, .softImpact:
+            return false
+        case .confirm, .success, .error:
+            return true
+        }
+    }
 }
 
 // MARK: - Sound player
@@ -105,23 +95,31 @@ enum FormaUIFeedback: Hashable {
 @MainActor
 final class FormaSoundPlayer: ObservableObject {
     private static let sampleRate = 44_100.0
+    private static var recordWaveCache: [RecordFeedbackEvent: Data] = [:]
+    private static var uiWaveCache: [FormaUIFeedback: Data] = [:]
 
     private var audioPlayer: AVAudioPlayer?
     private var hasConfiguredAudioSession = false
 
     func play(_ event: RecordFeedbackEvent) {
-        play(tones: Self.tones(for: event))
+        guard event.playsSound, FormaFeedbackPreferences.soundEffectsEnabled else { return }
+        let data = Self.recordWaveCache[event] ?? Self.makeWaveFile(tones: Self.tones(for: event))
+        Self.recordWaveCache[event] = data
+        play(data: data)
     }
 
     func play(_ event: FormaUIFeedback) {
-        play(tones: Self.tones(for: event))
+        guard event.playsSound, FormaFeedbackPreferences.soundEffectsEnabled else { return }
+        let data = Self.uiWaveCache[event] ?? Self.makeWaveFile(tones: Self.tones(for: event))
+        Self.uiWaveCache[event] = data
+        play(data: data)
     }
 
-    private func play(tones: [Tone]) {
+    private func play(data: Data) {
         configureAudioSessionIfNeeded()
 
         do {
-            let player = try AVAudioPlayer(data: Self.makeWaveFile(tones: tones))
+            let player = try AVAudioPlayer(data: data)
             player.prepareToPlay()
             player.play()
             audioPlayer = player
@@ -252,6 +250,64 @@ final class FormaSoundPlayer: ObservableObject {
         Swift.withUnsafeBytes(of: &littleEndianValue) { bytes in
             data.append(contentsOf: bytes)
         }
+    }
+}
+
+private struct FormaUIFeedbackModifier<Trigger: Equatable>: ViewModifier {
+    let event: FormaUIFeedback
+    let trigger: Trigger
+    let condition: (Trigger, Trigger) -> Bool
+
+    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
+    @AppStorage(FormaFeedbackPreferences.hapticsKey) private var hapticsEnabled = true
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: trigger) { oldValue, newValue in
+                guard condition(oldValue, newValue) else { return }
+                soundPlayer.play(event)
+            }
+            .sensoryFeedback(event.sensoryFeedback, trigger: trigger) { oldValue, newValue in
+                hapticsEnabled && condition(oldValue, newValue)
+            }
+    }
+}
+
+private struct FormaRecordFeedbackModifier<Trigger: Equatable>: ViewModifier {
+    let event: RecordFeedbackEvent
+    let trigger: Trigger
+    let condition: (Trigger, Trigger) -> Bool
+
+    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
+    @AppStorage(FormaFeedbackPreferences.hapticsKey) private var hapticsEnabled = true
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: trigger) { oldValue, newValue in
+                guard condition(oldValue, newValue) else { return }
+                soundPlayer.play(event)
+            }
+            .sensoryFeedback(event.sensoryFeedback, trigger: trigger) { oldValue, newValue in
+                hapticsEnabled && condition(oldValue, newValue)
+            }
+    }
+}
+
+extension View {
+    func formaFeedback<Trigger: Equatable>(
+        _ event: FormaUIFeedback,
+        trigger: Trigger,
+        condition: @escaping (Trigger, Trigger) -> Bool = { _, _ in true }
+    ) -> some View {
+        modifier(FormaUIFeedbackModifier(event: event, trigger: trigger, condition: condition))
+    }
+
+    func formaFeedback<Trigger: Equatable>(
+        _ event: RecordFeedbackEvent,
+        trigger: Trigger,
+        condition: @escaping (Trigger, Trigger) -> Bool = { _, _ in true }
+    ) -> some View {
+        modifier(FormaRecordFeedbackModifier(event: event, trigger: trigger, condition: condition))
     }
 }
 

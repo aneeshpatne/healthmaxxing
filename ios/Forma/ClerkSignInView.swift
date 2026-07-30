@@ -11,7 +11,6 @@ import ClerkKitUI
 struct ClerkSignInView: View {
     @State private var authIsPresented = false
     @State private var continueFeedbackNonce = 0
-    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
 
     var body: some View {
         ZStack {
@@ -33,7 +32,6 @@ struct ClerkSignInView: View {
 
                 Button {
                     continueFeedbackNonce += 1
-                    soundPlayer.play(FormaUIFeedback.confirm)
                     authIsPresented = true
                 } label: {
                     Label("Continue with Clerk", systemImage: "person.crop.circle.badge.checkmark")
@@ -52,7 +50,7 @@ struct ClerkSignInView: View {
         .sheet(isPresented: $authIsPresented) {
             AuthView()
         }
-        .sensoryFeedback(FormaUIFeedback.confirm.sensoryFeedback, trigger: continueFeedbackNonce)
+        .formaFeedback(.confirm, trigger: continueFeedbackNonce)
     }
 }
 

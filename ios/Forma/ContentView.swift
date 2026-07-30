@@ -10,6 +10,7 @@ import ClerkKit
 
 struct ContentView: View {
     @Environment(Clerk.self) private var clerk
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -33,7 +34,7 @@ struct ContentView: View {
             }
             #endif
         }
-        .animation(.easeInOut(duration: 0.3), value: clerk.user != nil)
+        .animation(reduceMotion ? nil : FormaMotion.enter, value: clerk.user != nil)
         .formaLaunchReveal()
     }
 }

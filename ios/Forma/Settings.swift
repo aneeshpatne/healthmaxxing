@@ -10,6 +10,8 @@ import ClerkKitUI
 
 struct Settings: View {
     @State private var navigationFeedbackNonce = 0
+    @AppStorage(FormaFeedbackPreferences.soundEffectsKey) private var soundEffectsEnabled = true
+    @AppStorage(FormaFeedbackPreferences.hapticsKey) private var hapticsEnabled = true
     @EnvironmentObject private var soundPlayer: FormaSoundPlayer
 
     var body: some View {
@@ -34,6 +36,28 @@ struct Settings: View {
                         tint: .sleekAccent
                     ) {
                         UserProfileView()
+                    }
+                }
+
+                settingsSection("Experience") {
+                    VStack(spacing: FormaSpacing.md) {
+                        experienceToggle(
+                            title: "Sound Effects",
+                            subtitle: "Soft cues for confirmations and milestones",
+                            systemImage: "speaker.wave.2.fill",
+                            tint: .formaCyan,
+                            isOn: $soundEffectsEnabled
+                        )
+
+                        FormaDivider()
+
+                        experienceToggle(
+                            title: "Haptics",
+                            subtitle: "Tactile feedback for actions and progress",
+                            systemImage: "waveform.path",
+                            tint: .formaTeal,
+                            isOn: $hapticsEnabled
+                        )
                     }
                 }
 
@@ -67,7 +91,14 @@ struct Settings: View {
         .background(FormaBackground())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .sensoryFeedback(FormaUIFeedback.softImpact.sensoryFeedback, trigger: navigationFeedbackNonce)
+        .formaFeedback(.softImpact, trigger: navigationFeedbackNonce)
+        .onChange(of: soundEffectsEnabled) { wasEnabled, isEnabled in
+            guard !wasEnabled, isEnabled else { return }
+            soundPlayer.play(.confirm)
+        }
+        .formaFeedback(.softImpact, trigger: hapticsEnabled) { wasEnabled, isEnabled in
+            !wasEnabled && isEnabled
+        }
     }
 
     private func settingsRow<Destination: View>(
@@ -86,7 +117,6 @@ struct Settings: View {
         .simultaneousGesture(
             TapGesture().onEnded {
                 navigationFeedbackNonce += 1
-                soundPlayer.play(FormaUIFeedback.softImpact)
             }
         )
     }
@@ -120,8 +150,9 @@ struct Settings: View {
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text(subtitle)
-                    .font(.caption)
+                    .font(FormaTypography.supporting)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()
@@ -132,6 +163,37 @@ struct Settings: View {
         }
         .frame(minHeight: 44)
         .contentShape(Rectangle())
+    }
+
+    private func experienceToggle(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        tint: Color,
+        isOn: Binding<Bool>
+    ) -> some View {
+        Toggle(isOn: isOn) {
+            HStack(spacing: FormaSpacing.sm) {
+                FormaIconTile(
+                    systemImage: systemImage,
+                    tint: tint,
+                    size: 34,
+                    radius: 10,
+                    symbolFont: .system(size: 14, weight: .semibold)
+                )
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.body.weight(.semibold))
+                    Text(subtitle)
+                        .font(FormaTypography.supporting)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .tint(.sleekAccent)
+        .frame(minHeight: 44)
     }
 
     private func settingsSection<Content: View>(
