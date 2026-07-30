@@ -63,6 +63,30 @@ final class MetricsReportStore: ObservableObject {
         }
     }
 
+    #if DEBUG
+    func applyDebugScenario(_ scenario: FormaUITestScenario) {
+        pollTask?.cancel()
+        completedReport = nil
+        activeJob = nil
+        latestReport = nil
+        isLoading = false
+        isWaitingForReport = false
+        errorMessage = nil
+
+        switch scenario {
+        case .metricsLoading:
+            isLoading = true
+            statusMessage = "Preparing your report…"
+        case .metricsError:
+            errorMessage = "The report service is temporarily unavailable."
+            statusMessage = "Report unavailable."
+        case .metricsPopulated:
+            completedReport = FormaFixtures.populatedReport
+            statusMessage = "Latest report ready."
+        }
+    }
+    #endif
+
     private func loadAndPollReport(ignoringCache _: Bool) async {
         guard let profileId = PrimaryProfileStore.primaryProfileId else {
             errorMessage = "Create or select a primary profile to load reports."

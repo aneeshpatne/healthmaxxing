@@ -64,6 +64,44 @@ final class FormaUITests: XCTestCase {
     }
 
     @MainActor
+    func testPopulatedMetricsTabs() throws {
+        let app = launchShell(tab: "metrics", scenario: "metrics-populated")
+
+        XCTAssertTrue(app.staticTexts["Consistency"].waitForExistence(timeout: 8))
+
+        app.buttons["metrics-tab-performance"].tap()
+        XCTAssertTrue(app.staticTexts["Balanced muscularity"].waitForExistence(timeout: 3))
+
+        app.buttons["metrics-tab-fat"].tap()
+        XCTAssertTrue(app.staticTexts["Body Fat Ratio"].waitForExistence(timeout: 3))
+
+        app.buttons["metrics-tab-muscle"].tap()
+        XCTAssertTrue(app.staticTexts["Strong foundation"].waitForExistence(timeout: 3))
+
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Populated Metrics"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
+    func testMetricsLoadingAndErrorSemantics() throws {
+        let loading = launchShell(tab: "metrics", scenario: "metrics-loading")
+        XCTAssertTrue(
+            loading.descendants(matching: .any)["metrics-loading"].waitForExistence(timeout: 8)
+        )
+        XCTAssertEqual(
+            loading.descendants(matching: .any)["metrics-loading"].label,
+            "Preparing your report…"
+        )
+        loading.terminate()
+
+        let error = launchShell(tab: "metrics", scenario: "metrics-error")
+        XCTAssertTrue(error.staticTexts["Report unavailable"].waitForExistence(timeout: 8))
+        XCTAssertTrue(error.buttons["Try Again"].exists)
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
@@ -72,9 +110,12 @@ final class FormaUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchShell(tab: String) -> XCUIApplication {
+    private func launchShell(tab: String, scenario: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-FormaUITestShell", "-FormaUITestTab", tab]
+        if let scenario {
+            app.launchArguments += ["-FormaUITestScenario", scenario]
+        }
         app.launch()
         return app
     }

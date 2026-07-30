@@ -18,11 +18,12 @@ struct SwiftUIView: View {
     @State private var activeTab: AppTab = .metrics
     @State private var selectedMetricsTab: MetricsTab = .insights
     @State private var isMetricsAtTop = true
-    @StateObject private var reportStore = MetricsReportStore()
-    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
+    @StateObject private var reportStore: MetricsReportStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init() {
+        let reportStore = MetricsReportStore()
+
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
         if let markerIndex = arguments.firstIndex(of: "-FormaUITestTab"),
@@ -30,7 +31,15 @@ struct SwiftUIView: View {
            let requestedTab = AppTab(rawValue: arguments[markerIndex + 1]) {
             _activeTab = State(initialValue: requestedTab)
         }
+
+        if let markerIndex = arguments.firstIndex(of: "-FormaUITestScenario"),
+           arguments.indices.contains(markerIndex + 1),
+           let scenario = FormaUITestScenario(rawValue: arguments[markerIndex + 1]) {
+            reportStore.applyDebugScenario(scenario)
+        }
         #endif
+
+        _reportStore = StateObject(wrappedValue: reportStore)
     }
 
     private var isUITestShell: Bool {
@@ -50,8 +59,12 @@ struct SwiftUIView: View {
                         isAtTop: $isMetricsAtTop,
                         reportStore: reportStore,
                         onRecordRequested: {
-                            withAnimation(FormaMotion.selection) {
+                            if reduceMotion {
                                 activeTab = .record
+                            } else {
+                                withAnimation(FormaMotion.selection) {
+                                    activeTab = .record
+                                }
                             }
                         }
                     )
@@ -96,10 +109,7 @@ struct SwiftUIView: View {
                 guard activeTab == .metrics, !isUITestShell else { return }
                 await reportStore.loadAndPollReport()
             }
-            .onChange(of: activeTab) { _, _ in
-                soundPlayer.play(FormaUIFeedback.selection)
-            }
-            .sensoryFeedback(FormaUIFeedback.selection.sensoryFeedback, trigger: activeTab)
+            .formaFeedback(.selection, trigger: activeTab)
         }
     }
 }
@@ -110,7 +120,6 @@ enum FormaLayout {
 
 struct FloatingSettingsButton: View {
     @State private var openFeedbackNonce = 0
-    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
 
     var body: some View {
         NavigationLink {
@@ -127,10 +136,9 @@ struct FloatingSettingsButton: View {
         .simultaneousGesture(
             TapGesture().onEnded {
                 openFeedbackNonce += 1
-                soundPlayer.play(FormaUIFeedback.softImpact)
             }
         )
-        .sensoryFeedback(FormaUIFeedback.softImpact.sensoryFeedback, trigger: openFeedbackNonce)
+        .formaFeedback(.softImpact, trigger: openFeedbackNonce)
     }
 }
 

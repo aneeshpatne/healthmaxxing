@@ -40,4 +40,30 @@ struct FormaChartStyleTests {
         let selection = Date(timeIntervalSinceReferenceDate: 141)
         #expect(FormaChartStyle.nearestDate(to: selection, in: dates) == dates[1])
     }
+
+    @Test func steppedDateMovesAcrossSamplesAndClampsAtBounds() {
+        let dates = [
+            Date(timeIntervalSinceReferenceDate: 0),
+            Date(timeIntervalSinceReferenceDate: 100),
+            Date(timeIntervalSinceReferenceDate: 200)
+        ]
+
+        #expect(FormaChartStyle.steppedDate(from: dates[1], offset: 1, in: dates) == dates[2])
+        #expect(FormaChartStyle.steppedDate(from: dates[0], offset: -1, in: dates) == dates[0])
+        #expect(FormaChartStyle.steppedDate(from: dates[2], offset: 1, in: dates) == dates[2])
+    }
+}
+
+struct FormaFeedbackPolicyTests {
+    @Test func routineSelectionIsHapticOnly() {
+        #expect(FormaUIFeedback.selection.playsSound == false)
+        #expect(FormaUIFeedback.softImpact.playsSound == false)
+    }
+
+    @Test func confirmationsAndRecordMilestonesKeepSound() {
+        #expect(FormaUIFeedback.confirm.playsSound)
+        #expect(FormaUIFeedback.success.playsSound)
+        #expect(RecordFeedbackEvent.metric(.weight).playsSound)
+        #expect(RecordFeedbackEvent.success.playsSound)
+    }
 }
