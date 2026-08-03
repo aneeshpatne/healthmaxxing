@@ -65,13 +65,88 @@ enum FormaTypography {
 
 // MARK: - Motion
 
-/// A small, shared motion language. Keep everyday interactions quick; reserve
-/// the longer choreography for the once-per-launch brand moment.
+/// Shared motion language for Forma.
+/// Everyday interactions stay quick; emphasis is rare and intentional.
+/// Prefer system navigation/sheet motion; these tokens cover app-owned state.
 enum FormaMotion {
-    static let press = Animation.easeOut(duration: 0.14)
-    static let enter = Animation.timingCurve(0.23, 1, 0.32, 1, duration: 0.22)
-    static let move = Animation.timingCurve(0.77, 0, 0.175, 1, duration: 0.24)
-    static let selection = Animation.spring(duration: 0.22, bounce: 0.12)
+    // MARK: Core
+
+    /// Finger-down / press feedback (~100ms).
+    static let tap = Animation.easeOut(duration: 0.10)
+
+    /// Small chrome changes — lockups, chips, secondary UI (~160ms).
+    static let fast = Animation.easeInOut(duration: 0.16)
+
+    /// Default content replacement — status, banners, footers (~280ms).
+    static let standard = Animation.easeInOut(duration: 0.28)
+
+    /// Rare high-emphasis settle — save success, short brand exit.
+    static let emphasized = Animation.spring(duration: 0.40, bounce: 0.08)
+
+    // MARK: Interaction classes
+
+    /// Segmented controls, stage trackers, list selection highlights.
+    static let selection = Animation.spring(duration: 0.20, bounce: 0.05)
+
+    /// Drag release, scrub settle, gesture-owned animation.
+    static let interactive = Animation.interactiveSpring(
+        response: 0.32,
+        dampingFraction: 0.86,
+        blendDuration: 0.15
+    )
+
+    /// Single-element insertion into a collection.
+    static let insertion = Animation.easeOut(duration: 0.22)
+
+    /// Removal before neighbors close the gap.
+    static let removal = Animation.easeIn(duration: 0.18)
+
+    /// Explicit dismiss for app-owned overlays (toasts).
+    static let dismissal = Animation.easeIn(duration: 0.20)
+
+    // MARK: Data & brand
+
+    /// Gauge marker and first data paint only.
+    static let dataReveal = Animation.easeOut(duration: 0.45)
+
+    /// Short brand decelerate for the cold-launch moment only.
+    static let brandDecelerate = Animation.timingCurve(0.2, 0.9, 0.2, 1, duration: 0.36)
+
+    /// Soft continuous pulse for loading marks / skeletons (never for navigation).
+    static let pulse = Animation.easeInOut(duration: 1.2).repeatForever(autoreverses: true)
+
+    // MARK: System-aligned (prefer nil — do not wrap NavigationLink / sheets)
+
+    /// Push/pop: leave to NavigationStack interactive transitions.
+    static let navigation: Animation? = nil
+
+    /// Sheets / fullScreenCover: leave to system presentation.
+    static let presentation: Animation? = nil
+
+    // MARK: Compatibility aliases
+
+    /// - Important: Prefer `tap`.
+    static let press = tap
+    /// - Important: Prefer `standard` or `insertion`.
+    static let enter = standard
+    /// - Important: Prefer `fast`.
+    static let move = fast
+
+    // MARK: Reduce Motion
+
+    /// Returns `nil` under Reduce Motion so state changes snap (or use a short fade).
+    static func preferred(_ animation: Animation, reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : animation
+    }
+
+    /// Opacity-only fallback when a short crossfade is still useful under Reduce Motion.
+    static func resolve(
+        _ animation: Animation?,
+        reduceMotion: Bool,
+        fallback: Animation? = .easeOut(duration: 0.12)
+    ) -> Animation? {
+        reduceMotion ? fallback : animation
+    }
 }
 
 enum FormaPressDepth {
@@ -106,7 +181,7 @@ struct FormaPressableButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed && isEnabled && !reduceMotion ? depth.scale : 1)
             .opacity(isEnabled ? (configuration.isPressed ? depth.pressedOpacity : 1) : 0.48)
-            .animation(reduceMotion ? nil : FormaMotion.press, value: configuration.isPressed)
+            .animation(FormaMotion.preferred(FormaMotion.tap, reduceMotion: reduceMotion), value: configuration.isPressed)
             .formaHoverEffect()
     }
 }
@@ -120,6 +195,15 @@ extension View {
         self
         #endif
     }
+
+    /// Scoped animation that respects Reduce Motion.
+    func formaAnimation<V: Equatable>(
+        _ animation: Animation,
+        value: V,
+        reduceMotion: Bool
+    ) -> some View {
+        self.animation(FormaMotion.preferred(animation, reduceMotion: reduceMotion), value: value)
+    }
 }
 
 private struct FormaEntranceModifier: ViewModifier {
@@ -130,13 +214,16 @@ private struct FormaEntranceModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .opacity(isVisible ? 1 : 0)
-            .offset(y: isVisible || reduceMotion ? 0 : 8)
+            // Small rise only — avoid large travel that feels web-like.
+            .offset(y: isVisible || reduceMotion ? 0 : 6)
             .onAppear {
                 guard !isVisible else { return }
                 if reduceMotion {
                     isVisible = true
                 } else {
-                    withAnimation(FormaMotion.enter.delay(Double(order) * 0.05)) {
+                    // Cap stagger so stacked cards do not stage a parade.
+                    let delay = min(Double(order) * 0.04, 0.08)
+                    withAnimation(FormaMotion.insertion.delay(delay)) {
                         isVisible = true
                     }
                 }
@@ -882,8 +969,9 @@ enum FormaLoadingIndicatorSize: Equatable {
     }
 }
 
-/// A small animated expression of the Forma mark used consistently for loading.
+/// A quiet expression of the Forma mark used consistently for loading.
 /// Loading copy belongs to the parent so VoiceOver hears one useful status.
+/// Uses a single opacity pulse — not staggered stroke thrash.
 struct FormaLoadingIndicator: View {
     var size: FormaLoadingIndicatorSize = .compact
     var tint: Color = .sleekAccent
@@ -895,7 +983,7 @@ struct FormaLoadingIndicator: View {
         ZStack {
             ForEach(0..<3, id: \.self) { index in
                 FormaMarkContour(index: index)
-                    .trim(from: 0, to: reduceMotion || isAnimating ? 1 : 0.22)
+                    .trim(from: 0, to: 1)
                     .stroke(
                         tint,
                         style: StrokeStyle(
@@ -904,19 +992,12 @@ struct FormaLoadingIndicator: View {
                             lineJoin: .round
                         )
                     )
-                    .opacity(reduceMotion ? 0.88 : (isAnimating ? 1 : 0.38))
-                    .animation(
-                        reduceMotion
-                            ? nil
-                            : .timingCurve(0.23, 1, 0.32, 1, duration: 0.82)
-                                .repeatForever(autoreverses: true)
-                                .delay(Double(index) * 0.09),
-                        value: isAnimating
-                    )
             }
         }
+        .opacity(reduceMotion ? 0.88 : (isAnimating ? 1.0 : 0.48))
+        .animation(FormaMotion.preferred(FormaMotion.pulse, reduceMotion: reduceMotion), value: isAnimating)
         .frame(width: size.frame.width, height: size.frame.height)
-        .shadow(color: tint.opacity(reduceMotion ? 0.12 : 0.28), radius: size == .compact ? 4 : 8)
+        .shadow(color: tint.opacity(reduceMotion ? 0.10 : 0.16), radius: size == .compact ? 3 : 5)
         .accessibilityHidden(true)
         .onAppear {
             guard !reduceMotion else { return }
@@ -953,12 +1034,24 @@ struct FormaRefreshStatus: View {
 // MARK: - Transitions
 
 enum FormaTransition {
+    /// Content swap without implying vertical hierarchy.
+    static let fade: AnyTransition = .opacity
+
+    /// Child material appearing near a parent (footer under record circle).
+    static let rise: AnyTransition = .opacity.combined(with: .offset(y: 6))
+
     /// Gentle rise-and-fade used when cards and screens swap content.
-    static let card: AnyTransition = .opacity.combined(with: .offset(y: 10))
+    static let card: AnyTransition = rise
+
+    /// Prefer fade under Reduce Motion.
+    static func content(reduceMotion: Bool) -> AnyTransition {
+        reduceMotion ? fade : rise
+    }
 }
 
-/// One-time, silent cold-launch sequence. The real destination renders behind
+/// One-time, short cold-launch moment. The real destination renders behind
 /// the overlay so authentication/profile/report loading proceeds immediately.
+/// Full choreography stays under ~400ms so the app feels ready, not staged.
 struct FormaLaunchReveal: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -966,7 +1059,6 @@ struct FormaLaunchReveal: ViewModifier {
     @State private var isShowingOverlay = true
     @State private var revealsMark = false
     @State private var revealsWordmark = false
-    @State private var revealsTagline = false
     @State private var revealsContent = false
     @State private var exitsOverlay = false
 
@@ -974,21 +1066,18 @@ struct FormaLaunchReveal: ViewModifier {
         ZStack {
             content
                 .opacity(revealsContent || reduceMotion ? 1 : 0)
-                .scaleEffect(revealsContent || reduceMotion ? 1 : 0.985)
-                .offset(y: revealsContent || reduceMotion ? 0 : 8)
 
             if isShowingOverlay {
                 FormaLaunchSequence(
                     revealsMark: revealsMark,
                     revealsWordmark: revealsWordmark,
-                    revealsTagline: revealsTagline,
                     isExiting: exitsOverlay,
                     reduceMotion: reduceMotion,
                     reduceTransparency: reduceTransparency
                 )
                 .transition(.opacity)
                 .zIndex(10)
-                .allowsHitTesting(true)
+                .allowsHitTesting(!exitsOverlay)
                 .accessibilityHidden(true)
             }
         }
@@ -1006,26 +1095,21 @@ struct FormaLaunchReveal: ViewModifier {
                 return
             }
 
-            withAnimation(.timingCurve(0.23, 1, 0.32, 1, duration: 0.52)) {
+            withAnimation(FormaMotion.brandDecelerate) {
                 revealsMark = true
             }
-            try? await Task.sleep(for: .milliseconds(520))
+            try? await Task.sleep(for: .milliseconds(180))
 
-            withAnimation(.timingCurve(0.23, 1, 0.32, 1, duration: 0.4)) {
+            withAnimation(FormaMotion.fast) {
                 revealsWordmark = true
             }
-            try? await Task.sleep(for: .milliseconds(260))
+            try? await Task.sleep(for: .milliseconds(120))
 
-            withAnimation(FormaMotion.enter) {
-                revealsTagline = true
-            }
-            try? await Task.sleep(for: .milliseconds(280))
-
-            withAnimation(.timingCurve(0.23, 1, 0.32, 1, duration: 0.3)) {
+            withAnimation(FormaMotion.emphasized) {
                 revealsContent = true
                 exitsOverlay = true
             }
-            try? await Task.sleep(for: .milliseconds(320))
+            try? await Task.sleep(for: .milliseconds(280))
             isShowingOverlay = false
         }
     }
@@ -1034,7 +1118,6 @@ struct FormaLaunchReveal: ViewModifier {
 private struct FormaLaunchSequence: View {
     let revealsMark: Bool
     let revealsWordmark: Bool
-    let revealsTagline: Bool
     let isExiting: Bool
     let reduceMotion: Bool
     let reduceTransparency: Bool
@@ -1048,44 +1131,29 @@ private struct FormaLaunchSequence: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                Color.sleekAccent.opacity(revealsMark ? 0.16 : 0),
+                                Color.sleekAccent.opacity(revealsMark ? 0.12 : 0),
                                 .clear
                             ],
                             center: .center,
                             startRadius: 0,
-                            endRadius: 250
+                            endRadius: 220
                         )
                     )
-                    .frame(width: 520, height: 520)
-                    .scaleEffect(isExiting ? 1.45 : (revealsMark ? 1 : 0.82))
+                    .frame(width: 480, height: 480)
                     .opacity(isExiting ? 0 : 1)
             }
 
-            VStack(spacing: FormaSpacing.lg) {
-                HStack(spacing: FormaSpacing.sm) {
-                    FormaAnimatedMark(progress: revealsMark ? 1 : 0, reduceMotion: reduceMotion)
-                        .frame(width: 62, height: 82)
+            HStack(spacing: FormaSpacing.sm) {
+                FormaAnimatedMark(progress: revealsMark ? 1 : 0, reduceMotion: reduceMotion)
+                    .frame(width: 52, height: 68)
 
-                    Text("Forma")
-                        .font(FormaTypography.wordmark(size: 54))
-                        .tracking(revealsWordmark ? -1 : 4)
-                        .foregroundStyle(Color.primary)
-                        .mask(alignment: .leading) {
-                            Rectangle()
-                                .scaleEffect(x: revealsWordmark ? 1 : 0, anchor: .leading)
-                        }
-                        .opacity(revealsWordmark ? 1 : 0.01)
-                }
-                .fixedSize()
-
-                Text("Your body, understood over time.")
-                    .font(.subheadline.weight(.semibold))
-                    .tracking(0.2)
-                    .foregroundStyle(.secondary)
-                    .opacity(revealsTagline && !isExiting ? 1 : 0)
-                    .offset(y: revealsTagline && !isExiting ? 0 : 6)
+                Text("Forma")
+                    .font(FormaTypography.wordmark(size: 48))
+                    .tracking(revealsWordmark ? -1 : 2)
+                    .foregroundStyle(Color.primary)
+                    .opacity(revealsWordmark ? 1 : 0)
             }
-            .scaleEffect(isExiting ? 1.025 : 1)
+            .fixedSize()
             .opacity(isExiting ? 0 : 1)
         }
         .ignoresSafeArea()
@@ -1109,17 +1177,16 @@ private struct FormaAnimatedMark: View {
                             lineJoin: .round
                         )
                     )
-                    .shadow(color: .sleekAccent.opacity(0.22), radius: 6)
+                    .shadow(color: .sleekAccent.opacity(0.16), radius: 4)
                     .animation(
-                        reduceMotion
-                            ? nil
-                            : .timingCurve(0.23, 1, 0.32, 1, duration: 0.43)
-                                .delay(Double(index) * 0.045),
+                        FormaMotion.preferred(
+                            FormaMotion.brandDecelerate.delay(Double(index) * 0.03),
+                            reduceMotion: reduceMotion
+                        ),
                         value: progress
                     )
             }
         }
-        .scaleEffect(progress > 0 ? 1 : 0.94)
         .opacity(progress > 0 ? 1 : 0)
     }
 }
@@ -1277,13 +1344,17 @@ struct FormaSemicircularGauge: View {
 
     private func animateToValue() {
         let clamped = min(range.upperBound, max(range.lowerBound, value))
+        // Skip re-sweeps when the value did not change (tab revisits, layout).
+        if let animatedValue, abs(animatedValue - clamped) < 0.000_1 {
+            return
+        }
 
         if reduceMotion {
             animatedValue = clamped
         } else {
-            // Explicit transaction so the marker sweep always runs even when a
-            // parent view has suppressed implicit animations for tab swaps.
-            var transaction = Transaction(animation: .easeOut(duration: 0.7))
+            // Explicit transaction so the marker sweep still runs when a parent
+            // view has suppressed implicit animations for tab swaps.
+            var transaction = Transaction(animation: FormaMotion.dataReveal)
             transaction.disablesAnimations = false
             withTransaction(transaction) {
                 animatedValue = clamped
@@ -1411,51 +1482,23 @@ struct FormaCategoryLegend: View {
 
 // MARK: - Skeleton loading
 
+/// Soft opacity pulse for skeleton placeholders. Prefer this over traveling
+/// shimmer gradients — cheaper, interruptible, and more native under Reduce Motion.
 struct ShimmerModifier: ViewModifier {
-    @State private var phase: CGFloat = 0
+    @State private var isPulsing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
         content
-            .modifier(AnimatedShimmerModifier(phase: reduceMotion ? 0.5 : phase))
+            .opacity(reduceMotion ? 1 : (isPulsing ? 1 : 0.72))
+            .animation(FormaMotion.preferred(FormaMotion.pulse, reduceMotion: reduceMotion), value: isPulsing)
             .onAppear {
                 guard !reduceMotion else { return }
-
-                withAnimation(.linear(duration: 1.6).repeatForever(autoreverses: false)) {
-                    phase = 1
-                }
+                isPulsing = true
             }
-    }
-}
-
-struct AnimatedShimmerModifier: AnimatableModifier {
-    var phase: CGFloat
-
-    var animatableData: CGFloat {
-        get { phase }
-        set { phase = newValue }
-    }
-
-    func body(content: Content) -> some View {
-        content
-            .overlay(
-                GeometryReader { geo in
-                    let w = geo.size.width
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0.3),
-                            .init(color: .white.opacity(0.22), location: 0.5),
-                            .init(color: .clear, location: 0.7)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: w * 2)
-                    .offset(x: -w + (w * 2 * phase))
-                    .blendMode(.overlay)
-                }
-                .mask(content)
-            )
+            .onChange(of: reduceMotion) { _, shouldReduceMotion in
+                isPulsing = !shouldReduceMotion
+            }
     }
 }
 

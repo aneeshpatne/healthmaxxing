@@ -34,7 +34,7 @@ struct ContentView: View {
             }
             #endif
         }
-        .animation(reduceMotion ? nil : FormaMotion.enter, value: clerk.user != nil)
+        .animation(FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion), value: clerk.user != nil)
         .formaLaunchReveal()
     }
 }

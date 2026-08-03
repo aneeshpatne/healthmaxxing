@@ -16,7 +16,6 @@ struct Profiles: View {
     @State private var isLoading = false
     @State private var isShowingAddProfile = false
     @State private var editingProfile: ClientProfile?
-    @State private var editFeedbackNonce = 0
 
     private let apiClient = APIClient()
 
@@ -56,10 +55,7 @@ struct Profiles: View {
         .task {
             await loadProfiles()
         }
-        .formaFeedback(FormaUIFeedback.softImpact, trigger: isShowingAddProfile) { wasShown, isShown in
-            !wasShown && isShown
-        }
-        .formaFeedback(FormaUIFeedback.softImpact, trigger: editFeedbackNonce)
+        // Sheets provide their own presentation feedback; keep haptics for errors only.
         .formaFeedback(FormaUIFeedback.error, trigger: errorMessage) { oldMessage, newMessage in
             oldMessage != newMessage && newMessage != nil
         }
@@ -159,7 +155,6 @@ struct Profiles: View {
     }
 
     private func editProfile(_ profile: ClientProfile) {
-        editFeedbackNonce += 1
         editingProfile = profile
     }
 

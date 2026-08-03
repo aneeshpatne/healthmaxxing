@@ -48,7 +48,7 @@ struct MetricsView: View {
                     )
                     .padding(.horizontal, FormaSpacing.screenGutter)
                     .padding(.bottom, FormaSpacing.md)
-                    .transition(.opacity.combined(with: .offset(y: -6)))
+                    .transition(FormaTransition.content(reduceMotion: reduceMotion))
                 }
 
                 // Tab body swaps without a parent animation transaction so Charts
@@ -104,7 +104,10 @@ struct MetricsView: View {
                 // still letting it leave naturally when the page scrolls up.
                 FormaAccentWash(accent: pageAccent, topExtension: 1_000)
                     .offset(y: -1_000)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.28), value: selectedTab)
+                    .animation(
+                        FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
+                        value: selectedTab
+                    )
             }
         }
         .refreshable {
@@ -119,16 +122,19 @@ struct MetricsView: View {
             if reduceMotion {
                 isAtTop = shouldShowBrand
             } else {
-                withAnimation(.easeOut(duration: 0.2)) {
+                withAnimation(FormaMotion.fast) {
                     isAtTop = shouldShowBrand
                 }
             }
         }
         .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
         .background(FormaBackground())
-        .animation(reduceMotion ? nil : FormaMotion.enter, value: reportStore.payload != nil)
         .animation(
-            reduceMotion ? nil : FormaMotion.enter,
+            FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
+            value: reportStore.payload != nil
+        )
+        .animation(
+            FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
             value: reportStore.isWaitingForReport || reportStore.isLoading
         )
     }
@@ -206,7 +212,10 @@ struct MetricsTabBar: View {
                 .frame(height: 0.5)
         }
         // Scope selection motion to the tab bar only — not the report body.
-        .animation(reduceMotion ? nil : FormaMotion.selection, value: selectedTab)
+        .animation(
+            FormaMotion.preferred(FormaMotion.selection, reduceMotion: reduceMotion),
+            value: selectedTab
+        )
         .formaFeedback(.selection, trigger: selectedTab)
         .accessibilityIdentifier("metrics-tab-bar")
     }

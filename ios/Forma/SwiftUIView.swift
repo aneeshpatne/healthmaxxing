@@ -59,13 +59,8 @@ struct SwiftUIView: View {
                         isAtTop: $isMetricsAtTop,
                         reportStore: reportStore,
                         onRecordRequested: {
-                            if reduceMotion {
-                                activeTab = .record
-                            } else {
-                                withAnimation(FormaMotion.selection) {
-                                    activeTab = .record
-                                }
-                            }
+                            // System tab changes are immediate — no spring morph.
+                            activeTab = .record
                         }
                     )
                 }
@@ -89,7 +84,7 @@ struct SwiftUIView: View {
                 HStack {
                     if activeTab != .metrics || isMetricsAtTop {
                         FormaBrandLockup(variant: .header, wordmarkColor: .primary)
-                            .transition(.opacity.combined(with: .offset(y: -4)))
+                            .transition(FormaTransition.fade)
                     }
 
                     Spacer(minLength: 0)
@@ -101,7 +96,7 @@ struct SwiftUIView: View {
                 .padding(.horizontal, FormaSpacing.screenGutter)
                 .safeAreaPadding(.top, FormaSpacing.xs)
                 .animation(
-                    reduceMotion ? nil : .easeOut(duration: 0.22),
+                    FormaMotion.preferred(FormaMotion.fast, reduceMotion: reduceMotion),
                     value: activeTab != .metrics || isMetricsAtTop
                 )
             }

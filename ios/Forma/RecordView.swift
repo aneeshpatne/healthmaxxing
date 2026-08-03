@@ -100,7 +100,8 @@ final class IdleTimerLease {
 }
 
 struct RecordView: View {
-    private static let minimumMetricDisplayDuration = Duration.milliseconds(800)
+    /// Brief hold so each stage is readable without feeling staged behind the scale.
+    private static let minimumMetricDisplayDuration = Duration.milliseconds(400)
 
     let reportStore: MetricsReportStore
 
@@ -538,14 +539,18 @@ private struct RecordCircle: View {
         .accessibilityValue(accessibilityValue)
         .accessibilityHint(accessibilityHint)
         .accessibilityIdentifier("record-primary-control")
-        .animation(reduceMotion ? nil : FormaMotion.enter, value: state)
+        .animation(
+            FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
+            value: state
+        )
     }
 
     @ViewBuilder
     private var circleBackground: some View {
         switch state {
         case .ready:
-            AnimatedRecordPalette(diameter: diameter)
+            // Static brand disc while idle — no continuous Canvas/blur animation.
+            ReadyRecordPalette(diameter: diameter)
                 .overlay {
                     Circle()
                         .fill(
@@ -791,7 +796,7 @@ private struct RecordFlowFooter: View {
                         .foregroundStyle(.primary)
                 }
                 .padding(.horizontal, FormaSpacing.xxl)
-                .transition(.opacity.combined(with: .offset(y: 6)))
+                .transition(FormaTransition.content(reduceMotion: reduceMotion))
 
             case .submissionFailed(let message):
                 VStack(spacing: FormaSpacing.xs) {
@@ -811,7 +816,7 @@ private struct RecordFlowFooter: View {
                         .foregroundStyle(.primary)
                 }
                 .padding(.horizontal, FormaSpacing.xxl)
-                .transition(.opacity.combined(with: .offset(y: 6)))
+                .transition(FormaTransition.content(reduceMotion: reduceMotion))
 
             case .connecting(let label) where isReading:
                 VStack(spacing: FormaSpacing.sm) {
@@ -821,7 +826,7 @@ private struct RecordFlowFooter: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
-                .transition(.opacity)
+                .transition(FormaTransition.fade)
 
             case .weight, .impedance, .heartRate:
                 if isReading {
@@ -832,7 +837,7 @@ private struct RecordFlowFooter: View {
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     }
-                    .transition(.opacity)
+                    .transition(FormaTransition.fade)
                 } else {
                     Text(state.actionGuidance)
                         .font(.caption.weight(.semibold))
@@ -841,13 +846,13 @@ private struct RecordFlowFooter: View {
 
             case .saved:
                 RecordMeasurementSummary(measurement: measurement)
-                    .transition(.opacity.combined(with: .offset(y: 6)))
+                    .transition(FormaTransition.content(reduceMotion: reduceMotion))
 
             case .ready:
                 Text(state.actionGuidance)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .transition(.opacity)
+                    .transition(FormaTransition.fade)
 
             case .connecting:
                 Text(state.actionGuidance)
@@ -856,7 +861,10 @@ private struct RecordFlowFooter: View {
             }
         }
         .frame(minHeight: 60, alignment: .top)
-        .animation(reduceMotion ? nil : FormaMotion.enter, value: state)
+        .animation(
+            FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
+            value: state
+        )
         .accessibilityIdentifier(state.accessibilityIdentifier)
     }
 
@@ -1015,7 +1023,10 @@ private struct RecordStageTracker: View {
                 fullProgress
             }
         }
-        .animation(reduceMotion ? nil : FormaMotion.selection, value: measurement)
+        .animation(
+            FormaMotion.preferred(FormaMotion.selection, reduceMotion: reduceMotion),
+            value: measurement
+        )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Measurement progress")
         .accessibilityValue(accessibleProgressLabel)
@@ -1095,187 +1106,81 @@ private struct RecordStageTracker: View {
     }
 }
 
-private struct AnimatedRecordPalette: View {
+/// Static brand fill for the ready state. Continuous Canvas motion was removed
+/// so the primary control stays calm and cheap until the user starts a reading.
+private struct ReadyRecordPalette: View {
     let diameter: CGFloat
-    var reduceMotionOverride: Bool? = nil
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private static let cycleDuration: TimeInterval = 10
-    private static let reducedMotionPhase = Double.pi * 0.38
-    /// Monochromatic brand greens only — single-accent ready state, no multi-hue noise.
-    private static let fields: [RecordColorField] = [
-        RecordColorField(
-            color: Color(red: 0.043, green: 0.420, blue: 0.290), // brand primary #0B6B4A
-            center: CGPoint(x: 0.17, y: 0.18),
-            size: CGSize(width: 0.94, height: 0.74),
-            travel: CGVector(dx: 0.10, dy: 0.08),
-            phaseOffset: 0.15,
-            xFrequency: 1,
-            yFrequency: 2,
-            scaleFrequency: 1
-        ),
-        RecordColorField(
-            color: Color(red: 0.027, green: 0.290, blue: 0.200), // pressed #074A33
-            center: CGPoint(x: 0.80, y: 0.16),
-            size: CGSize(width: 0.82, height: 0.76),
-            travel: CGVector(dx: 0.09, dy: 0.10),
-            phaseOffset: 1.20,
-            xFrequency: 2,
-            yFrequency: 1,
-            scaleFrequency: 2
-        ),
-        RecordColorField(
-            color: Color(red: 0.122, green: 0.651, blue: 0.416), // dark fill #1FA66A
-            center: CGPoint(x: 0.14, y: 0.72),
-            size: CGSize(width: 0.92, height: 0.90),
-            travel: CGVector(dx: 0.11, dy: 0.08),
-            phaseOffset: 2.30,
-            xFrequency: 1,
-            yFrequency: 2,
-            scaleFrequency: 1
-        ),
-        RecordColorField(
-            color: Color(red: 0.169, green: 0.749, blue: 0.478), // action fill #2BBF7A
-            center: CGPoint(x: 0.78, y: 0.66),
-            size: CGSize(width: 0.90, height: 0.84),
-            travel: CGVector(dx: 0.10, dy: 0.09),
-            phaseOffset: 3.45,
-            xFrequency: 2,
-            yFrequency: 1,
-            scaleFrequency: 2
-        ),
-        RecordColorField(
-            color: Color(red: 0.239, green: 0.839, blue: 0.561), // accent #3DD68F
-            center: CGPoint(x: 0.52, y: 0.46),
-            size: CGSize(width: 0.72, height: 0.66),
-            travel: CGVector(dx: 0.13, dy: 0.11),
-            phaseOffset: 4.55,
-            xFrequency: 1,
-            yFrequency: 2,
-            scaleFrequency: 1
-        ),
-        RecordColorField(
-            color: Color(red: 0.035, green: 0.353, blue: 0.243), // hover #095A3E
-            center: CGPoint(x: 0.52, y: 0.96),
-            size: CGSize(width: 1.08, height: 0.74),
-            travel: CGVector(dx: 0.08, dy: 0.07),
-            phaseOffset: 5.50,
-            xFrequency: 2,
-            yFrequency: 1,
-            scaleFrequency: 2
-        )
-    ]
 
     var body: some View {
-        Group {
-            if reduceMotionOverride ?? reduceMotion {
-                palette(phase: Self.reducedMotionPhase)
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                    palette(phase: phase(for: context.date))
-                }
-            }
-        }
-        .clipShape(Circle())
-        .accessibilityHidden(true)
-    }
-
-    private func palette(phase: Double) -> some View {
-        Canvas(opaque: true, colorMode: .nonLinear, rendersAsynchronously: true) { context, size in
-            context.fill(
-                Path(CGRect(origin: .zero, size: size)),
-                with: .color(Color(red: 0.09, green: 0.38, blue: 0.29)) // deep brand teal base
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.169, green: 0.749, blue: 0.478), // #2BBF7A
+                        Color(red: 0.043, green: 0.420, blue: 0.290), // #0B6B4A
+                        Color(red: 0.027, green: 0.290, blue: 0.200)  // #074A33
+                    ],
+                    center: UnitPoint(x: 0.32, y: 0.28),
+                    startRadius: 0,
+                    endRadius: diameter * 0.72
+                )
             )
-
-            context.drawLayer { layer in
-                layer.addFilter(.blur(radius: size.width * 0.14))
-
-                for field in Self.fields {
-                    let scale = 1 + (0.09 * sin((phase * field.scaleFrequency) + field.phaseOffset))
-                    let width = size.width * field.size.width * scale
-                    let height = size.height * field.size.height * scale
-                    let center = CGPoint(
-                        x: size.width * (
-                            field.center.x
-                                + (field.travel.dx * sin((phase * field.xFrequency) + field.phaseOffset))
-                        ),
-                        y: size.height * (
-                            field.center.y
-                                + (field.travel.dy * cos((phase * field.yFrequency) + field.phaseOffset))
+            .frame(width: diameter, height: diameter)
+            .overlay {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(red: 0.239, green: 0.839, blue: 0.561).opacity(0.35),
+                                .clear
+                            ],
+                            center: UnitPoint(x: 0.72, y: 0.68),
+                            startRadius: 0,
+                            endRadius: diameter * 0.55
                         )
                     )
-                    let rect = CGRect(
-                        x: center.x - (width / 2),
-                        y: center.y - (height / 2),
-                        width: width,
-                        height: height
-                    )
-
-                    layer.fill(Path(ellipseIn: rect), with: .color(field.color))
-                }
             }
-        }
-        .frame(width: diameter, height: diameter)
+            .accessibilityHidden(true)
     }
-
-    private func phase(for date: Date) -> Double {
-        let elapsed = date.timeIntervalSinceReferenceDate
-            .truncatingRemainder(dividingBy: Self.cycleDuration)
-        return (elapsed / Self.cycleDuration) * (2 * Double.pi)
-    }
-}
-
-private struct RecordColorField {
-    let color: Color
-    let center: CGPoint
-    let size: CGSize
-    let travel: CGVector
-    let phaseOffset: Double
-    let xFrequency: Double
-    let yFrequency: Double
-    let scaleFrequency: Double
 }
 
 private struct OrbitingRecordRing: View {
     let diameter: CGFloat
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isSpinning = false
 
     var body: some View {
         ZStack {
             Circle()
                 .stroke(Color.sleekAccent.opacity(0.12), lineWidth: 3)
 
-            if reduceMotion {
-                Circle()
-                    .trim(from: 0, to: 0.24)
-                    .stroke(
-                        Color.sleekAccent,
-                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
-                    let revolutionDuration = 1.6
-                    let progress = context.date.timeIntervalSinceReferenceDate
-                        .truncatingRemainder(dividingBy: revolutionDuration) / revolutionDuration
-
-                    Circle()
-                        .trim(from: 0, to: 0.24)
-                        .stroke(
-                            AngularGradient(
-                                colors: [.sleekAccent.opacity(0.22), .sleekAccent],
-                                center: .center
-                            ),
-                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees((progress * 360) - 90))
-                }
-            }
+            Circle()
+                .trim(from: 0, to: 0.24)
+                .stroke(
+                    AngularGradient(
+                        colors: [.sleekAccent.opacity(0.22), .sleekAccent],
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                )
+                .rotationEffect(.degrees(reduceMotion ? -90 : (isSpinning ? 270 : -90)))
+                .animation(
+                    reduceMotion
+                        ? nil
+                        : .linear(duration: 1.6).repeatForever(autoreverses: false),
+                    value: isSpinning
+                )
         }
         .frame(width: diameter, height: diameter)
         .accessibilityHidden(true)
+        .onAppear {
+            guard !reduceMotion else { return }
+            isSpinning = true
+        }
+        .onChange(of: reduceMotion) { _, shouldReduceMotion in
+            isSpinning = !shouldReduceMotion
+        }
     }
 }
 
@@ -1285,8 +1190,8 @@ private struct OrbitingRecordRing: View {
         .background(FormaBackground())
 }
 
-#Preview("Record — Reduce Motion") {
-    AnimatedRecordPalette(diameter: 240, reduceMotionOverride: true)
+#Preview("Record — Ready palette") {
+    ReadyRecordPalette(diameter: 240)
         .overlay {
             Text("Record")
                 .font(.title2.weight(.semibold))

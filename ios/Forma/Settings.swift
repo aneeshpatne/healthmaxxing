@@ -9,7 +9,6 @@ import ClerkKit
 import ClerkKitUI
 
 struct Settings: View {
-    @State private var navigationFeedbackNonce = 0
     @AppStorage(FormaFeedbackPreferences.soundEffectsKey) private var soundEffectsEnabled = true
     @AppStorage(FormaFeedbackPreferences.hapticsKey) private var hapticsEnabled = true
     @EnvironmentObject private var soundPlayer: FormaSoundPlayer
@@ -91,11 +90,11 @@ struct Settings: View {
         .background(FormaBackground())
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .formaFeedback(.softImpact, trigger: navigationFeedbackNonce)
         .onChange(of: soundEffectsEnabled) { wasEnabled, isEnabled in
             guard !wasEnabled, isEnabled else { return }
             soundPlayer.play(.confirm)
         }
+        // Haptic only when enabling the preference itself — not on every row push.
         .formaFeedback(.softImpact, trigger: hapticsEnabled) { wasEnabled, isEnabled in
             !wasEnabled && isEnabled
         }
@@ -114,11 +113,6 @@ struct Settings: View {
             rowContent(title: title, subtitle: subtitle, systemImage: systemImage, tint: tint)
         }
         .buttonStyle(FormaPressableButtonStyle())
-        .simultaneousGesture(
-            TapGesture().onEnded {
-                navigationFeedbackNonce += 1
-            }
-        )
     }
 
     private var appVersion: String {
