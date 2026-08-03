@@ -585,7 +585,7 @@ private struct RecordCircle: View {
             VStack(spacing: FormaSpacing.md) {
                 Image(systemName: "antenna.radiowaves.left.and.right")
                     .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(Color.formaTeal)
+                    .foregroundStyle(Color.sleekAccent)
                 Text(label)
                     .font(.headline.weight(.semibold))
             }
@@ -601,7 +601,7 @@ private struct RecordCircle: View {
                 metricContent(title: "Heart Rate", value: String(value), unit: "bpm")
 
                 if isSubmitting {
-                    FormaLoadingIndicator(tint: .formaTeal)
+                    FormaLoadingIndicator(tint: .sleekAccent)
                         .transition(.opacity)
                 }
             }
@@ -663,9 +663,9 @@ private struct RecordCircle: View {
         case .ready:
             return .actionInk
         case .saved:
-            return .sleekAccent
+            return .formaPositive
         case .recordingFailed, .submissionFailed:
-            return .formaCoral
+            return .formaNegative
         case .connecting, .weight, .impedance, .heartRate:
             return .appSecondaryBackground
         }
@@ -679,7 +679,7 @@ private struct RecordCircle: View {
         case .saved, .recordingFailed, .submissionFailed:
             color = .white.opacity(0.18)
         case .connecting, .weight, .impedance, .heartRate:
-            color = .formaTeal.opacity(0.15)
+            color = .sleekAccent.opacity(0.12)
         }
 
         return RadialGradient(
@@ -693,11 +693,11 @@ private struct RecordCircle: View {
     private var shadowColor: Color {
         switch state {
         case .saved:
-            return .sleekAccent.opacity(0.24)
+            return .formaPositive.opacity(0.22)
         case .recordingFailed, .submissionFailed:
-            return .formaCoral.opacity(0.24)
+            return .formaNegative.opacity(0.22)
         case .ready:
-            return .actionInk.opacity(0.24)
+            return .actionInk.opacity(0.22)
         case .connecting, .weight, .impedance, .heartRate:
             return .cardShadow
         }
@@ -777,7 +777,7 @@ private struct RecordFlowFooter: View {
                 VStack(spacing: FormaSpacing.xs) {
                     Text(message)
                         .font(FormaTypography.body)
-                        .foregroundStyle(Color.formaCoral)
+                        .foregroundStyle(Color.formaNegative)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -797,7 +797,7 @@ private struct RecordFlowFooter: View {
                 VStack(spacing: FormaSpacing.xs) {
                     Text(message)
                         .font(FormaTypography.body)
-                        .foregroundStyle(Color.formaCoral)
+                        .foregroundStyle(Color.formaNegative)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -1031,7 +1031,7 @@ private struct RecordStageTracker: View {
                 HStack(spacing: FormaSpacing.xs) {
                     ZStack {
                         Circle()
-                            .fill(stage.isComplete ? Color.formaTeal : Color.appTertiaryBackground)
+                            .fill(stage.isComplete ? Color.formaPositive : Color.appTertiaryBackground)
                             .frame(width: 20, height: 20)
 
                         if stage.isComplete {
@@ -1053,7 +1053,7 @@ private struct RecordStageTracker: View {
 
                 if index < stages.count - 1 {
                     Capsule()
-                        .fill(stage.isComplete ? Color.formaTeal.opacity(0.65) : Color.appTertiaryBackground)
+                        .fill(stage.isComplete ? Color.formaPositive.opacity(0.65) : Color.appTertiaryBackground)
                         .frame(maxWidth: 24)
                         .frame(height: 2)
                 }
@@ -1071,13 +1071,13 @@ private struct RecordStageTracker: View {
                 Image(systemName: stage.isComplete ? "checkmark.circle.fill" : "\(index + 1).circle.fill")
                     .foregroundStyle(
                         stage.isComplete
-                            ? Color.formaTeal
+                            ? Color.formaPositive
                             : (isActive ? Color.sleekAccent : Color.secondary)
                     )
 
                 if index < stages.count - 1 {
                     Capsule()
-                        .fill(stage.isComplete ? Color.formaTeal.opacity(0.65) : Color.appTertiaryBackground)
+                        .fill(stage.isComplete ? Color.formaPositive.opacity(0.65) : Color.appTertiaryBackground)
                         .frame(width: 24, height: 2)
                 }
             }
@@ -1103,9 +1103,10 @@ private struct AnimatedRecordPalette: View {
 
     private static let cycleDuration: TimeInterval = 10
     private static let reducedMotionPhase = Double.pi * 0.38
+    /// Monochromatic brand greens only — single-accent ready state, no multi-hue noise.
     private static let fields: [RecordColorField] = [
         RecordColorField(
-            color: Color(red: 0.36, green: 0.87, blue: 0.66), // sleekAccent mint
+            color: Color(red: 0.043, green: 0.420, blue: 0.290), // brand primary #0B6B4A
             center: CGPoint(x: 0.17, y: 0.18),
             size: CGSize(width: 0.94, height: 0.74),
             travel: CGVector(dx: 0.10, dy: 0.08),
@@ -1115,7 +1116,7 @@ private struct AnimatedRecordPalette: View {
             scaleFrequency: 1
         ),
         RecordColorField(
-            color: Color(red: 0.10, green: 0.52, blue: 0.40), // deep emerald
+            color: Color(red: 0.027, green: 0.290, blue: 0.200), // pressed #074A33
             center: CGPoint(x: 0.80, y: 0.16),
             size: CGSize(width: 0.82, height: 0.76),
             travel: CGVector(dx: 0.09, dy: 0.10),
@@ -1125,7 +1126,7 @@ private struct AnimatedRecordPalette: View {
             scaleFrequency: 2
         ),
         RecordColorField(
-            color: Color(red: 0.10, green: 0.42, blue: 0.58), // deep cyan
+            color: Color(red: 0.122, green: 0.651, blue: 0.416), // dark fill #1FA66A
             center: CGPoint(x: 0.14, y: 0.72),
             size: CGSize(width: 0.92, height: 0.90),
             travel: CGVector(dx: 0.11, dy: 0.08),
@@ -1135,7 +1136,7 @@ private struct AnimatedRecordPalette: View {
             scaleFrequency: 1
         ),
         RecordColorField(
-            color: Color(red: 0.20, green: 0.72, blue: 0.58), // mid teal
+            color: Color(red: 0.169, green: 0.749, blue: 0.478), // action fill #2BBF7A
             center: CGPoint(x: 0.78, y: 0.66),
             size: CGSize(width: 0.90, height: 0.84),
             travel: CGVector(dx: 0.10, dy: 0.09),
@@ -1145,7 +1146,7 @@ private struct AnimatedRecordPalette: View {
             scaleFrequency: 2
         ),
         RecordColorField(
-            color: Color(red: 0.62, green: 0.95, blue: 0.82), // pale mint highlight
+            color: Color(red: 0.239, green: 0.839, blue: 0.561), // accent #3DD68F
             center: CGPoint(x: 0.52, y: 0.46),
             size: CGSize(width: 0.72, height: 0.66),
             travel: CGVector(dx: 0.13, dy: 0.11),
@@ -1155,7 +1156,7 @@ private struct AnimatedRecordPalette: View {
             scaleFrequency: 1
         ),
         RecordColorField(
-            color: Color(red: 0.28, green: 0.86, blue: 0.71), // formaTeal
+            color: Color(red: 0.035, green: 0.353, blue: 0.243), // hover #095A3E
             center: CGPoint(x: 0.52, y: 0.96),
             size: CGSize(width: 1.08, height: 0.74),
             travel: CGVector(dx: 0.08, dy: 0.07),
@@ -1244,13 +1245,13 @@ private struct OrbitingRecordRing: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color.formaTeal.opacity(0.12), lineWidth: 3)
+                .stroke(Color.sleekAccent.opacity(0.12), lineWidth: 3)
 
             if reduceMotion {
                 Circle()
                     .trim(from: 0, to: 0.24)
                     .stroke(
-                        Color.formaTeal,
+                        Color.sleekAccent,
                         style: StrokeStyle(lineWidth: 3, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
@@ -1264,7 +1265,7 @@ private struct OrbitingRecordRing: View {
                         .trim(from: 0, to: 0.24)
                         .stroke(
                             AngularGradient(
-                                colors: [.formaTeal.opacity(0.22), .formaTeal],
+                                colors: [.sleekAccent.opacity(0.22), .sleekAccent],
                                 center: .center
                             ),
                             style: StrokeStyle(lineWidth: 3, lineCap: .round)

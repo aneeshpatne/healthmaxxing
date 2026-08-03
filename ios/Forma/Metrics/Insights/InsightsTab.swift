@@ -24,7 +24,7 @@ struct InsightsTab: View {
                     headline: overview.headline ?? overview.displayComment,
                     calloutText: overview.remark?.text ?? overview.displayComment,
                     calloutIcon: overview.remark?.marker?.iconName ?? "flame.fill",
-                    calloutTint: overview.remark?.marker?.color ?? .formaAmber
+                    calloutTint: overview.remark?.marker?.color ?? .secondary
                 )
             }
 
@@ -35,7 +35,7 @@ struct InsightsTab: View {
                     body: foundation.comment ?? foundation.remark?.text,
                     calloutText: foundation.remark?.text ?? foundation.displayComment,
                     calloutIcon: foundation.remark?.marker?.iconName ?? "checkmark.circle.fill",
-                    calloutTint: foundation.remark?.marker?.color ?? .formaTeal
+                    calloutTint: foundation.remark?.marker?.color ?? .secondary
                 )
             }
 
@@ -46,7 +46,7 @@ struct InsightsTab: View {
                     body: momentum.comment ?? momentum.remark?.text,
                     calloutText: momentum.remark?.text ?? momentum.displayComment,
                     calloutIcon: momentum.remark?.marker?.iconName ?? "bolt.fill",
-                    calloutTint: momentum.remark?.marker?.color ?? .formaAmber
+                    calloutTint: momentum.remark?.marker?.color ?? .secondary
                 )
             }
 
@@ -57,7 +57,7 @@ struct InsightsTab: View {
                     body: progress.comment ?? progress.remark?.text,
                     calloutText: progress.remark?.text ?? progress.displayComment,
                     calloutIcon: progress.remark?.marker?.iconName ?? "sparkle",
-                    calloutTint: progress.remark?.marker?.color ?? .formaTeal
+                    calloutTint: progress.remark?.marker?.color ?? .secondary
                 ) {
                     ProgressTrendChart(trendData: progress.trendData)
                 }
@@ -70,7 +70,7 @@ struct InsightsTab: View {
                     body: lever.comment ?? lever.remark?.text,
                     calloutText: lever.remark?.text ?? lever.displayComment,
                     calloutIcon: lever.remark?.marker?.iconName ?? "arrow.up.forward.circle.fill",
-                    calloutTint: lever.remark?.marker?.color ?? .formaTeal
+                    calloutTint: lever.remark?.marker?.color ?? .secondary
                 )
             }
 
@@ -81,7 +81,7 @@ struct InsightsTab: View {
                     body: physiqueArchetype.comment,
                     calloutText: physiqueArchetype.bodyType.map { "Body type: \($0.displayName)" } ?? physiqueArchetype.comment ?? "",
                     calloutIcon: "dumbbell.fill",
-                    calloutTint: .formaCyan
+                    calloutTint: .secondary
                 ) {
                     Image(physiqueArchetype.bodyType?.imageName ?? "body-normal")
                         .resizable()
@@ -99,7 +99,7 @@ struct InsightsTab: View {
                     title: effortSection.title ?? "Effort Score",
                     calloutText: effortSection.comment ?? effortSection.remark?.text ?? "",
                     calloutIcon: effortSection.remark?.marker?.iconName ?? "chart.line.downtrend.xyaxis",
-                    calloutTint: effortSection.remark?.marker?.color ?? .formaTeal
+                    calloutTint: effortSection.remark?.marker?.color ?? .secondary
                 )
             }
         }
@@ -116,7 +116,7 @@ private struct PriorityFactorCard: View {
     let factor: InsightReportFactorSection
 
     private var tint: Color {
-        factor.remark?.marker?.color ?? factor.factorColor?.color ?? .formaAmber
+        factor.remark?.marker?.color ?? factor.factorColor?.color ?? .sleekAccent
     }
     private var calloutText: String {
         factor.remark?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -165,7 +165,7 @@ private struct InsightSectionCard<Content: View>: View {
     var bodyText: String?
     let calloutText: String
     var calloutIcon = "sparkles"
-    var calloutTint: Color = .sleekAccent
+    var calloutTint: Color = .secondary
     @ViewBuilder var content: Content
 
     init(
@@ -174,7 +174,7 @@ private struct InsightSectionCard<Content: View>: View {
         body bodyText: String? = nil,
         calloutText: String,
         calloutIcon: String = "sparkles",
-        calloutTint: Color = .sleekAccent,
+        calloutTint: Color = .secondary,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
@@ -232,7 +232,7 @@ extension InsightSectionCard where Content == EmptyView {
         body bodyText: String? = nil,
         calloutText: String,
         calloutIcon: String = "sparkles",
-        calloutTint: Color = .sleekAccent
+        calloutTint: Color = .secondary
     ) {
         self.init(
             title: title,
@@ -252,7 +252,7 @@ private struct EffortScoreCard: View {
     let title: String
     let calloutText: String
     var calloutIcon = "chart.line.downtrend.xyaxis"
-    var calloutTint: Color = .formaTeal
+    var calloutTint: Color = .secondary
 
     var body: some View {
         VStack(alignment: .leading, spacing: FormaSpacing.cardContent) {
@@ -260,7 +260,7 @@ private struct EffortScoreCard: View {
                 FormaValueBadge(text: String(format: "%.0f/100", score), tint: .sleekAccent)
             }
 
-            // Single-accent progress track with the current position marker.
+            // Single primary track — reserved brand accent for the key score indicator.
             VStack(spacing: FormaSpacing.xs) {
                 GeometryReader { geometry in
                     let markerRadius: CGFloat = 8
@@ -275,7 +275,7 @@ private struct EffortScoreCard: View {
                             .frame(height: 8)
 
                         Capsule()
-                            .fill(Color.sleekAccent.gradient)
+                            .fill(Color.sleekAccent)
                             .frame(width: max(markerRadius * 2, markerX), height: 8)
 
                         Circle()

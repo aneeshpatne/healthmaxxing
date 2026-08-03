@@ -107,13 +107,13 @@ struct FatTab: View {
                     subtitle: section.comment,
                     valueText: String(format: "%.1f %@", currentMass, unit),
                     unit: unit,
-                    color: .formaAmber,
+                    color: .formaChartVisceral,
                     metricLabel: "Visceral fat",
                     statusText: section.title ?? section.displayTitle,
-                    statusColor: .formaPositive,
-                    statusIcon: "checkmark.circle.fill",
+                    statusColor: section.remark?.marker?.color ?? .secondary,
+                    statusIcon: section.remark?.marker?.iconName ?? "info.circle.fill",
                     remark: section.remark,
-                    points: chartPoints(from: trendPoints, metric: "Visceral fat", color: .formaAmber)
+                    points: chartPoints(from: trendPoints, metric: "Visceral fat", color: .formaChartVisceral)
                 )
             }
 
@@ -123,11 +123,11 @@ struct FatTab: View {
                     subtitle: section.comment,
                     valueText: String(format: "%.1f kg", currentMass),
                     unit: "kg",
-                    color: .formaCyan,
+                    color: .formaChartSubcutaneous,
                     metricLabel: "Subcutaneous fat",
                     statusText: section.title ?? section.displayTitle,
-                    statusColor: .formaNegative,
-                    statusIcon: "exclamationmark.triangle.fill",
+                    statusColor: section.remark?.marker?.color ?? .secondary,
+                    statusIcon: section.remark?.marker?.iconName ?? "info.circle.fill",
                     remark: section.remark,
                     points: chartPoints(
                         from: section.trendPoints(preferredKeys: [
@@ -136,7 +136,7 @@ struct FatTab: View {
                             "subcutaneousFatMassKg"
                         ]),
                         metric: "Subcutaneous fat",
-                        color: .formaCyan
+                        color: .formaChartSubcutaneous
                     )
                 )
             }
@@ -147,16 +147,16 @@ struct FatTab: View {
                     subtitle: section.comment,
                     valueText: String(format: "%.1f kg", currentMass),
                     unit: "kg",
-                    color: .formaCoral,
+                    color: .formaChartFat,
                     metricLabel: "Fat mass",
                     statusText: section.title ?? section.displayTitle,
-                    statusColor: .formaNegative,
-                    statusIcon: "chart.line.downtrend.xyaxis",
+                    statusColor: section.remark?.marker?.color ?? .secondary,
+                    statusIcon: section.remark?.marker?.iconName ?? "chart.line.downtrend.xyaxis",
                     remark: section.remark,
                     points: chartPoints(
                         from: section.trendPoints(preferredKeys: ["fatMassKg", "fat_mass_kg", "totalFatKg"]),
                         metric: "Fat mass",
-                        color: .formaCoral
+                        color: .formaChartFat
                     )
                 )
             }
@@ -168,7 +168,7 @@ struct FatTab: View {
                     subtitle: section.comment,
                     valueText: String(format: "%.1f%%", value),
                     unit: "%",
-                    color: .formaCoral,
+                    color: .formaChartFat,
                     metricLabel: "Body fat",
                     statusText: metrics.statusText,
                     statusColor: metrics.statusColor,
@@ -177,7 +177,7 @@ struct FatTab: View {
                     points: chartPoints(
                         from: section.trends["fatPercent"] ?? [],
                         metric: "Body fat",
-                        color: .formaCoral
+                        color: .formaChartFat
                     ),
                     accessibilitySummary: "Fat Ratio, \(String(format: "%.1f", value)) percent, \(metrics.statusText.lowercased()), \(metrics.verdictText.lowercased())."
                 )
@@ -336,20 +336,20 @@ struct VisceralSubcutaneousDonutChart: View {
             let visceralTrimEnd = max(gapOffset, CGFloat(visceralFraction) - gapOffset)
             let subcutaneousTrimStart = min(1.0 - gapOffset, CGFloat(visceralFraction) + gapOffset)
 
-            // Subcutaneous segment (Cyan)
+            // Subcutaneous segment (chart categorical — info family)
             Circle()
                 .trim(from: subcutaneousTrimStart, to: 1.0 - gapOffset)
                 .stroke(
-                    Color.formaCyan.gradient,
+                    Color.formaChartSubcutaneous.gradient,
                     style: StrokeStyle(lineWidth: 12, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
 
-            // Visceral segment (Amber — matches the visceral trend charts)
+            // Visceral segment (chart categorical — caution family)
             Circle()
                 .trim(from: gapOffset, to: visceralTrimEnd)
                 .stroke(
-                    Color.formaAmber.gradient,
+                    Color.formaChartVisceral.gradient,
                     style: StrokeStyle(lineWidth: 12, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
@@ -454,7 +454,7 @@ struct VisceralSubcutaneousCard: View {
                             value: visceralFat,
                             unit: visceralUnit,
                             percentage: visceralPercentageText,
-                            tint: Color.formaAmber
+                            tint: Color.formaChartVisceral
                         )
 
                         VisceralSubcutaneousDonutChart(visceralFraction: visceralFraction)
@@ -464,7 +464,7 @@ struct VisceralSubcutaneousCard: View {
                             value: subcutaneousFat,
                             unit: "kg",
                             percentage: subcutaneousPercentageText,
-                            tint: Color.formaCyan
+                            tint: Color.formaChartSubcutaneous
                         )
                     }
                 } else {
@@ -474,7 +474,7 @@ struct VisceralSubcutaneousCard: View {
                             value: visceralFat,
                             unit: visceralUnit,
                             percentage: visceralPercentageText,
-                            tint: Color.formaAmber
+                            tint: Color.formaChartVisceral
                         )
 
                         VisceralSubcutaneousDonutChart(visceralFraction: visceralFraction)
@@ -484,7 +484,7 @@ struct VisceralSubcutaneousCard: View {
                             value: subcutaneousFat,
                             unit: "kg",
                             percentage: subcutaneousPercentageText,
-                            tint: Color.formaCyan
+                            tint: Color.formaChartSubcutaneous
                         )
                     }
                 }
@@ -500,7 +500,7 @@ struct VisceralSubcutaneousCard: View {
                 FormaCallout(
                     text: text,
                     systemImage: remark?.marker?.iconName ?? "info.circle",
-                    tint: remark?.marker?.color ?? .formaCyan
+                    tint: remark?.marker?.color ?? .secondary
                 )
             }
         }

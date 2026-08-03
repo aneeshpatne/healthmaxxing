@@ -15,21 +15,22 @@ struct MetricsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var pageAccent: Color {
-        guard let payload = reportStore.payload else { return .formaAmber }
+        // Single brand wash for metrics shell — status colors stay on cards, not the page.
+        guard let payload = reportStore.payload else { return .sleekAccent }
 
         switch selectedTab {
         case .insights:
-            return payload.factor?.factorColor?.color ?? .formaAmber
+            return payload.factor?.factorColor?.color ?? .sleekAccent
         case .performance:
             return payload.performance["ffmi_gauge"]?.factorColor?.color ?? .sleekAccent
         case .fat:
-            return payload.fat["fat_ratio"]?.factorColor?.color ?? .formaCoral
+            return payload.fat["fat_ratio"]?.factorColor?.color ?? .sleekAccent
         case .muscle:
             return payload.muscle["skeletal_muscle_gauge"]?.factorColor?.color
                 ?? ["muscle_mass", "bone_mass_trend", "muscle_ratio_trend", "skeletal_muscle_mass_trend"]
                     .compactMap { payload.muscle[$0]?.factorColor?.color }
                     .first
-                ?? .formaTeal
+                ?? .sleekAccent
         }
     }
 
@@ -63,7 +64,7 @@ struct MetricsView: View {
                             title: "Report unavailable",
                             message: errorMessage,
                             systemImage: "exclamationmark.triangle.fill",
-                            tint: .formaCoral,
+                            tint: .formaNegative,
                             actionTitle: "Try Again",
                             actionTint: .sleekAccent
                         ) {

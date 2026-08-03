@@ -2,11 +2,11 @@ import SwiftUI
 
 private extension Color {
     /// Muscle visuals share the app's pastel theme palette.
-    static let musclePrimary = Color.sleekAccent
-    static let muscleSecondary = Color.formaCyan
-    static let musclePositive = Color.formaTeal
-    static let muscleCaution = Color.formaAmber
-    static let muscleNegative = Color.formaCoral
+    static let musclePrimary = Color.formaChartMuscle
+    static let muscleSecondary = Color.formaChartSubcutaneous
+    static let musclePositive = Color.formaPositive
+    static let muscleCaution = Color.formaCaution
+    static let muscleNegative = Color.formaNegative
 }
 
 struct MuscleTab: View {
@@ -103,7 +103,7 @@ private struct SkeletalMuscleGaugeCard: View {
                 FormaCallout(
                     text: section.remark?.text ?? section.displayComment,
                     systemImage: section.remark?.marker?.iconName ?? "figure.strengthtraining.traditional",
-                    tint: section.remark?.marker?.color ?? accent
+                    tint: section.remark?.marker?.color ?? .secondary
                 )
             }
         }
@@ -169,7 +169,7 @@ private struct MuscleReportCard: View {
                 FormaCallout(
                     text: remark.text ?? "",
                     systemImage: remark.marker?.iconName ?? "sparkle",
-                    tint: remark.marker?.color ?? Color.sleekAccent
+                    tint: remark.marker?.color ?? .secondary
                 )
             }
         }

@@ -22,7 +22,7 @@ struct Settings: View {
                         title: "Manage Profiles",
                         subtitle: "People, goals, and primary profile",
                         systemImage: "person.crop.circle",
-                        tint: .formaTeal
+                        tint: .secondary
                     ) {
                         Profiles()
                     }
@@ -45,7 +45,7 @@ struct Settings: View {
                             title: "Sound Effects",
                             subtitle: "Soft cues for confirmations and milestones",
                             systemImage: "speaker.wave.2.fill",
-                            tint: .formaCyan,
+                            tint: .secondary,
                             isOn: $soundEffectsEnabled
                         )
 
@@ -55,7 +55,7 @@ struct Settings: View {
                             title: "Haptics",
                             subtitle: "Tactile feedback for actions and progress",
                             systemImage: "waveform.path",
-                            tint: .formaTeal,
+                            tint: .secondary,
                             isOn: $hapticsEnabled
                         )
                     }
@@ -65,7 +65,7 @@ struct Settings: View {
                     HStack(spacing: FormaSpacing.sm) {
                         FormaIconTile(
                             systemImage: "app.badge",
-                            tint: .formaCyan,
+                            tint: .secondary,
                             size: 34,
                             radius: 10
                         )

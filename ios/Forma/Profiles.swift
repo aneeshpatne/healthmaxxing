@@ -90,7 +90,7 @@ struct Profiles: View {
                     title: "Couldn't Load Profiles",
                     message: errorMessage,
                     systemImage: "exclamationmark.triangle.fill",
-                    tint: .formaCoral,
+                    tint: .formaNegative,
                     actionTitle: "Try Again",
                     actionTint: .sleekAccent
                 ) {
@@ -138,7 +138,7 @@ struct Profiles: View {
 
     private func inlineErrorBanner(_ message: String) -> some View {
         HStack(spacing: FormaSpacing.sm) {
-            FormaIconTile(systemImage: "exclamationmark.triangle.fill", tint: .formaCoral)
+            FormaIconTile(systemImage: "exclamationmark.triangle.fill", tint: .formaNegative)
 
             Text(message)
                 .font(FormaTypography.body)
@@ -155,7 +155,7 @@ struct Profiles: View {
             }
             .accessibilityLabel("Dismiss")
         }
-        .formaSurface(.card, padding: FormaSpacing.md, tint: .formaCoral)
+        .formaSurface(.card, padding: FormaSpacing.md, tint: .formaNegative)
     }
 
     private func editProfile(_ profile: ClientProfile) {
@@ -284,7 +284,7 @@ struct PrimaryProfileGate: View {
                     title: "Couldn't Load Profiles",
                     message: message,
                     systemImage: "exclamationmark.triangle.fill",
-                    tint: .formaCoral,
+                    tint: .formaNegative,
                     actionTitle: "Try Again",
                     actionTint: .sleekAccent
                 ) {
@@ -353,6 +353,12 @@ private struct ProfileFormView: View {
     @State private var saveErrorNonce = 0
     @State private var cancelFeedbackNonce = 0
     @State private var hasEditedName = false
+    @FocusState private var focusedField: ProfileFormField?
+
+    private enum ProfileFormField: Hashable {
+        case name
+        case profileImage
+    }
 
     init(
         apiClient: APIClient,
@@ -415,7 +421,7 @@ private struct ProfileFormView: View {
     }
 
     private var profileImageFooterColor: Color {
-        profileImageError == nil ? .secondary : .formaCoral
+        profileImageError == nil ? .secondary : .formaNegative
     }
 
     var body: some View {
@@ -423,6 +429,8 @@ private struct ProfileFormView: View {
             Section {
                 TextField("Name", text: $name)
                     .textContentType(.name)
+                    .focused($focusedField, equals: .name)
+                    .formaFocusRing(isFocused: focusedField == .name, cornerRadius: FormaRadius.inset)
                     .onChange(of: name) { _, _ in
                         hasEditedName = true
                     }
@@ -440,7 +448,7 @@ private struct ProfileFormView: View {
                 .font(FormaTypography.supporting)
                 .foregroundStyle(
                     hasEditedName && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        ? Color.formaCoral
+                        ? Color.formaNegative
                         : Color.secondary
                 )
             }
@@ -501,6 +509,8 @@ private struct ProfileFormView: View {
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .focused($focusedField, equals: .profileImage)
+                    .formaFocusRing(isFocused: focusedField == .profileImage, cornerRadius: FormaRadius.inset)
             } header: {
                 formSectionHeader("Preferences")
             } footer: {
@@ -517,7 +527,7 @@ private struct ProfileFormView: View {
                     FormaCallout(
                         text: errorMessage,
                         systemImage: "exclamationmark.triangle.fill",
-                        tint: .formaCoral
+                        tint: .formaNegative
                     )
                 }
                 .listRowBackground(Color.clear)
@@ -814,7 +824,7 @@ private struct ProfileRow: View {
                         ZStack {
                             Circle()
                                 .fill(Color.appTertiaryBackground)
-                            FormaLoadingIndicator(tint: .formaTeal)
+                            FormaLoadingIndicator(tint: .sleekAccent)
                         }
                     case .failure:
                         initialsView(for: profile.displayName)
@@ -830,9 +840,11 @@ private struct ProfileRow: View {
         .clipShape(Circle())
         .overlay {
             Circle()
-                .strokeBorder(Color.sleekAccent.opacity(0.20), lineWidth: 0.75)
+                .strokeBorder(
+                    profile.isPrimary ? Color.sleekAccent.opacity(0.28) : Color.appBorder,
+                    lineWidth: 0.75
+                )
         }
-        .shadow(color: Color.sleekAccent.opacity(0.12), radius: 8, y: 4)
         .accessibilityHidden(true)
     }
 
@@ -844,13 +856,7 @@ private struct ProfileRow: View {
             .uppercased()
 
         return Circle()
-            .fill(
-                LinearGradient(
-                    colors: [Color.sleekAccent.opacity(0.18), Color.formaTeal.opacity(0.08)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
+            .fill(Color.sleekAccent.opacity(0.12))
             .overlay {
                 Text(initials.isEmpty ? "?" : initials)
                     .font(.system(.title3, design: .rounded).weight(.bold))
@@ -918,7 +924,7 @@ private struct ProfileRow: View {
     private func metadataIcon(_ systemImage: String) -> some View {
         Image(systemName: systemImage)
             .font(FormaTypography.body)
-            .foregroundStyle(Color.sleekAccent)
+            .foregroundStyle(Color.secondary)
             .frame(width: 20, alignment: .leading)
             .accessibilityHidden(true)
     }

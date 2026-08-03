@@ -33,15 +33,15 @@ enum RemarkMarker: String, Codable, Equatable {
     var color: Color {
         switch self {
         case .trendUp:
-            return .formaTeal
+            return .formaPositive
         case .trendDown:
-            return .formaCoral
+            return .formaNegative
         case .aiRecommendation:
-            return .formaCyan
+            return .formaInfo
         case .caution:
-            return .formaAmber
+            return .formaCaution
         case .complement:
-            return .formaTeal
+            return .formaPositive
         }
     }
 
@@ -58,10 +58,10 @@ enum FactorColor: String, Codable, Equatable {
 
     var color: Color {
         switch self {
-        case .red: return .formaCoral
-        case .orange: return .formaAmber
-        case .yellow: return .formaYellow
-        case .green: return .formaTeal
+        case .red: return .formaNegative
+        case .orange: return .formaCaution
+        case .yellow: return .formaCaution
+        case .green: return .formaPositive
         }
     }
 }

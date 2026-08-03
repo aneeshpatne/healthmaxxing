@@ -14,7 +14,7 @@ struct VitalsView: View {
                 title: "Vitals",
                 message: "Heart-rate history, recovery, and Apple Health trends are being prepared for a future update.",
                 systemImage: "heart.text.square",
-                tint: .formaCoral
+                tint: .formaInfo
             )
             .padding(.top, FormaSpacing.xl)
             .frame(maxWidth: .infinity)

@@ -2,12 +2,12 @@ import SwiftUI
 import Charts
 
 private extension Color {
-    /// Performance visuals share the app's pastel theme palette.
+    /// Performance gauges use brand primary + semantic status (not ad-hoc hues).
     static let performancePrimary = Color.sleekAccent
-    static let performanceSecondary = Color.formaCyan
-    static let performancePositive = Color.formaTeal
-    static let performanceCaution = Color.formaAmber
-    static let performanceNegative = Color.formaCoral
+    static let performanceSecondary = Color.formaInfo
+    static let performancePositive = Color.formaPositive
+    static let performanceCaution = Color.formaCaution
+    static let performanceNegative = Color.formaNegative
 }
 
 private extension InsightReportMetricSection {
@@ -166,7 +166,7 @@ struct FFMIGaugeCard: View {
                 FormaCallout(
                     text: calloutText,
                     systemImage: section?.remark?.marker?.iconName ?? "sparkles",
-                    tint: section?.remark?.marker?.color ?? Color.performancePrimary
+                    tint: section?.remark?.marker?.color ?? .secondary
                 )
             }
         }
@@ -276,7 +276,7 @@ struct CompositionMapCard: View {
                 FormaCallout(
                     text: calloutText,
                     systemImage: section?.remark?.marker?.iconName ?? "map.fill",
-                    tint: section?.remark?.marker?.color ?? Color.performancePrimary
+                    tint: section?.remark?.marker?.color ?? .secondary
                 )
             }
         }
@@ -605,7 +605,7 @@ struct BodyCompositionFlowCard: View {
                 FormaCallout(
                     text: calloutText,
                     systemImage: section?.remark?.marker?.iconName ?? "arrow.triangle.branch",
-                    tint: section?.remark?.marker?.color ?? Color.performancePrimary
+                    tint: section?.remark?.marker?.color ?? .secondary
                 )
             }
         }
@@ -701,7 +701,7 @@ struct CompositionTrendsCard: View {
                 FormaCallout(
                     text: calloutText,
                     systemImage: section?.remark?.marker?.iconName ?? "chart.xyaxis.line",
-                    tint: section?.remark?.marker?.color ?? Color.performancePrimary
+                    tint: section?.remark?.marker?.color ?? .secondary
                 )
             }
         }
@@ -898,7 +898,7 @@ struct RecompVectorPlotCard: View {
                 FormaCallout(
                     text: calloutText,
                     systemImage: section?.remark?.marker?.iconName ?? "target",
-                    tint: section?.remark?.marker?.color ?? Color.performancePositive
+                    tint: section?.remark?.marker?.color ?? .secondary
                 )
             }
         }
@@ -1124,7 +1124,7 @@ struct ExcessFatGaugeCard: View {
                 FormaCallout(
                     text: calloutText,
                     systemImage: section?.remark?.marker?.iconName ?? "flame",
-                    tint: section?.remark?.marker?.color ?? Color.performanceCaution
+                    tint: section?.remark?.marker?.color ?? .secondary
                 )
             }
         }

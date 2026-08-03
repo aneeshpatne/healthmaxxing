@@ -14,7 +14,7 @@ struct WorkoutsView: View {
                 title: "Workouts",
                 message: "Guided strength sessions and training analytics are being shaped for a future update.",
                 systemImage: "figure.strengthtraining.traditional",
-                tint: .formaTeal
+                tint: .sleekAccent
             )
             .padding(.top, FormaSpacing.xl)
             .frame(maxWidth: .infinity)

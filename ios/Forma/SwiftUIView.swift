@@ -88,7 +88,7 @@ struct SwiftUIView: View {
             .overlay(alignment: .top) {
                 HStack {
                     if activeTab != .metrics || isMetricsAtTop {
-                        FormaBrandLockup(variant: .header, wordmarkColor: .white)
+                        FormaBrandLockup(variant: .header, wordmarkColor: .primary)
                             .transition(.opacity.combined(with: .offset(y: -4)))
                     }
 
