@@ -899,57 +899,6 @@ struct FormaStatusView: View {
     }
 }
 
-/// A richer empty state for modules that intentionally remain in the app shell
-/// while their functionality is still being built.
-struct FormaFeaturePreviewView: View {
-    let title: String
-    let message: String
-    let systemImage: String
-    let tint: Color
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        VStack(spacing: FormaSpacing.xl) {
-            ZStack {
-                Circle()
-                    .fill(tint.opacity(0.08))
-                    .frame(width: 104, height: 104)
-
-                Circle()
-                    .strokeBorder(tint.opacity(0.16), lineWidth: 0.75)
-                    .frame(width: 82, height: 82)
-
-                Image(systemName: systemImage)
-                    .font(.system(.largeTitle, design: .rounded, weight: .semibold))
-                    .foregroundStyle(tint.gradient)
-                    .symbolEffect(.appear, options: .nonRepeating, isActive: !reduceMotion)
-            }
-            .accessibilityHidden(true)
-
-            VStack(spacing: FormaSpacing.sm) {
-                FormaValueBadge(text: "COMING SOON", tint: tint)
-
-                Text(title)
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(.primary)
-
-                Text(message)
-                    .font(FormaTypography.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .frame(maxWidth: 420)
-        .padding(FormaSpacing.xxl)
-        .formaSurface(.hero, padding: nil, tint: tint)
-        .padding(.horizontal, FormaSpacing.screenGutter)
-        .accessibilityElement(children: .combine)
-        .formaEntrance()
-    }
-}
-
 enum FormaLoadingIndicatorSize: Equatable {
     case compact
     case medium

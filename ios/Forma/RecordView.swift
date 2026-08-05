@@ -149,14 +149,14 @@ struct RecordView: View {
                     .frame(
                         minHeight: max(
                             0,
-                            proxy.size.height - FormaLayout.floatingSettingsClearance
+                            proxy.size.height - FormaLayout.topOverlayClearance
                         )
                     )
                     .padding(.horizontal, FormaSpacing.screenGutter)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.top, FormaLayout.floatingSettingsClearance)
+            .padding(.top, FormaLayout.topOverlayClearance)
         }
         .onChange(of: scaleManager.isReading, initial: true) { wasReading, isReading in
             updateIdleTimer(isReading: isReading)

@@ -9,9 +9,8 @@ import SwiftUI
 
 enum AppTab: String {
     case metrics
-    case workouts
     case record
-    case vitals
+    case settings
 }
 
 struct SwiftUIView: View {
@@ -65,16 +64,12 @@ struct SwiftUIView: View {
                     )
                 }
 
-                Tab("Workouts", systemImage: "figure.strengthtraining.traditional", value: .workouts) {
-                    WorkoutsView()
-                }
-
                 Tab("Record", systemImage: "record.circle", value: .record) {
                     RecordView(reportStore: reportStore)
                 }
 
-                Tab("Vitals", systemImage: "heart.text.square", value: .vitals) {
-                    VitalsView()
+                Tab("Settings", systemImage: "gearshape", value: .settings) {
+                    Settings()
                 }
             }
             .tabBarMinimizeBehavior(.onScrollDown)
@@ -88,8 +83,6 @@ struct SwiftUIView: View {
                     }
 
                     Spacer(minLength: 0)
-
-                    FloatingSettingsButton()
                 }
                 .frame(maxWidth: 760)
                 .frame(maxWidth: .infinity)
@@ -110,31 +103,7 @@ struct SwiftUIView: View {
 }
 
 enum FormaLayout {
-    static let floatingSettingsClearance: CGFloat = 60
-}
-
-struct FloatingSettingsButton: View {
-    @State private var openFeedbackNonce = 0
-
-    var body: some View {
-        NavigationLink {
-            Settings()
-        } label: {
-            Image(systemName: "gearshape")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Color.primary)
-        }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.circle)
-        .frame(width: 44, height: 44)
-        .accessibilityLabel("Settings")
-        .simultaneousGesture(
-            TapGesture().onEnded {
-                openFeedbackNonce += 1
-            }
-        )
-        .formaFeedback(.softImpact, trigger: openFeedbackNonce)
-    }
+    static let topOverlayClearance: CGFloat = 60
 }
 
 #Preview {

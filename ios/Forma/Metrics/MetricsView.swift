@@ -127,7 +127,7 @@ struct MetricsView: View {
                 }
             }
         }
-        .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
+        .contentMargins(.top, FormaLayout.topOverlayClearance, for: .scrollContent)
         .background(FormaBackground())
         .animation(
             FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
