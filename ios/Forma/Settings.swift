@@ -9,6 +9,10 @@ import ClerkKit
 import ClerkKitUI
 
 struct Settings: View {
+    @AppStorage(FormaFeedbackPreferences.soundEffectsKey) private var soundEffectsEnabled = true
+    @AppStorage(FormaFeedbackPreferences.hapticsKey) private var hapticsEnabled = true
+    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FormaSpacing.sectionGap) {
@@ -17,7 +21,7 @@ struct Settings: View {
                         title: "Manage Profiles",
                         subtitle: "People, goals, and primary profile",
                         systemImage: "person.crop.circle",
-                        tint: .formaTeal
+                        tint: .secondary
                     ) {
                         Profiles()
                     }
@@ -33,12 +37,67 @@ struct Settings: View {
                         UserProfileView()
                     }
                 }
+
+                settingsSection("Experience") {
+                    VStack(spacing: FormaSpacing.md) {
+                        experienceToggle(
+                            title: "Sound Effects",
+                            subtitle: "Soft cues for confirmations and milestones",
+                            systemImage: "speaker.wave.2.fill",
+                            tint: .secondary,
+                            isOn: $soundEffectsEnabled
+                        )
+
+                        FormaDivider()
+
+                        experienceToggle(
+                            title: "Haptics",
+                            subtitle: "Tactile feedback for actions and progress",
+                            systemImage: "waveform.path",
+                            tint: .secondary,
+                            isOn: $hapticsEnabled
+                        )
+                    }
+                }
+
+                settingsSection("About") {
+                    HStack(spacing: FormaSpacing.sm) {
+                        FormaIconTile(
+                            systemImage: "app.badge",
+                            tint: .secondary,
+                            size: 34,
+                            radius: 10
+                        )
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Forma")
+                                .font(.body.weight(.semibold))
+                            Text("Version \(appVersion)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+                    }
+                    .accessibilityElement(children: .combine)
+                }
             }
+            .frame(maxWidth: 680)
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, FormaSpacing.screenGutter)
             .padding(.vertical, FormaSpacing.lg)
         }
         .background(FormaBackground())
         .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: soundEffectsEnabled) { wasEnabled, isEnabled in
+            guard !wasEnabled, isEnabled else { return }
+            soundPlayer.play(.confirm)
+        }
+        // Haptic only when enabling the preference itself — not on every row push.
+        .formaFeedback(.softImpact, trigger: hapticsEnabled) { wasEnabled, isEnabled in
+            !wasEnabled && isEnabled
+        }
     }
 
     private func settingsRow<Destination: View>(
@@ -53,23 +112,41 @@ struct Settings: View {
         } label: {
             rowContent(title: title, subtitle: subtitle, systemImage: systemImage, tint: tint)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FormaPressableButtonStyle())
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+
+        switch (version, build) {
+        case let (.some(version), .some(build)):
+            return "\(version) (\(build))"
+        case let (.some(version), nil):
+            return version
+        default:
+            return "Development"
+        }
     }
 
     private func rowContent(title: String, subtitle: String, systemImage: String, tint: Color) -> some View {
         HStack(spacing: FormaSpacing.sm) {
-            Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 28, height: 38)
+            FormaIconTile(
+                systemImage: systemImage,
+                tint: tint,
+                size: 34,
+                radius: 10,
+                symbolFont: .system(size: 14, weight: .semibold)
+            )
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text(subtitle)
-                    .font(.caption)
+                    .font(FormaTypography.supporting)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer()
@@ -78,7 +155,39 @@ struct Settings: View {
                 .font(.caption.weight(.bold))
                 .foregroundStyle(.tertiary)
         }
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
+    }
+
+    private func experienceToggle(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        tint: Color,
+        isOn: Binding<Bool>
+    ) -> some View {
+        Toggle(isOn: isOn) {
+            HStack(spacing: FormaSpacing.sm) {
+                FormaIconTile(
+                    systemImage: systemImage,
+                    tint: tint,
+                    size: 34,
+                    radius: 10,
+                    symbolFont: .system(size: 14, weight: .semibold)
+                )
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.body.weight(.semibold))
+                    Text(subtitle)
+                        .font(FormaTypography.supporting)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .tint(.sleekAccent)
+        .frame(minHeight: 44)
     }
 
     private func settingsSection<Content: View>(
@@ -92,22 +201,12 @@ struct Settings: View {
                 .padding(.horizontal, FormaSpacing.xxs)
 
             content()
-                .formaSurface(.card, padding: FormaSpacing.md)
+                .formaSurface(.card, padding: FormaSpacing.cardInset)
         }
-    }
-}
-
-private struct SettingsDetailView: View {
-    let title: String
-
-    var body: some View {
-        Text(title)
-            .font(.title2)
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 #Preview {
     Settings()
+        .environmentObject(FormaSoundPlayer())
 }

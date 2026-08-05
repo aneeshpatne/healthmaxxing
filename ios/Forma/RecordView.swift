@@ -58,6 +58,11 @@ private enum RecordOutcome: Equatable {
     case submissionFailed(String)
 }
 
+private struct RecordFeedbackSignal: Equatable {
+    let sequence: Int
+    let event: RecordFeedbackEvent
+}
+
 @MainActor
 protocol IdleTimerControlling: AnyObject {
     var isIdleTimerDisabled: Bool { get set }
@@ -95,7 +100,10 @@ final class IdleTimerLease {
 }
 
 struct RecordView: View {
-    private static let minimumMetricDisplayDuration = Duration.milliseconds(800)
+    /// Brief hold so each stage is readable without feeling staged behind the scale.
+    private static let minimumMetricDisplayDuration = Duration.milliseconds(400)
+
+    let reportStore: MetricsReportStore
 
     @StateObject private var scaleManager = ScaleBLEManager()
 
@@ -108,6 +116,7 @@ struct RecordView: View {
     @State private var metricAdvanceTask: Task<Void, Never>?
     @State private var outcomeRevealTask: Task<Void, Never>?
     @State private var idleTimerLease: IdleTimerLease?
+    @State private var feedbackSignal = RecordFeedbackSignal(sequence: 0, event: .start)
 
     private let apiClient = APIClient()
     private let clock = ContinuousClock()
@@ -120,19 +129,40 @@ struct RecordView: View {
             ZStack {
                 FormaBackground()
 
-                RecordCircle(
-                    state: circleState,
-                    diameter: diameter,
-                    isEnabled: circleIsEnabled,
-                    showsActivityRing: scaleManager.isReading,
-                    action: handleCircleAction
-                )
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: FormaSpacing.xl) {
+                        RecordCircle(
+                            state: circleState,
+                            diameter: diameter,
+                            isEnabled: circleIsEnabled,
+                            showsActivityRing: scaleManager.isReading,
+                            action: handleCircleAction
+                        )
+
+                        RecordFlowFooter(
+                            state: circleState,
+                            measurement: scaleManager.latestMeasurement,
+                            isReading: scaleManager.isReading
+                        )
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(
+                        minHeight: max(
+                            0,
+                            proxy.size.height - FormaLayout.topOverlayClearance
+                        )
+                    )
+                    .padding(.horizontal, FormaSpacing.screenGutter)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.top, FormaLayout.floatingSettingsClearance)
+            .padding(.top, FormaLayout.topOverlayClearance)
         }
-        .onChange(of: scaleManager.isReading, initial: true) { _, isReading in
+        .onChange(of: scaleManager.isReading, initial: true) { wasReading, isReading in
             updateIdleTimer(isReading: isReading)
+            if !wasReading && isReading {
+                emitFeedback(.start)
+            }
         }
         .onChange(of: scaleManager.latestMeasurement) { _, measurement in
             handleMeasurementUpdate(measurement)
@@ -140,11 +170,24 @@ struct RecordView: View {
         .onChange(of: scaleManager.state) { _, state in
             handleScaleStateChange(state)
         }
+        .onChange(of: displayedMetricStage) { _, stage in
+            if let stage {
+                emitFeedback(.metric(stage))
+            }
+        }
+        .onChange(of: circleState) { previousState, state in
+            if previousState != .saved && state == .saved {
+                emitFeedback(.success)
+            } else if !previousState.isFailure && state.isFailure {
+                emitFeedback(.error)
+            }
+        }
         .onDisappear {
             if !scaleManager.isReading {
                 releaseIdleTimerLease()
             }
         }
+        .recordFeedback(signal: feedbackSignal)
     }
 
     private var circleState: RecordCircleState {
@@ -191,15 +234,15 @@ struct RecordView: View {
         case .idle:
             return "Starting"
         case .waitingForBluetooth:
-            return "Bluetooth"
+            return "Turn on Bluetooth"
         case .scanning:
-            return "Searching"
+            return "Finding your scale"
         case .connecting:
             return "Connecting"
         case .discoveringServices:
-            return "Preparing"
+            return "Waking your scale"
         case .listening:
-            return "Reading"
+            return "Step on your scale"
         case .finished:
             return "Complete"
         case .failed:
@@ -225,12 +268,14 @@ struct RecordView: View {
             resetToReady()
 
         case .submissionFailed:
+            emitFeedback(.retry)
             Task {
                 await submitLatestMeasurement()
             }
 
         case .connecting, .weight, .impedance, .heartRate:
             guard scaleManager.isReading else { return }
+            emitFeedback(.cancel)
             cancelReading()
         }
     }
@@ -391,7 +436,7 @@ struct RecordView: View {
 
             let response = try await apiClient.send(AddMeasurementRequest(body: body))
             submittedMeasurement = measurement
-            InsightReportJobStore.add(response.jobId, for: profileId)
+            reportStore.reportQueued(for: profileId, jobId: response.jobId)
             outcome = .saved
         } catch APIError.missingAuthToken {
             outcome = .submissionFailed("Missing auth token.")
@@ -404,6 +449,10 @@ struct RecordView: View {
 
             outcome = .submissionFailed("Failed to save measurement.")
         }
+    }
+
+    private func emitFeedback(_ event: RecordFeedbackEvent) {
+        feedbackSignal = RecordFeedbackSignal(sequence: feedbackSignal.sequence + 1, event: event)
     }
 
     private func updateIdleTimer(isReading: Bool) {
@@ -432,6 +481,29 @@ struct RecordView: View {
     }
 }
 
+private struct RecordFeedbackSignalModifier: ViewModifier {
+    let signal: RecordFeedbackSignal
+
+    @EnvironmentObject private var soundPlayer: FormaSoundPlayer
+    @AppStorage(FormaFeedbackPreferences.hapticsKey) private var hapticsEnabled = true
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: signal) { _, signal in
+                soundPlayer.play(signal.event)
+            }
+            .sensoryFeedback(signal.event.sensoryFeedback, trigger: signal.sequence) { previous, current in
+                hapticsEnabled && previous != current
+            }
+    }
+}
+
+private extension View {
+    func recordFeedback(signal: RecordFeedbackSignal) -> some View {
+        modifier(RecordFeedbackSignalModifier(signal: signal))
+    }
+}
+
 private struct RecordCircle: View {
     let state: RecordCircleState
     let diameter: CGFloat
@@ -440,6 +512,7 @@ private struct RecordCircle: View {
     let action: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .largeTitle) private var metricValueSize: CGFloat = 54
 
     var body: some View {
         Button(action: action) {
@@ -460,19 +533,24 @@ private struct RecordCircle: View {
                 }
             }
         }
-        .buttonStyle(RecordCircleButtonStyle(isEnabled: isEnabled))
+        .buttonStyle(FormaPressableButtonStyle(depth: .prominent))
         .disabled(!isEnabled)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue(accessibilityValue)
         .accessibilityHint(accessibilityHint)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: state)
+        .accessibilityIdentifier("record-primary-control")
+        .animation(
+            FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
+            value: state
+        )
     }
 
     @ViewBuilder
     private var circleBackground: some View {
         switch state {
         case .ready:
-            AnimatedRecordPalette(diameter: diameter)
+            // Static brand disc while idle — no continuous Canvas/blur animation.
+            ReadyRecordPalette(diameter: diameter)
                 .overlay {
                     Circle()
                         .fill(
@@ -512,7 +590,7 @@ private struct RecordCircle: View {
             VStack(spacing: FormaSpacing.md) {
                 Image(systemName: "antenna.radiowaves.left.and.right")
                     .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(Color.formaTeal)
+                    .foregroundStyle(Color.sleekAccent)
                 Text(label)
                     .font(.headline.weight(.semibold))
             }
@@ -528,8 +606,7 @@ private struct RecordCircle: View {
                 metricContent(title: "Heart Rate", value: String(value), unit: "bpm")
 
                 if isSubmitting {
-                    ProgressView()
-                        .controlSize(.small)
+                    FormaLoadingIndicator(tint: .sleekAccent)
                         .transition(.opacity)
                 }
             }
@@ -553,8 +630,8 @@ private struct RecordCircle: View {
                 .opacity(0.72)
 
             Text(value)
-                .font(.system(size: 54, weight: .semibold, design: .rounded))
-                .contentTransition(.numericText())
+                .font(.system(size: metricValueSize, weight: .semibold, design: .rounded))
+                .contentTransition(reduceMotion ? .identity : .numericText())
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
 
@@ -566,11 +643,23 @@ private struct RecordCircle: View {
 
     private func resultContent(title: String, systemImage: String) -> some View {
         VStack(spacing: FormaSpacing.sm) {
-            Image(systemName: systemImage)
-                .font(.system(size: 32, weight: .bold))
+            resultSymbol(systemImage)
             Text(title)
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
+        }
+        .foregroundStyle(Color.actionForeground)
+    }
+
+    @ViewBuilder
+    private func resultSymbol(_ systemImage: String) -> some View {
+        let symbol = Image(systemName: systemImage)
+            .font(.system(size: 32, weight: .bold))
+
+        if reduceMotion {
+            symbol
+        } else {
+            symbol.symbolEffect(.appear, options: .nonRepeating)
         }
     }
 
@@ -579,9 +668,9 @@ private struct RecordCircle: View {
         case .ready:
             return .actionInk
         case .saved:
-            return .green
+            return .formaPositive
         case .recordingFailed, .submissionFailed:
-            return .red
+            return .formaNegative
         case .connecting, .weight, .impedance, .heartRate:
             return .appSecondaryBackground
         }
@@ -595,7 +684,7 @@ private struct RecordCircle: View {
         case .saved, .recordingFailed, .submissionFailed:
             color = .white.opacity(0.18)
         case .connecting, .weight, .impedance, .heartRate:
-            color = .formaTeal.opacity(0.15)
+            color = .sleekAccent.opacity(0.12)
         }
 
         return RadialGradient(
@@ -609,11 +698,11 @@ private struct RecordCircle: View {
     private var shadowColor: Color {
         switch state {
         case .saved:
-            return .green.opacity(0.24)
+            return .formaPositive.opacity(0.22)
         case .recordingFailed, .submissionFailed:
-            return .red.opacity(0.24)
+            return .formaNegative.opacity(0.22)
         case .ready:
-            return .actionInk.opacity(0.24)
+            return .actionInk.opacity(0.22)
         case .connecting, .weight, .impedance, .heartRate:
             return .cardShadow
         }
@@ -677,198 +766,421 @@ private struct RecordCircle: View {
     }
 }
 
-private struct AnimatedRecordPalette: View {
-    let diameter: CGFloat
-    var reduceMotionOverride: Bool? = nil
+/// Guidance area beneath the record circle: stage progress during a reading,
+/// and a visible error message when something goes wrong.
+private struct RecordFlowFooter: View {
+    let state: RecordCircleState
+    let measurement: ScaleMeasurement
+    let isReading: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private static let cycleDuration: TimeInterval = 10
-    private static let reducedMotionPhase = Double.pi * 0.38
-    private static let fields: [RecordColorField] = [
-        RecordColorField(
-            color: Color(red: 1.00, green: 0.42, blue: 0.38),
-            center: CGPoint(x: 0.17, y: 0.18),
-            size: CGSize(width: 0.94, height: 0.74),
-            travel: CGVector(dx: 0.10, dy: 0.08),
-            phaseOffset: 0.15,
-            xFrequency: 1,
-            yFrequency: 2,
-            scaleFrequency: 1
-        ),
-        RecordColorField(
-            color: Color(red: 1.00, green: 0.54, blue: 0.16),
-            center: CGPoint(x: 0.80, y: 0.16),
-            size: CGSize(width: 0.82, height: 0.76),
-            travel: CGVector(dx: 0.09, dy: 0.10),
-            phaseOffset: 1.20,
-            xFrequency: 2,
-            yFrequency: 1,
-            scaleFrequency: 2
-        ),
-        RecordColorField(
-            color: Color(red: 0.14, green: 0.33, blue: 0.90),
-            center: CGPoint(x: 0.14, y: 0.72),
-            size: CGSize(width: 0.92, height: 0.90),
-            travel: CGVector(dx: 0.11, dy: 0.08),
-            phaseOffset: 2.30,
-            xFrequency: 1,
-            yFrequency: 2,
-            scaleFrequency: 1
-        ),
-        RecordColorField(
-            color: Color(red: 0.49, green: 0.23, blue: 0.93),
-            center: CGPoint(x: 0.78, y: 0.66),
-            size: CGSize(width: 0.90, height: 0.84),
-            travel: CGVector(dx: 0.10, dy: 0.09),
-            phaseOffset: 3.45,
-            xFrequency: 2,
-            yFrequency: 1,
-            scaleFrequency: 2
-        ),
-        RecordColorField(
-            color: Color(red: 1.00, green: 0.91, blue: 0.60),
-            center: CGPoint(x: 0.52, y: 0.46),
-            size: CGSize(width: 0.72, height: 0.66),
-            travel: CGVector(dx: 0.13, dy: 0.11),
-            phaseOffset: 4.55,
-            xFrequency: 1,
-            yFrequency: 2,
-            scaleFrequency: 1
-        ),
-        RecordColorField(
-            color: Color(red: 0.27, green: 0.75, blue: 0.66),
-            center: CGPoint(x: 0.52, y: 0.96),
-            size: CGSize(width: 1.08, height: 0.74),
-            travel: CGVector(dx: 0.08, dy: 0.07),
-            phaseOffset: 5.50,
-            xFrequency: 2,
-            yFrequency: 1,
-            scaleFrequency: 2
-        )
-    ]
-
     var body: some View {
         Group {
-            if reduceMotionOverride ?? reduceMotion {
-                palette(phase: Self.reducedMotionPhase)
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                    palette(phase: phase(for: context.date))
+            switch state {
+            case .recordingFailed(let message):
+                VStack(spacing: FormaSpacing.xs) {
+                    Text(message)
+                        .font(FormaTypography.body)
+                        .foregroundStyle(Color.formaNegative)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(recoveryGuidance(for: message))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Text(state.actionGuidance)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
                 }
+                .padding(.horizontal, FormaSpacing.xxl)
+                .transition(FormaTransition.content(reduceMotion: reduceMotion))
+
+            case .submissionFailed(let message):
+                VStack(spacing: FormaSpacing.xs) {
+                    Text(message)
+                        .font(FormaTypography.body)
+                        .foregroundStyle(Color.formaNegative)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("Check your connection. The captured values are still ready to save.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Text(state.actionGuidance)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+                .padding(.horizontal, FormaSpacing.xxl)
+                .transition(FormaTransition.content(reduceMotion: reduceMotion))
+
+            case .connecting(let label) where isReading:
+                VStack(spacing: FormaSpacing.sm) {
+                    RecordStageTracker(measurement: measurement)
+                    Text(connectingGuidance(for: label))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .transition(FormaTransition.fade)
+
+            case .weight, .impedance, .heartRate:
+                if isReading {
+                    VStack(spacing: FormaSpacing.sm) {
+                        RecordStageTracker(measurement: measurement)
+                        Text("Stay still on the scale. Tap the circle to cancel.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .transition(FormaTransition.fade)
+                } else {
+                    Text(state.actionGuidance)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+            case .saved:
+                RecordMeasurementSummary(measurement: measurement)
+                    .transition(FormaTransition.content(reduceMotion: reduceMotion))
+
+            case .ready:
+                Text(state.actionGuidance)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .transition(FormaTransition.fade)
+
+            case .connecting:
+                Text(state.actionGuidance)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
         }
-        .clipShape(Circle())
-        .accessibilityHidden(true)
+        .frame(minHeight: 60, alignment: .top)
+        .animation(
+            FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
+            value: state
+        )
+        .accessibilityIdentifier(state.accessibilityIdentifier)
     }
 
-    private func palette(phase: Double) -> some View {
-        Canvas(opaque: true, colorMode: .nonLinear, rendersAsynchronously: true) { context, size in
-            context.fill(
-                Path(CGRect(origin: .zero, size: size)),
-                with: .color(Color(red: 0.27, green: 0.75, blue: 0.66))
-            )
-
-            context.drawLayer { layer in
-                layer.addFilter(.blur(radius: size.width * 0.14))
-
-                for field in Self.fields {
-                    let scale = 1 + (0.09 * sin((phase * field.scaleFrequency) + field.phaseOffset))
-                    let width = size.width * field.size.width * scale
-                    let height = size.height * field.size.height * scale
-                    let center = CGPoint(
-                        x: size.width * (
-                            field.center.x
-                                + (field.travel.dx * sin((phase * field.xFrequency) + field.phaseOffset))
-                        ),
-                        y: size.height * (
-                            field.center.y
-                                + (field.travel.dy * cos((phase * field.yFrequency) + field.phaseOffset))
-                        )
-                    )
-                    let rect = CGRect(
-                        x: center.x - (width / 2),
-                        y: center.y - (height / 2),
-                        width: width,
-                        height: height
-                    )
-
-                    layer.fill(Path(ellipseIn: rect), with: .color(field.color))
-                }
-            }
+    private func connectingGuidance(for label: String) -> String {
+        switch label {
+        case "Turn on Bluetooth":
+            return "Enable Bluetooth in Control Center, then keep Forma open."
+        case "Finding your scale":
+            return "Wake the scale and keep your phone nearby. Tap the circle to cancel."
+        case "Step on your scale":
+            return "Step on barefoot and remain still. Tap the circle to cancel."
+        default:
+            return "Keep your phone near the scale. Tap the circle to cancel."
         }
-        .frame(width: diameter, height: diameter)
     }
 
-    private func phase(for date: Date) -> Double {
-        let elapsed = date.timeIntervalSinceReferenceDate
-            .truncatingRemainder(dividingBy: Self.cycleDuration)
-        return (elapsed / Self.cycleDuration) * (2 * Double.pi)
+    private func recoveryGuidance(for message: String) -> String {
+        let normalized = message.lowercased()
+        if normalized.contains("bluetooth") {
+            return "Turn on Bluetooth, keep your phone nearby, and wake the scale."
+        }
+        if normalized.contains("scale") || normalized.contains("connect") {
+            return "Wake the scale and try again with your phone nearby."
+        }
+        if normalized.contains("complete") {
+            return "Stay on the scale until weight, impedance, and heart rate are all captured."
+        }
+        return "Check the scale, keep your phone nearby, and try once more."
     }
 }
 
-private struct RecordColorField {
-    let color: Color
-    let center: CGPoint
-    let size: CGSize
-    let travel: CGVector
-    let phaseOffset: Double
-    let xFrequency: Double
-    let yFrequency: Double
-    let scaleFrequency: Double
+private extension RecordCircleState {
+    var isFailure: Bool {
+        switch self {
+        case .recordingFailed, .submissionFailed:
+            return true
+        case .ready, .connecting, .weight, .impedance, .heartRate, .saved:
+            return false
+        }
+    }
+
+    var accessibilityIdentifier: String {
+        switch self {
+        case .ready:
+            return "record-state-ready"
+        case .connecting:
+            return "record-state-connecting"
+        case .weight:
+            return "record-state-weight"
+        case .impedance:
+            return "record-state-impedance"
+        case .heartRate(_, let isSubmitting):
+            return isSubmitting ? "record-state-submitting" : "record-state-heart-rate"
+        case .saved:
+            return "record-state-saved"
+        case .recordingFailed:
+            return "record-state-recording-failed"
+        case .submissionFailed:
+            return "record-state-submission-failed"
+        }
+    }
+
+    var actionGuidance: String {
+        switch self {
+        case .ready:
+            return "Tap the circle to begin"
+        case .connecting, .weight, .impedance:
+            return "Tap to cancel"
+        case .heartRate(_, let isSubmitting):
+            return isSubmitting ? "Saving your measurement…" : "Tap to cancel"
+        case .saved:
+            return "Tap to record another"
+        case .recordingFailed:
+            return "Tap the circle to try again"
+        case .submissionFailed:
+            return "Tap the circle to retry saving"
+        }
+    }
+}
+
+private struct RecordMeasurementSummary: View {
+    let measurement: ScaleMeasurement
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        VStack(spacing: FormaSpacing.sm) {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: FormaSpacing.xs) {
+                    summaryItems
+                }
+            } else {
+                HStack(spacing: FormaSpacing.xl) {
+                    summaryItems
+                }
+            }
+
+            Text("Tap the circle to record another")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+        .formaEntrance()
+    }
+
+    @ViewBuilder
+    private var summaryItems: some View {
+        if let weight = measurement.weightKg {
+            summaryItem(String(format: "%.1f kg", weight), label: "Weight")
+        }
+        if let impedance = measurement.impedanceOhms {
+            summaryItem(String(format: "%.0f Ω", impedance), label: "Impedance")
+        }
+        if let heartRate = measurement.heartRate {
+            summaryItem("\(heartRate) bpm", label: "Heart rate")
+        }
+    }
+
+    private func summaryItem(_ value: String, label: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.caption.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+            Text(label)
+                .font(FormaTypography.micro)
+                .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+/// Three-stage progress indicator for the measurement ritual.
+private struct RecordStageTracker: View {
+    let measurement: ScaleMeasurement
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var stages: [(title: String, isComplete: Bool)] {
+        [
+            ("Weight", measurement.weightKg != nil),
+            ("Impedance", measurement.impedanceOhms != nil),
+            ("Heart Rate", measurement.heartRate != nil)
+        ]
+    }
+
+    var body: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: FormaSpacing.xs) {
+                    compactProgress
+                    Text(accessibleProgressLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+            } else {
+                fullProgress
+            }
+        }
+        .animation(
+            FormaMotion.preferred(FormaMotion.selection, reduceMotion: reduceMotion),
+            value: measurement
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Measurement progress")
+        .accessibilityValue(accessibleProgressLabel)
+    }
+
+    private var fullProgress: some View {
+        HStack(spacing: FormaSpacing.xs) {
+            ForEach(0..<stages.count, id: \.self) { index in
+                let stage = stages[index]
+                let isActive = !stage.isComplete
+                    && stages.prefix(index).allSatisfy { $0.isComplete }
+
+                HStack(spacing: FormaSpacing.xs) {
+                    ZStack {
+                        Circle()
+                            .fill(stage.isComplete ? Color.formaPositive : Color.appTertiaryBackground)
+                            .frame(width: 20, height: 20)
+
+                        if stage.isComplete {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(Color.actionForeground)
+                                .transition(reduceMotion ? .identity : .scale.combined(with: .opacity))
+                        } else if isActive {
+                            Circle()
+                                .fill(Color.sleekAccent)
+                                .frame(width: 6, height: 6)
+                        }
+                    }
+
+                    Text(stage.title)
+                        .font(.caption2.weight(stage.isComplete || isActive ? .semibold : .medium))
+                        .foregroundStyle(stage.isComplete || isActive ? .primary : .secondary)
+                }
+
+                if index < stages.count - 1 {
+                    Capsule()
+                        .fill(stage.isComplete ? Color.formaPositive.opacity(0.65) : Color.appTertiaryBackground)
+                        .frame(maxWidth: 24)
+                        .frame(height: 2)
+                }
+            }
+        }
+    }
+
+    private var compactProgress: some View {
+        HStack(spacing: FormaSpacing.xs) {
+            ForEach(0..<stages.count, id: \.self) { index in
+                let stage = stages[index]
+                let isActive = !stage.isComplete
+                    && stages.prefix(index).allSatisfy { $0.isComplete }
+
+                Image(systemName: stage.isComplete ? "checkmark.circle.fill" : "\(index + 1).circle.fill")
+                    .foregroundStyle(
+                        stage.isComplete
+                            ? Color.formaPositive
+                            : (isActive ? Color.sleekAccent : Color.secondary)
+                    )
+
+                if index < stages.count - 1 {
+                    Capsule()
+                        .fill(stage.isComplete ? Color.formaPositive.opacity(0.65) : Color.appTertiaryBackground)
+                        .frame(width: 24, height: 2)
+                }
+            }
+        }
+    }
+
+    private var accessibleProgressLabel: String {
+        let completedCount = stages.filter(\.isComplete).count
+        if completedCount == stages.count {
+            return "All three stages complete"
+        }
+
+        let activeStage = stages.first(where: { !$0.isComplete })?.title ?? "Complete"
+        return "\(completedCount) of \(stages.count) complete. Current stage: \(activeStage)"
+    }
+}
+
+/// Static brand fill for the ready state. Continuous Canvas motion was removed
+/// so the primary control stays calm and cheap until the user starts a reading.
+private struct ReadyRecordPalette: View {
+    let diameter: CGFloat
+
+    var body: some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.169, green: 0.749, blue: 0.478), // #2BBF7A
+                        Color(red: 0.043, green: 0.420, blue: 0.290), // #0B6B4A
+                        Color(red: 0.027, green: 0.290, blue: 0.200)  // #074A33
+                    ],
+                    center: UnitPoint(x: 0.32, y: 0.28),
+                    startRadius: 0,
+                    endRadius: diameter * 0.72
+                )
+            )
+            .frame(width: diameter, height: diameter)
+            .overlay {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(red: 0.239, green: 0.839, blue: 0.561).opacity(0.35),
+                                .clear
+                            ],
+                            center: UnitPoint(x: 0.72, y: 0.68),
+                            startRadius: 0,
+                            endRadius: diameter * 0.55
+                        )
+                    )
+            }
+            .accessibilityHidden(true)
+    }
 }
 
 private struct OrbitingRecordRing: View {
     let diameter: CGFloat
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isSpinning = false
 
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color.formaTeal.opacity(0.12), lineWidth: 3)
+                .stroke(Color.sleekAccent.opacity(0.12), lineWidth: 3)
 
-            if reduceMotion {
-                Circle()
-                    .trim(from: 0, to: 0.24)
-                    .stroke(
-                        Color.formaTeal,
-                        style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { context in
-                    let revolutionDuration = 1.6
-                    let progress = context.date.timeIntervalSinceReferenceDate
-                        .truncatingRemainder(dividingBy: revolutionDuration) / revolutionDuration
-
-                    Circle()
-                        .trim(from: 0, to: 0.24)
-                        .stroke(
-                            AngularGradient(
-                                colors: [.formaTeal.opacity(0.22), .formaTeal],
-                                center: .center
-                            ),
-                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees((progress * 360) - 90))
-                }
-            }
+            Circle()
+                .trim(from: 0, to: 0.24)
+                .stroke(
+                    AngularGradient(
+                        colors: [.sleekAccent.opacity(0.22), .sleekAccent],
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                )
+                .rotationEffect(.degrees(reduceMotion ? -90 : (isSpinning ? 270 : -90)))
+                .animation(
+                    reduceMotion
+                        ? nil
+                        : .linear(duration: 1.6).repeatForever(autoreverses: false),
+                    value: isSpinning
+                )
         }
         .frame(width: diameter, height: diameter)
         .accessibilityHidden(true)
-    }
-}
-
-private struct RecordCircleButtonStyle: ButtonStyle {
-    let isEnabled: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed && isEnabled && !reduceMotion ? 0.96 : 1)
-            .opacity(configuration.isPressed && isEnabled ? 0.92 : 1)
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: configuration.isPressed)
+        .onAppear {
+            guard !reduceMotion else { return }
+            isSpinning = true
+        }
+        .onChange(of: reduceMotion) { _, shouldReduceMotion in
+            isSpinning = !shouldReduceMotion
+        }
     }
 }
 
@@ -878,8 +1190,8 @@ private struct RecordCircleButtonStyle: ButtonStyle {
         .background(FormaBackground())
 }
 
-#Preview("Record — Reduce Motion") {
-    AnimatedRecordPalette(diameter: 240, reduceMotionOverride: true)
+#Preview("Record — Ready palette") {
+    ReadyRecordPalette(diameter: 240)
         .overlay {
             Text("Record")
                 .font(.title2.weight(.semibold))

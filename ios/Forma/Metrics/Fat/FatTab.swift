@@ -1,56 +1,12 @@
 import SwiftUI
-import Charts
-
-private extension Color {
-    // Red for extremities (Low & High)
-    static let extremityRed = Color(uiColor: UIColor { traitCollection in
-        traitCollection.userInterfaceStyle == .dark
-            ? UIColor(red: 1.0, green: 0.40, blue: 0.40, alpha: 1.0)
-            : UIColor(red: 0.88, green: 0.20, blue: 0.20, alpha: 1.0)
-    })
-    
-    // Green for good (Optimal)
-    static let goodGreen = Color(uiColor: UIColor { traitCollection in
-        traitCollection.userInterfaceStyle == .dark
-            ? UIColor(red: 0.35, green: 0.85, blue: 0.50, alpha: 1.0)
-            : UIColor(red: 0.15, green: 0.65, blue: 0.30, alpha: 1.0)
-    })
-    
-    // Yellow for warning & average
-    static let avgYellow = Color(uiColor: UIColor { traitCollection in
-        traitCollection.userInterfaceStyle == .dark
-            ? UIColor(red: 1.0, green: 0.85, blue: 0.30, alpha: 1.0)
-            : UIColor(red: 0.95, green: 0.70, blue: 0.10, alpha: 1.0)
-    })
-    
-    // Main value text inside gauge
-    static let valueDarkTeal = Color(uiColor: UIColor { traitCollection in
-        traitCollection.userInterfaceStyle == .dark
-            ? UIColor(red: 0.80, green: 0.95, blue: 0.95, alpha: 1.0)
-            : UIColor(red: 0.05, green: 0.30, blue: 0.30, alpha: 1.0)
-    })
-    
-    // Visceral vs Subcutaneous colors
-    static let visceralDarkTeal = Color(uiColor: UIColor { traitCollection in
-        traitCollection.userInterfaceStyle == .dark
-            ? UIColor(red: 0.15, green: 0.65, blue: 0.65, alpha: 1.0)
-            : UIColor(red: 0.05, green: 0.40, blue: 0.40, alpha: 1.0)
-    })
-    
-    static let subcutaneousLightTeal = Color(uiColor: UIColor { traitCollection in
-        traitCollection.userInterfaceStyle == .dark
-            ? UIColor(red: 0.45, green: 0.85, blue: 0.85, alpha: 1.0)
-            : UIColor(red: 0.20, green: 0.70, blue: 0.70, alpha: 1.0)
-    })
-}
 
 struct FatRatioMetrics {
     let value: Double
-    
+
     var valueText: String {
         String(format: "%.1f%%", value)
     }
-    
+
     var statusText: String {
         if value < 6.0 {
             return "Low / Essential"
@@ -62,7 +18,7 @@ struct FatRatioMetrics {
             return "High Fat Ratio"
         }
     }
-    
+
     var verdictText: String {
         if value < 6.0 {
             return "Low"
@@ -74,31 +30,19 @@ struct FatRatioMetrics {
             return "Elevated"
         }
     }
-    
-    var remarkText: String {
-        if value < 6.0 {
-            return "Below optimal essential range. Ensure healthy fat intake."
-        } else if value < 18.0 {
-            return "Within optimal athletic range. Great job keeping it steady!"
-        } else if value < 25.0 {
-            return "Above your target of 18%. Aim for steady fat reduction."
-        } else {
-            return "Significantly above target. Prioritize active fat reduction."
-        }
-    }
-    
+
     var statusColor: Color {
         if value < 6.0 {
-            return Color.extremityRed
+            return Color.formaNegative
         } else if value < 18.0 {
-            return Color.goodGreen
+            return Color.formaPositive
         } else if value < 25.0 {
-            return Color.avgYellow
+            return Color.formaCaution
         } else {
-            return Color.extremityRed
+            return Color.formaNegative
         }
     }
-    
+
     var statusIcon: String {
         if value < 6.0 {
             return "exclamationmark.triangle.fill"
@@ -116,80 +60,142 @@ struct FatTab: View {
     let payload: InsightReportPayload?
 
     var body: some View {
-        VStack(spacing: 20) {
+        // LazyVStack defers off-screen charts so switching to Fat only builds
+        // the cards that fit the first screen instead of every trend at once.
+        LazyVStack(spacing: FormaSpacing.cardGap) {
             if payload?.fat.isEmpty != false {
                 MetricsUnavailableContent(message: "Fat report data is unavailable.")
             }
 
             if let section = payload?.fat["fat_ratio"], let value = section.numberValue {
-            FatRatioCard(
-                value: value,
-                comment: section.comment,
-                remark: section.remark
-            )
+                FatRatioCard(
+                    value: value,
+                    comment: section.comment,
+                    remark: section.remark
+                )
+                .formaEntrance()
             }
-            
+
             if let section = payload?.fat["visceral_vs_subcutaneous"],
-               let visceralFat = section.nestedNumber("visceralFatDeltaKg"),
+               let visceralFat = section.firstNestedNumber(
+                   "visceralFatIndexDelta",
+                   "visceralFatDeltaKg"
+               ),
                let subcutaneousFat = section.nestedNumber("subcutaneousFatDeltaKg") {
-            VisceralSubcutaneousCard(
-                visceralFat: visceralFat,
-                subcutaneousFat: subcutaneousFat,
-                verdict: section.title ?? section.displayTitle,
-                remark: section.remark,
-                comment: section.comment
-            )
+                let usesIndex = section.nestedNumber("visceralFatIndexDelta") != nil
+                VisceralSubcutaneousCard(
+                    visceralFat: visceralFat,
+                    subcutaneousFat: subcutaneousFat,
+                    visceralUnit: usesIndex ? "idx" : "kg",
+                    verdict: section.title ?? section.displayTitle,
+                    remark: section.remark,
+                    comment: section.comment
+                )
             }
-            
+
             if let section = payload?.fat["visceral_trend"], let currentMass = section.numberValue {
-            VisceralFatMassTrendCard(
-                currentMass: currentMass,
-                statusText: section.title ?? section.displayTitle,
-                statusColor: .goodGreen,
-                statusIcon: "checkmark.circle.fill",
-                remark: section.remark,
-                comment: section.comment,
-                data: section.trendPoints(preferredKeys: ["visceralFatKg", "visceral_fat_kg", "visceralFatMassKg"])
-                    .map { VisceralFatMassPoint(date: $0.date, value: $0.value) }
-            )
+                let trendPoints = section.trendPoints(preferredKeys: [
+                    "visceralFatIndex",
+                    "visceralFatKg",
+                    "visceral_fat_kg",
+                    "visceralFatMassKg"
+                ])
+                let usesIndex = section.trends["visceralFatIndex"]?.isEmpty == false
+                let unit = usesIndex ? "idx" : "kg"
+                FatTrendCard(
+                    title: usesIndex ? "Visceral Fat Index" : "Visceral Fat Mass",
+                    subtitle: section.comment,
+                    valueText: String(format: "%.1f %@", currentMass, unit),
+                    unit: unit,
+                    color: .formaChartVisceral,
+                    metricLabel: "Visceral fat",
+                    statusText: section.title ?? section.displayTitle,
+                    statusColor: section.remark?.marker?.color ?? .secondary,
+                    statusIcon: section.remark?.marker?.iconName ?? "info.circle.fill",
+                    remark: section.remark,
+                    points: chartPoints(from: trendPoints, metric: "Visceral fat", color: .formaChartVisceral)
+                )
             }
-            
+
             if let section = payload?.fat["subcutaneous_fat_mass_trend"], let currentMass = section.numberValue {
-            SubcFatMassTrendCard(
-                currentMass: currentMass,
-                statusText: section.title ?? section.displayTitle,
-                statusColor: .extremityRed,
-                statusIcon: "exclamationmark.triangle.fill",
-                remark: section.remark,
-                comment: section.comment,
-                data: section.trendPoints(preferredKeys: ["subcutaneousFatKg", "subcutaneous_fat_kg", "subcutaneousFatMassKg"])
-                    .map { SubcFatMassPoint(date: $0.date, value: $0.value) }
-            )
+                FatTrendCard(
+                    title: "Subcutaneous Fat Mass",
+                    subtitle: section.comment,
+                    valueText: String(format: "%.1f kg", currentMass),
+                    unit: "kg",
+                    color: .formaChartSubcutaneous,
+                    metricLabel: "Subcutaneous fat",
+                    statusText: section.title ?? section.displayTitle,
+                    statusColor: section.remark?.marker?.color ?? .secondary,
+                    statusIcon: section.remark?.marker?.iconName ?? "info.circle.fill",
+                    remark: section.remark,
+                    points: chartPoints(
+                        from: section.trendPoints(preferredKeys: [
+                            "subcutaneousFatKg",
+                            "subcutaneous_fat_kg",
+                            "subcutaneousFatMassKg"
+                        ]),
+                        metric: "Subcutaneous fat",
+                        color: .formaChartSubcutaneous
+                    )
+                )
             }
-            
+
             if let section = payload?.fat["fat_mass_trend"], let currentMass = section.numberValue {
-            FatMassTrendCard(
-                currentMass: currentMass,
-                statusText: section.title ?? section.displayTitle,
-                remark: section.remark,
-                comment: section.comment,
-                data: section.trendPoints(preferredKeys: ["fatMassKg", "fat_mass_kg", "totalFatKg"])
-                    .map { FatMassPoint(date: $0.date, value: $0.value) }
-            )
+                FatTrendCard(
+                    title: "Fat Mass History",
+                    subtitle: section.comment,
+                    valueText: String(format: "%.1f kg", currentMass),
+                    unit: "kg",
+                    color: .formaChartFat,
+                    metricLabel: "Fat mass",
+                    statusText: section.title ?? section.displayTitle,
+                    statusColor: section.remark?.marker?.color ?? .secondary,
+                    statusIcon: section.remark?.marker?.iconName ?? "chart.line.downtrend.xyaxis",
+                    remark: section.remark,
+                    points: chartPoints(
+                        from: section.trendPoints(preferredKeys: ["fatMassKg", "fat_mass_kg", "totalFatKg"]),
+                        metric: "Fat mass",
+                        color: .formaChartFat
+                    )
+                )
             }
-            
+
             if let section = payload?.fat["fat_ratio_trend"], let value = section.numberValue {
-            FatHistoryCard(
-                value: value,
-                comment: section.comment,
-                remark: section.remark,
-                data: (section.trends["fatPercent"] ?? [])
-                    .map { FatDataPoint(date: $0.date, ratio: $0.value) }
-            )
+                let metrics = FatRatioMetrics(value: value)
+                FatTrendCard(
+                    title: "Fat Ratio History",
+                    subtitle: section.comment,
+                    valueText: String(format: "%.1f%%", value),
+                    unit: "%",
+                    color: .formaChartFat,
+                    metricLabel: "Body fat",
+                    statusText: metrics.statusText,
+                    statusColor: metrics.statusColor,
+                    statusIcon: metrics.statusIcon,
+                    remark: section.remark,
+                    points: chartPoints(
+                        from: section.trends["fatPercent"] ?? [],
+                        metric: "Body fat",
+                        color: .formaChartFat
+                    ),
+                    accessibilitySummary: "Fat Ratio, \(String(format: "%.1f", value)) percent, \(metrics.statusText.lowercased()), \(metrics.verdictText.lowercased())."
+                )
             }
         }
         .padding(.horizontal, FormaSpacing.screenGutter)
-        .padding(.vertical, 16)
+        .padding(.top, FormaSpacing.xxs)
+        .padding(.bottom, FormaSpacing.xl)
+    }
+
+    private func chartPoints(
+        from points: [InsightReportTrendPoint],
+        metric: String,
+        color: Color
+    ) -> [FormaChartPoint] {
+        points
+            .sorted { $0.date < $1.date }
+            .map { FormaChartPoint(date: $0.date, value: $0.value, metric: metric, color: color) }
     }
 }
 
@@ -203,57 +209,64 @@ private extension InsightReportMetricSection {
 
         return trends.values.first(where: { !$0.isEmpty }) ?? []
     }
+
+    func firstNestedNumber(_ keys: String...) -> Double? {
+        for key in keys {
+            if let number = nestedNumber(key) {
+                return number
+            }
+        }
+        return nil
+    }
 }
 
 // MARK: - Fat Ratio Card
-
-struct FatRatioZone {
-    let name: String
-    let min: Double
-    let max: Double
-    let rangeText: String
-    let color: Color
-}
 
 struct FatRatioCard: View {
     let value: Double
     var comment: String? = nil
     var remark: InsightReportRemark? = nil
-    
+
     var metrics: FatRatioMetrics {
         FatRatioMetrics(value: value)
     }
-    
+
+    private static let gaugeSegments: [FormaGaugeSegment] = [
+        FormaGaugeSegment(color: .formaNegative, min: 2, max: 6),
+        FormaGaugeSegment(color: .formaPositive, min: 6, max: 18),
+        FormaGaugeSegment(color: .formaCaution, min: 18, max: 25),
+        FormaGaugeSegment(color: .formaNegative, min: 25, max: 30)
+    ]
+
+    private static let categories: [FormaLegendCategory] = [
+        FormaLegendCategory(name: "Low", range: "< 6%", color: .formaNegative, min: 0, max: 6),
+        FormaLegendCategory(name: "Optimal", range: "6-18%", color: .formaPositive, min: 6, max: 18),
+        FormaLegendCategory(name: "Average", range: "18-25%", color: .formaCaution, min: 18, max: 25),
+        FormaLegendCategory(name: "High", range: "> 25%", color: .formaNegative, min: 25, max: 100)
+    ]
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            // Header
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Body Fat Ratio")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                
-                Text(comment ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            // Gauge Semicircle Visualization
-            FatSemicircularGauge(
+        VStack(alignment: .leading, spacing: FormaSpacing.cardContent) {
+            FormaCardHeader("Body Fat Ratio", subtitle: comment)
+
+            FormaSemicircularGauge(
                 value: value,
-                statusColor: metrics.statusColor,
-                statusText: metrics.statusText,
-                valueText: metrics.valueText
+                accent: metrics.statusColor,
+                segments: Self.gaugeSegments,
+                range: 2...30,
+                tickLabels: [2, 6, 18, 25, 30],
+                labelSuffix: "%",
+                valueText: metrics.valueText,
+                caption: metrics.statusText.uppercased(),
+                captionColor: metrics.statusColor
             )
-            .padding(.top, 10)
-            .padding(.horizontal, 10)
-            
-            // Category legend
-            FatRatioCategoryLegend(selectedValue: value)
-                .padding(.top, 4)
-            
+            .padding(.top, FormaSpacing.xs)
+
+            FormaCategoryLegend(categories: Self.categories, selectedValue: value)
+                .padding(.top, FormaSpacing.xxs)
+
             if let text = remark?.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Divider().overlay(Color.appSeparator)
+                FormaDivider()
                 FormaCallout(
                     text: text,
                     systemImage: remark?.marker?.iconName ?? metrics.statusIcon,
@@ -267,213 +280,48 @@ struct FatRatioCard: View {
     }
 }
 
-// MARK: - Fat Semicircular Gauge
+// MARK: - Shared fat trend card
 
-struct FatSemicircularGauge: View {
-    let value: Double
-    let statusColor: Color
-    let statusText: String
+/// One card layout for every fat trend: header with trailing value badge, a
+/// time-series chart, and an optional tinted remark.
+private struct FatTrendCard: View {
+    let title: String
+    var subtitle: String? = nil
     let valueText: String
-    
-    let segments: [(color: Color, min: Double, max: Double)] = [
-        (Color.extremityRed, 2.0, 6.0),
-        (Color.goodGreen, 6.0, 18.0),
-        (Color.avgYellow, 18.0, 25.0),
-        (Color.extremityRed, 25.0, 30.0)
-    ]
-    
-    let labels: [Double] = [2, 6, 18, 25, 30]
-    
-    var body: some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            let height = geometry.size.height
-            let radius = width / 2
-            let strokeWidth: CGFloat = 20
-            
-            ZStack {
-                // Colored Segments
-                ZStack {
-                    ForEach(0..<segments.count, id: \.self) { index in
-                        let segment = segments[index]
-                        let startTrim = CGFloat((segment.min - 2.0) / 28.0) * 0.5
-                        let endTrim = CGFloat((segment.max - 2.0) / 28.0) * 0.5
-                        
-                        Circle()
-                            .trim(from: startTrim, to: endTrim)
-                            .stroke(segment.color.gradient, style: StrokeStyle(lineWidth: strokeWidth, lineCap: .butt))
-                            .rotationEffect(.degrees(180))
-                    }
-                }
-                .frame(width: width, height: width)
-                .position(x: width / 2, y: height)
-                
-                // Range labels
-                ForEach(labels, id: \.self) { labelValue in
-                    let t = (labelValue - 2.0) / 28.0
-                    let angle = Angle(degrees: 180 - t * 180)
-                    let labelRadius = radius - 30
-                    
-                    Text(String(format: "%.0f%%", labelValue))
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .position(
-                            x: width / 2 + labelRadius * CGFloat(cos(angle.radians)),
-                            y: height - labelRadius * CGFloat(sin(angle.radians))
-                        )
-                }
-                
-                // Marker
-                let valueT = max(0, min(1, (value - 2.0) / 28.0))
-                let markerAngle = Angle(degrees: 180 - valueT * 180)
-                
-                Circle()
-                    .fill(Color.appSecondaryBackground)
-                    .frame(width: 18, height: 18)
-                    .overlay(
-                        Circle().stroke(statusColor, lineWidth: 3.5)
-                    )
-                    .shadow(color: .black.opacity(0.2), radius: 5, x: 0, y: 3)
-                    .position(
-                        x: width / 2 + radius * CGFloat(cos(markerAngle.radians)),
-                        y: height - radius * CGFloat(sin(markerAngle.radians))
-                    )
-                
-                // Score
-                VStack(spacing: 2) {
-                    Text(valueText)
-                        .font(.system(size: 38, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                    
-                    Text(statusText)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(statusColor)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(statusColor.opacity(0.12))
-                        )
-                }
-                .position(x: width / 2, y: height - 25)
-            }
-        }
-        .aspectRatio(2.0, contentMode: .fit)
-    }
-}
-
-// MARK: - Fat Ratio Category Legend
-
-struct FatRatioCategoryLegend: View {
-    let selectedValue: Double
-    
-    let categories: [(name: String, range: String, color: Color, min: Double, max: Double)] = [
-        ("Low", "< 6%", Color.extremityRed, 0, 6),
-        ("Optimal", "6-18%", Color.goodGreen, 6, 18),
-        ("Average", "18-25%", Color.avgYellow, 18, 25),
-        ("High", "> 25%", Color.extremityRed, 25, 100)
-    ]
-    
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<categories.count, id: \.self) { index in
-                let cat = categories[index]
-                let isSelected = selectedValue >= cat.min && selectedValue < cat.max
-                
-                VStack(spacing: 6) {
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(isSelected ? AnyShapeStyle(cat.color.gradient) : AnyShapeStyle(cat.color.opacity(0.15)))
-                        .frame(height: 4)
-                    
-                    Text(cat.name)
-                        .font(.caption2.weight(isSelected ? .bold : .medium))
-                        .foregroundStyle(isSelected ? .primary : .secondary)
-                        .minimumScaleFactor(0.8)
-                        .lineLimit(1)
-                    
-                    Text(cat.range)
-                        .font(.system(size: 9, weight: .regular))
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-    }
-}
-
-// MARK: - Fat Ratio History
-
-struct FatDataPoint: Identifiable {
-    let id = UUID()
-    let date: Date
-    let ratio: Double
-}
-
-struct FatHistoryCard: View {
-    let value: Double
-    var comment: String? = nil
-    var remark: InsightReportRemark? = nil
-    var reportData: [FatDataPoint]?
-    
-    var metrics: FatRatioMetrics {
-        FatRatioMetrics(value: value)
-    }
-    
-    init(value: Double, comment: String? = nil, remark: InsightReportRemark? = nil, data: [FatDataPoint]? = nil) {
-        self.value = value
-        self.comment = comment
-        self.remark = remark
-        self.reportData = data
-    }
-
-    var data: [FatDataPoint] {
-        reportData ?? []
-    }
-
-    private var chartData: [FatDataPoint] {
-        data.sorted { $0.date < $1.date }
-    }
+    let unit: String
+    let color: Color
+    let metricLabel: String
+    var statusText: String
+    var statusColor: Color
+    var statusIcon: String
+    var remark: InsightReportRemark?
+    /// Pre-sorted chart points (built once by `FatTab`).
+    let points: [FormaChartPoint]
+    var accessibilitySummary: String? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Fat Ratio History")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    
-                    Spacer()
-                    
-                    Text(String(format: "%.1f%%", value))
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                }
-                
-                Text(comment ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: FormaSpacing.cardContent) {
+            FormaCardHeader(title, subtitle: subtitle) {
+                FormaValueBadge(text: valueText, tint: color)
             }
-            
+
             FormaTimeSeriesChart(
-                points: chartData.map {
-                    FormaChartPoint(date: $0.date, value: $0.ratio, metric: "Body fat", color: .formaCoral)
-                },
-                unit: "%"
+                points: points,
+                unit: unit
             )
-            
+
             if let text = remark?.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Divider().overlay(Color.appSeparator)
+                FormaDivider()
                 FormaCallout(
                     text: text,
-                    systemImage: remark?.marker?.iconName ?? metrics.statusIcon,
-                    tint: remark?.marker?.color ?? metrics.statusColor
+                    systemImage: remark?.marker?.iconName ?? statusIcon,
+                    tint: remark?.marker?.color ?? statusColor
                 )
             }
         }
         .formaSurface(.card, padding: FormaSpacing.cardInset)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Fat Ratio, \(String(format: "%.1f", value)) percent, \(metrics.statusText.lowercased()), \(metrics.verdictText.lowercased()).")
+        .accessibilityLabel(accessibilitySummary ?? "\(title) history, ending at \(valueText). Current status is \(statusText). Remark: \((remark?.text ?? "").replacingOccurrences(of: "\n", with: " ")).")
     }
 }
 
@@ -481,31 +329,31 @@ struct FatHistoryCard: View {
 
 struct VisceralSubcutaneousDonutChart: View {
     let visceralFraction: Double
-    
+
     var body: some View {
         ZStack {
             let gapOffset: CGFloat = 0.008
             let visceralTrimEnd = max(gapOffset, CGFloat(visceralFraction) - gapOffset)
             let subcutaneousTrimStart = min(1.0 - gapOffset, CGFloat(visceralFraction) + gapOffset)
-            
-            // Subcutaneous segment (Light Teal)
+
+            // Subcutaneous segment (chart categorical — info family)
             Circle()
                 .trim(from: subcutaneousTrimStart, to: 1.0 - gapOffset)
                 .stroke(
-                    Color.subcutaneousLightTeal.gradient,
+                    Color.formaChartSubcutaneous.gradient,
                     style: StrokeStyle(lineWidth: 12, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-            
-            // Visceral segment (Dark Teal)
+
+            // Visceral segment (chart categorical — caution family)
             Circle()
                 .trim(from: gapOffset, to: visceralTrimEnd)
                 .stroke(
-                    Color.visceralDarkTeal.gradient,
+                    Color.formaChartVisceral.gradient,
                     style: StrokeStyle(lineWidth: 12, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-            
+
             Text("VS")
                 .font(.system(size: 13, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
@@ -515,447 +363,150 @@ struct VisceralSubcutaneousDonutChart: View {
 }
 
 struct VisceralSubcutaneousCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let visceralFat: Double
     let subcutaneousFat: Double
+    /// Unit label for visceral (server now sends index deltas as `idx`, legacy was `kg`).
+    var visceralUnit: String = "kg"
     let verdict: String
     let remark: InsightReportRemark?
     let comment: String?
-    
+
     var totalFat: Double {
         visceralFat + subcutaneousFat
     }
-    
+
     var visceralFraction: Double {
         guard totalFat > 0 else { return 0.0 }
         return visceralFat / totalFat
     }
-    
+
     var subcutaneousFraction: Double {
         guard totalFat > 0 else { return 0.0 }
         return subcutaneousFat / totalFat
     }
-    
+
     var visceralPercentageText: String {
         String(format: "%.0f%%", visceralFraction * 100)
     }
-    
+
     var subcutaneousPercentageText: String {
         String(format: "%.0f%%", subcutaneousFraction * 100)
     }
-    
-    var body: some View {
-        VStack(spacing: 12) {
-            // Header Row
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Visceral vs Subcutaneous")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.primary)
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        // Action or info trigger
-                    }) {
-                        Image(systemName: "info.circle")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityLabel("More information about visceral and subcutaneous fat.")
+
+    private func comparisonMetric(
+        title: String,
+        value: Double,
+        unit: String,
+        percentage: String,
+        tint: Color
+    ) -> some View {
+        VStack(alignment: .center, spacing: 2) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.center)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 1) {
+                    metricValue(value, tint: tint)
+                    metricUnit(unit)
                 }
-                
-                if let comment {
-                    Text(comment)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                .fixedSize(horizontal: true, vertical: false)
+
+                VStack(spacing: 1) {
+                    metricValue(value, tint: tint)
+                    metricUnit(unit)
                 }
             }
-            
-            // Top Comparison Panel (Inner Panel)
-            HStack(spacing: 16) {
-                // Left Metric: Visceral Fat
-                VStack(alignment: .center, spacing: 2) {
-                    Text("Visceral Fat")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    
-                    HStack(alignment: .firstTextBaseline, spacing: 1) {
-                        Text(String(format: "%.1f", visceralFat))
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.visceralDarkTeal)
-                        Text("kg")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
+
+            Text(percentage)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func metricValue(_ value: Double, tint: Color) -> some View {
+        Text(String(format: "%.1f", value))
+            .font(FormaTypography.metricSmall)
+            .foregroundStyle(tint)
+    }
+
+    private func metricUnit(_ unit: String) -> some View {
+        Text(unit)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FormaSpacing.cardContent) {
+            FormaCardHeader("Visceral vs Subcutaneous", subtitle: comment)
+
+            // Comparison panel
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: FormaSpacing.md) {
+                        comparisonMetric(
+                            title: visceralUnit == "idx" ? "Visceral Index" : "Visceral Fat",
+                            value: visceralFat,
+                            unit: visceralUnit,
+                            percentage: visceralPercentageText,
+                            tint: Color.formaChartVisceral
+                        )
+
+                        VisceralSubcutaneousDonutChart(visceralFraction: visceralFraction)
+
+                        comparisonMetric(
+                            title: "Subcutaneous Fat",
+                            value: subcutaneousFat,
+                            unit: "kg",
+                            percentage: subcutaneousPercentageText,
+                            tint: Color.formaChartSubcutaneous
+                        )
                     }
-                    
-                    Text(visceralPercentageText)
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                
-                // Center Donut Chart
-                VisceralSubcutaneousDonutChart(visceralFraction: visceralFraction)
-                
-                // Right Metric: Subcutaneous Fat
-                VStack(alignment: .center, spacing: 2) {
-                    Text("Subcutaneous Fat")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    
-                    HStack(alignment: .firstTextBaseline, spacing: 1) {
-                        Text(String(format: "%.1f", subcutaneousFat))
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.subcutaneousLightTeal)
-                        Text("kg")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
+                } else {
+                    HStack(spacing: FormaSpacing.md) {
+                        comparisonMetric(
+                            title: visceralUnit == "idx" ? "Visceral Index" : "Visceral Fat",
+                            value: visceralFat,
+                            unit: visceralUnit,
+                            percentage: visceralPercentageText,
+                            tint: Color.formaChartVisceral
+                        )
+
+                        VisceralSubcutaneousDonutChart(visceralFraction: visceralFraction)
+
+                        comparisonMetric(
+                            title: "Subcutaneous Fat",
+                            value: subcutaneousFat,
+                            unit: "kg",
+                            percentage: subcutaneousPercentageText,
+                            tint: Color.formaChartSubcutaneous
+                        )
                     }
-                    
-                    Text(subcutaneousPercentageText)
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.secondary)
                 }
-                .frame(maxWidth: .infinity)
             }
             .padding(.vertical, 12)
-            .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.appChartBackground)
-            )
-            
+            .padding(.horizontal, FormaSpacing.xs)
+            .formaSurface(.chart, padding: nil)
+
             if let text = remark?.text ?? comment,
                !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                FormaDivider()
+
                 FormaCallout(
                     text: text,
                     systemImage: remark?.marker?.iconName ?? "info.circle",
-                    tint: remark?.marker?.color ?? .formaCyan
-                )
-                .padding(.top, FormaSpacing.xxs)
-            }
-        }
-        .formaSurface(.card, padding: FormaSpacing.md)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Visceral fat \(String(format: "%.1f", visceralFat)) kilograms, \(visceralPercentageText). Subcutaneous fat \(String(format: "%.1f", subcutaneousFat)) kilograms, \(subcutaneousPercentageText). Verdict: \(verdict). Remark: \((remark?.text ?? "").replacingOccurrences(of: "\n", with: " ")).")
-    }
-}
-
-// MARK: - Fat Mass Trend Card
-
-struct FatMassPoint: Identifiable {
-    let id = UUID()
-    let date: Date
-    let value: Double
-}
-
-struct FatMassTrendCard: View {
-    let currentMass: Double
-    let statusText: String
-    let remark: InsightReportRemark?
-    let comment: String?
-    var reportData: [FatMassPoint]?
-    
-    init(currentMass: Double, statusText: String, remark: InsightReportRemark? = nil, comment: String? = nil, data: [FatMassPoint]? = nil) {
-        self.currentMass = currentMass
-        self.statusText = statusText
-        self.remark = remark
-        self.comment = comment
-        self.reportData = data
-    }
-
-    var data: [FatMassPoint] {
-        reportData ?? []
-    }
-
-    private var chartData: [FatMassPoint] {
-        data.sorted { $0.date < $1.date }
-    }
-
-    private var yDomain: ClosedRange<Double> {
-        let values = data.map { $0.value }
-        guard let minVal = values.min(), let maxVal = values.max() else {
-            return 15.0...21.5
-        }
-        if minVal == maxVal {
-            return (minVal - 1)...(maxVal + 1)
-        }
-        let padding = (maxVal - minVal) * 0.15
-        return (minVal - padding)...(maxVal + padding)
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Top Header Info
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Fat Mass History")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    
-                    Spacer()
-                    
-                    Text(String(format: "%.1f kg", currentMass))
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                }
-                
-                Text(comment ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            FormaTimeSeriesChart(
-                points: chartData.map {
-                    FormaChartPoint(date: $0.date, value: $0.value, metric: "Fat mass", color: .formaCoral)
-                },
-                unit: "kg"
-            )
-            
-            if let text = remark?.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Divider().overlay(Color.appSeparator)
-                FormaCallout(
-                    text: text,
-                    systemImage: remark?.marker?.iconName ?? "chart.line.downtrend.xyaxis",
-                    tint: remark?.marker?.color ?? .formaCoral
+                    tint: remark?.marker?.color ?? .secondary
                 )
             }
         }
         .formaSurface(.card, padding: FormaSpacing.cardInset)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Fat mass history over past 4 weeks, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \((remark?.text ?? "").replacingOccurrences(of: "\n", with: " ")).")
-    }
-}
-
-// MARK: - Visceral Subcutaneous Ratio Trend Card
-
-struct VisceralSubcRatioPoint: Identifiable {
-    let id = UUID()
-    let date: Date
-    let value: Double
-}
-
-struct VisceralSubcRatioTrendCard: View {
-    let currentRatio: Double
-    let statusText: String
-    let statusColor: Color
-    let statusIcon: String
-    let remark: InsightReportRemark?
-    let comment: String?
-    let data: [VisceralSubcRatioPoint]
-
-    private var chartData: [VisceralSubcRatioPoint] {
-        data.sorted { $0.date < $1.date }
-    }
-
-    private var yDomain: ClosedRange<Double> {
-        let values = data.map { $0.value }
-        guard let minVal = values.min(), let maxVal = values.max() else {
-            return 0.20...0.35
-        }
-        if minVal == maxVal {
-            return (minVal - 0.05)...(maxVal + 0.05)
-        }
-        let padding = (maxVal - minVal) * 0.15
-        return (minVal - padding)...(maxVal + padding)
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Top Header Info
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Visceral / Subcutaneous Ratio")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    
-                    Spacer()
-                    
-                    Text(String(format: "%.2f", currentRatio))
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                }
-                
-                Text(comment ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            FormaTimeSeriesChart(
-                points: chartData.map {
-                    FormaChartPoint(date: $0.date, value: $0.value, metric: "Visceral ratio", color: .formaAmber)
-                }
-            )
-            
-            if let text = remark?.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Divider().overlay(Color.appSeparator)
-                FormaCallout(
-                    text: text,
-                    systemImage: remark?.marker?.iconName ?? statusIcon,
-                    tint: remark?.marker?.color ?? statusColor
-                )
-            }
-        }
-        .formaSurface(.card, padding: FormaSpacing.cardInset)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Visceral to subcutaneous ratio history, ending at \(String(format: "%.2f", currentRatio)). Current status is \(statusText). Remark: \(remark?.text ?? "").")
-    }
-}
-
-// MARK: - Subcutaneous Fat Mass Trend Card
-
-struct SubcFatMassPoint: Identifiable {
-    let id = UUID()
-    let date: Date
-    let value: Double
-}
-
-struct SubcFatMassTrendCard: View {
-    let currentMass: Double
-    let statusText: String
-    let statusColor: Color
-    let statusIcon: String
-    let remark: InsightReportRemark?
-    let comment: String?
-    let data: [SubcFatMassPoint]
-
-    private var chartData: [SubcFatMassPoint] {
-        data.sorted { $0.date < $1.date }
-    }
-
-    private var yDomain: ClosedRange<Double> {
-        let values = data.map { $0.value }
-        guard let minVal = values.min(), let maxVal = values.max() else {
-            return 12.0...18.0
-        }
-        if minVal == maxVal {
-            return (minVal - 1)...(maxVal + 1)
-        }
-        let padding = (maxVal - minVal) * 0.15
-        return (minVal - padding)...(maxVal + padding)
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Top Header Info
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Subcutaneous Fat Mass")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    
-                    Spacer()
-                    
-                    Text(String(format: "%.1f kg", currentMass))
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                }
-                
-                Text(comment ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            FormaTimeSeriesChart(
-                points: chartData.map {
-                    FormaChartPoint(date: $0.date, value: $0.value, metric: "Subcutaneous fat", color: .formaCyan)
-                },
-                unit: "kg"
-            )
-            
-            if let text = remark?.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Divider().overlay(Color.appSeparator)
-                FormaCallout(
-                    text: text,
-                    systemImage: remark?.marker?.iconName ?? statusIcon,
-                    tint: remark?.marker?.color ?? statusColor
-                )
-            }
-        }
-        .formaSurface(.card, padding: FormaSpacing.cardInset)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Subcutaneous fat mass history, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \(remark?.text ?? "").")
-    }
-}
-
-// MARK: - Visceral Fat Mass Trend Card
-
-struct VisceralFatMassPoint: Identifiable {
-    let id = UUID()
-    let date: Date
-    let value: Double
-}
-
-struct VisceralFatMassTrendCard: View {
-    let currentMass: Double
-    let statusText: String
-    let statusColor: Color
-    let statusIcon: String
-    let remark: InsightReportRemark?
-    let comment: String?
-    let data: [VisceralFatMassPoint]
-
-    private var chartData: [VisceralFatMassPoint] {
-        data.sorted { $0.date < $1.date }
-    }
-
-    private var yDomain: ClosedRange<Double> {
-        let values = data.map { $0.value }
-        guard let minVal = values.min(), let maxVal = values.max() else {
-            return 2.0...6.0
-        }
-        if minVal == maxVal {
-            return (minVal - 1)...(maxVal + 1)
-        }
-        let padding = (maxVal - minVal) * 0.15
-        return (minVal - padding)...(maxVal + padding)
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Top Header Info
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Visceral Fat Mass")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    
-                    Spacer()
-                    
-                    Text(String(format: "%.1f kg", currentMass))
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                }
-                
-                Text(comment ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            FormaTimeSeriesChart(
-                points: chartData.map {
-                    FormaChartPoint(date: $0.date, value: $0.value, metric: "Visceral fat", color: .formaAmber)
-                },
-                unit: "kg"
-            )
-            
-            if let text = remark?.text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Divider().overlay(Color.appSeparator)
-                FormaCallout(
-                    text: text,
-                    systemImage: remark?.marker?.iconName ?? statusIcon,
-                    tint: remark?.marker?.color ?? statusColor
-                )
-            }
-        }
-        .formaSurface(.card, padding: FormaSpacing.cardInset)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Visceral fat mass history, ending at \(String(format: "%.1f", currentMass)) kilograms. Current status is \(statusText). Remark: \(remark?.text ?? "").")
+        .accessibilityLabel("Visceral \(String(format: "%.1f", visceralFat)) \(visceralUnit), \(visceralPercentageText). Subcutaneous fat \(String(format: "%.1f", subcutaneousFat)) kilograms, \(subcutaneousPercentageText). Verdict: \(verdict). Remark: \((remark?.text ?? "").replacingOccurrences(of: "\n", with: " ")).")
     }
 }
 

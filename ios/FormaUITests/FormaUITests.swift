@@ -24,13 +24,70 @@ final class FormaUITests: XCTestCase {
 
     @MainActor
     func testExample() throws {
-        // UI tests must launch the application that they test.
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchShell(tab: "metrics")
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // XCUIAutomation Documentation
-        // https://developer.apple.com/documentation/xcuiautomation
+        XCTAssertTrue(app.staticTexts["No report yet"].waitForExistence(timeout: 8))
+
+        let recordMeasurement = app.buttons["Record Measurement"]
+        XCTAssertTrue(recordMeasurement.exists)
+        recordMeasurement.tap()
+
+        XCTAssertTrue(app.buttons["Record"].waitForExistence(timeout: 3))
+    }
+
+    @MainActor
+    func testSettingsTabShowsSettings() throws {
+        let app = launchShell(tab: "settings")
+
+        XCTAssertTrue(app.tabBars.buttons["Settings"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Manage Profiles"].waitForExistence(timeout: 8))
+    }
+
+    @MainActor
+    func testRecordTabShowsExplicitAction() throws {
+        let app = launchShell(tab: "record")
+
+        let recordControl = app.buttons["record-primary-control"]
+        XCTAssertTrue(recordControl.waitForExistence(timeout: 8))
+        XCTAssertEqual(recordControl.value as? String, "Ready")
+    }
+
+    @MainActor
+    func testPopulatedMetricsTabs() throws {
+        let app = launchShell(tab: "metrics", scenario: "metrics-populated")
+
+        XCTAssertTrue(app.staticTexts["Consistency"].waitForExistence(timeout: 8))
+
+        app.buttons["Performance"].tap()
+        XCTAssertTrue(app.staticTexts["Balanced muscularity"].waitForExistence(timeout: 3))
+
+        app.buttons["Fat"].tap()
+        XCTAssertTrue(app.staticTexts["Body Fat Ratio"].waitForExistence(timeout: 3))
+
+        app.buttons["Muscle"].tap()
+        XCTAssertTrue(app.staticTexts["Strong foundation"].waitForExistence(timeout: 3))
+
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = "Populated Metrics"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
+    func testMetricsLoadingAndErrorSemantics() throws {
+        let loading = launchShell(tab: "metrics", scenario: "metrics-loading")
+        XCTAssertTrue(
+            loading.descendants(matching: .any)["metrics-loading"].waitForExistence(timeout: 8)
+        )
+        XCTAssertEqual(
+            loading.descendants(matching: .any)["metrics-loading"].label,
+            "Preparing your report…"
+        )
+        loading.terminate()
+
+        let error = launchShell(tab: "metrics", scenario: "metrics-error")
+        XCTAssertTrue(error.staticTexts["Report unavailable"].waitForExistence(timeout: 8))
+        XCTAssertTrue(error.buttons["Try Again"].exists)
     }
 
     @MainActor
@@ -39,5 +96,16 @@ final class FormaUITests: XCTestCase {
         measure(metrics: [XCTApplicationLaunchMetric()]) {
             XCUIApplication().launch()
         }
+    }
+
+    @MainActor
+    private func launchShell(tab: String, scenario: String? = nil) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-FormaUITestShell", "-FormaUITestTab", tab]
+        if let scenario {
+            app.launchArguments += ["-FormaUITestScenario", scenario]
+        }
+        app.launch()
+        return app
     }
 }

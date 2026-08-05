@@ -11,47 +11,103 @@ struct MetricsView: View {
     @Binding var selectedTab: MetricsTab
     @Binding var isAtTop: Bool
     @ObservedObject var reportStore: MetricsReportStore
+    var onRecordRequested: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var pageAccent: Color {
+        // Single brand wash for metrics shell — status colors stay on cards, not the page.
+        guard let payload = reportStore.payload else { return .sleekAccent }
+
+        switch selectedTab {
+        case .insights:
+            return payload.factor?.factorColor?.color ?? .sleekAccent
+        case .performance:
+            return payload.performance["ffmi_gauge"]?.factorColor?.color ?? .sleekAccent
+        case .fat:
+            return payload.fat["fat_ratio"]?.factorColor?.color ?? .sleekAccent
+        case .muscle:
+            return payload.muscle["skeletal_muscle_gauge"]?.factorColor?.color
+                ?? ["muscle_mass", "bone_mass_trend", "muscle_ratio_trend", "skeletal_muscle_mass_trend"]
+                    .compactMap { payload.muscle[$0]?.factorColor?.color }
+                    .first
+                ?? .sleekAccent
+        }
+    }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            MetricsTabBar(selectedTab: $selectedTab)
-                .padding(.horizontal, FormaSpacing.screenGutter)
-                .padding(.bottom, FormaSpacing.md)
+            VStack(spacing: 0) {
+                MetricsTabBar(selectedTab: $selectedTab)
+                    .padding(.horizontal, FormaSpacing.screenGutter)
+                    .padding(.bottom, FormaSpacing.md)
 
-            Group {
-                if reportStore.isLoading && reportStore.payload == nil {
-                    MetricsReportStatusScreen(
-                        title: "Preparing report",
-                        message: reportStore.statusMessage,
-                        isLoading: true
+                if reportStore.payload != nil,
+                   reportStore.isWaitingForReport || reportStore.isLoading {
+                    FormaRefreshStatus(
+                        message: reportStore.statusMessage
                     )
-                } else if let payload = reportStore.payload {
-                    switch selectedTab {
-                    case .insights:
-                        InsightsTab(reportStore: reportStore)
-                    case .performance:
-                        PerformanceTab(payload: payload)
-                    case .fat:
-                        FatTab(payload: payload)
-                    case .muscle:
-                        MuscleTab(payload: payload)
-                    }
-                } else if let errorMessage = reportStore.errorMessage {
-                    MetricsReportStatusScreen(
-                        title: "Report unavailable",
-                        message: errorMessage,
-                        systemImage: "exclamationmark.triangle.fill",
-                        tint: .red
-                    )
-                } else {
-                    MetricsReportStatusScreen(
-                        title: "No report yet",
-                        message: "Record a measurement to generate your first report.",
-                        systemImage: "doc.text.magnifyingglass",
-                        tint: .secondary
-                    )
+                    .padding(.horizontal, FormaSpacing.screenGutter)
+                    .padding(.bottom, FormaSpacing.md)
+                    .transition(FormaTransition.content(reduceMotion: reduceMotion))
                 }
+
+                // Tab body swaps without a parent animation transaction so Charts
+                // don't interpolate on selection. Gauges still run their own
+                // appear sweep via withAnimation inside FormaSemicircularGauge.
+                Group {
+                    if reportStore.payload == nil,
+                       reportStore.isWaitingForReport || reportStore.isLoading {
+                        MetricsSkeletonView(status: reportStore.statusMessage)
+                    } else if reportStore.payload == nil,
+                              let errorMessage = reportStore.errorMessage {
+                        FormaStatusView(
+                            title: "Report unavailable",
+                            message: errorMessage,
+                            systemImage: "exclamationmark.triangle.fill",
+                            tint: .formaNegative,
+                            actionTitle: "Try Again",
+                            actionTint: .sleekAccent
+                        ) {
+                            Task {
+                                await reportStore.refreshReport()
+                            }
+                        }
+                    } else if let payload = reportStore.payload {
+                        switch selectedTab {
+                        case .insights:
+                            InsightsTab(reportStore: reportStore)
+                        case .performance:
+                            PerformanceTab(payload: payload)
+                        case .fat:
+                            FatTab(payload: payload)
+                        case .muscle:
+                            MuscleTab(payload: payload)
+                        }
+                    } else {
+                        FormaStatusView(
+                            title: "No report yet",
+                            message: "Record a measurement to generate your first report.",
+                            systemImage: "doc.text.magnifyingglass",
+                            tint: .sleekAccent,
+                            actionTitle: "Record Measurement",
+                            actionTint: .sleekAccent,
+                            action: onRecordRequested
+                        )
+                        .formaEntrance()
+                    }
+                }
+            }
+            .frame(maxWidth: 760)
+            .frame(maxWidth: .infinity)
+            .background(alignment: .top) {
+                // Keep the wash above the viewport during pull-to-refresh while
+                // still letting it leave naturally when the page scrolls up.
+                FormaAccentWash(accent: pageAccent, topExtension: 1_000)
+                    .offset(y: -1_000)
+                    .animation(
+                        FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
+                        value: selectedTab
+                    )
             }
         }
         .refreshable {
@@ -66,154 +122,21 @@ struct MetricsView: View {
             if reduceMotion {
                 isAtTop = shouldShowBrand
             } else {
-                withAnimation(.easeOut(duration: 0.2)) {
+                withAnimation(FormaMotion.fast) {
                     isAtTop = shouldShowBrand
                 }
             }
         }
-        .contentMargins(.top, FormaLayout.floatingSettingsClearance, for: .scrollContent)
+        .contentMargins(.top, FormaLayout.topOverlayClearance, for: .scrollContent)
         .background(FormaBackground())
-    }
-}
-
-struct MetricsReportStatusScreen: View {
-    let title: String
-    let message: String
-    var systemImage = "hourglass"
-    var tint: Color = .accentColor
-    var isLoading = false
-
-    var body: some View {
-        VStack(spacing: 20) {
-            if isLoading {
-                MetricsReportLoadingIndicator(tint: tint)
-            } else {
-                ZStack {
-                    Circle()
-                        .fill(tint.opacity(0.12))
-                        .frame(width: 64, height: 64)
-
-                    Image(systemName: systemImage)
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(tint)
-                }
-            }
-
-            VStack(spacing: 8) {
-                Text(title)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.primary)
-
-                Text(message)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 80)
-    }
-}
-
-private struct MetricsReportLoadingIndicator: View {
-    let tint: Color
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
-            let elapsed = context.date.timeIntervalSinceReferenceDate
-            let progress = reduceMotion ? 0.1 : elapsed.truncatingRemainder(dividingBy: 3.2) / 3.2
-            let breathe = reduceMotion ? 1.0 : 0.985 + (0.015 * sin(elapsed * .pi))
-
-            ZStack {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [tint.opacity(0.18), tint.opacity(0.055)],
-                            center: .center,
-                            startRadius: 2,
-                            endRadius: 48
-                        )
-                    )
-
-                Circle()
-                    .stroke(tint.opacity(0.14), lineWidth: 10)
-                    .blur(radius: 8)
-                    .padding(8)
-
-                Circle()
-                    .stroke(
-                        AngularGradient(
-                            colors: [Color.appSeparator, tint.opacity(0.22), Color.appSeparator],
-                            center: .center
-                        ),
-                        lineWidth: 1
-                    )
-                    .padding(4)
-
-                Circle()
-                    .trim(from: 0.03, to: 0.27)
-                    .stroke(
-                        AngularGradient(
-                            colors: [tint.opacity(0.12), tint, Color.formaCyan, tint.opacity(0.12)],
-                            center: .center
-                        ),
-                        style: StrokeStyle(lineWidth: 3.5, lineCap: .round)
-                    )
-                    .padding(4)
-                    .rotationEffect(.degrees(progress * 360))
-
-                Circle()
-                    .trim(from: 0.54, to: 0.72)
-                    .stroke(
-                        LinearGradient(
-                            colors: [Color.formaCyan.opacity(0.18), Color.formaCyan.opacity(0.7)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        ),
-                        style: StrokeStyle(lineWidth: 2.25, lineCap: .round)
-                    )
-                    .padding(14)
-                    .rotationEffect(.degrees(-progress * 220))
-
-                ForEach(0..<3, id: \.self) { index in
-                    Circle()
-                        .fill(index == 0 ? tint : Color.formaCyan.opacity(0.7))
-                        .frame(width: index == 0 ? 5 : 3.5, height: index == 0 ? 5 : 3.5)
-                        .shadow(color: tint.opacity(0.7), radius: 4)
-                        .offset(y: -42)
-                        .rotationEffect(.degrees((progress * 360) + (Double(index) * 120)))
-                }
-
-                ZStack {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-
-                    Circle()
-                        .strokeBorder(
-                            LinearGradient(
-                                colors: [Color.white.opacity(0.2), tint.opacity(0.16)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 0.75
-                        )
-
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 20, weight: .medium))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(tint)
-                }
-                .frame(width: 48, height: 48)
-                .shadow(color: Color.black.opacity(0.22), radius: 10, y: 5)
-                .scaleEffect(breathe)
-            }
-        }
-        .frame(width: 96, height: 96)
-        .accessibilityHidden(true)
+        .animation(
+            FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
+            value: reportStore.payload != nil
+        )
+        .animation(
+            FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
+            value: reportStore.isWaitingForReport || reportStore.isLoading
+        )
     }
 }
 
@@ -232,8 +155,8 @@ struct MetricsUnavailableContent: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Color.appTertiaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(FormaSpacing.md)
+        .background(Color.appTertiaryBackground, in: RoundedRectangle(cornerRadius: FormaRadius.inset, style: .continuous))
     }
 }
 
@@ -251,197 +174,130 @@ enum MetricsTab: String, CaseIterable {
 struct MetricsTabBar: View {
     @Binding var selectedTab: MetricsTab
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Namespace private var selectionNamespace
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(MetricsTab.allCases.indices, id: \.self) { index in
-                let tab = MetricsTab.allCases[index]
-
-                Button {
-                    let update = {
-                        selectedTab = tab
-                    }
-
-                    if reduceMotion {
-                        update()
-                    } else {
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                            update()
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: FormaSpacing.xs) {
+                        ForEach(MetricsTab.allCases, id: \.self) { tab in
+                            tabButton(tab, expands: false)
                         }
                     }
-                } label: {
-                    VStack(spacing: 7) {
-                        Text(tab.title)
-                            .font(.subheadline.weight(selectedTab == tab ? .semibold : .medium))
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .foregroundStyle(selectedTab == tab ? .primary : .secondary)
-
-                        ZStack {
-                            Capsule()
-                                .fill(.clear)
-                                .frame(height: 2)
-
-                            if selectedTab == tab {
-                                Capsule()
-                                    .fill(Color.sleekAccent)
-                                    .frame(width: 24, height: 2)
-                                    .matchedGeometryEffect(id: "metrics-selection", in: selectionNamespace)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, FormaSpacing.xxs)
-                    .frame(minWidth: 44, minHeight: 48)
-                    .contentShape(Rectangle())
+                    .padding(.vertical, FormaSpacing.xxs)
                 }
-                .buttonStyle(MetricTabButtonStyle())
-                .accessibilityValue(selectedTab == tab ? "Selected" : "")
-
-                if index < MetricsTab.allCases.count - 1 {
-                    Spacer(minLength: FormaSpacing.xxs)
+            } else {
+                HStack(spacing: FormaSpacing.xs) {
+                    ForEach(MetricsTab.allCases, id: \.self) { tab in
+                        tabButton(tab, expands: true)
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity)
+        .focusable()
+        .onKeyPress(.leftArrow) {
+            moveSelection(by: -1)
+            return .handled
+        }
+        .onKeyPress(.rightArrow) {
+            moveSelection(by: 1)
+            return .handled
+        }
         .background(alignment: .bottom) {
             Rectangle()
                 .fill(Color.appSeparator)
                 .frame(height: 0.5)
         }
+        // Scope selection motion to the tab bar only — not the report body.
+        .animation(
+            FormaMotion.preferred(FormaMotion.selection, reduceMotion: reduceMotion),
+            value: selectedTab
+        )
+        .formaFeedback(.selection, trigger: selectedTab)
+        .accessibilityIdentifier("metrics-tab-bar")
     }
-}
 
-private struct MetricTabButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private func moveSelection(by offset: Int) {
+        guard let currentIndex = MetricsTab.allCases.firstIndex(of: selectedTab) else { return }
+        let nextIndex = min(max(currentIndex + offset, 0), MetricsTab.allCases.count - 1)
+        selectedTab = MetricsTab.allCases[nextIndex]
+    }
 
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
-            .opacity(configuration.isPressed ? 0.9 : 1)
-            .animation(
-                reduceMotion ? nil : .easeOut(duration: 0.12),
-                value: configuration.isPressed
+    private func tabButton(_ tab: MetricsTab, expands: Bool) -> some View {
+        let isSelected = selectedTab == tab
+
+        return Button {
+            // Assign without withAnimation so chart content never inherits the
+            // selector's spring transaction.
+            guard !isSelected else { return }
+            selectedTab = tab
+        } label: {
+            VStack(spacing: 7) {
+                Text(tab.title)
+                    .font(.subheadline.weight(isSelected ? .semibold : .medium))
+                    .lineLimit(1)
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+
+                ZStack {
+                    Capsule()
+                        .fill(.clear)
+                        .frame(height: 3)
+
+                    if isSelected {
+                        Capsule()
+                            .fill(Color.sleekAccent)
+                            .frame(width: 24, height: 3)
+                            .matchedGeometryEffect(id: "metrics-selection", in: selectionNamespace)
+                    }
+                }
+            }
+            .padding(.horizontal, FormaSpacing.sm)
+            .frame(maxWidth: expands ? .infinity : nil)
+            .frame(minWidth: 64, minHeight: 48)
+            .background(
+                isSelected ? Color.sleekAccent.opacity(0.10) : Color.clear,
+                in: RoundedRectangle(cornerRadius: FormaRadius.badge, style: .continuous)
             )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(FormaPressableButtonStyle(depth: .standard))
+        .accessibilityIdentifier("metrics-tab-\(tab.rawValue)")
+        .accessibilityLabel(tab.title)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
+/// Skeleton stand-in for the report while it is being prepared.
 struct MetricsSkeletonView: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            SkeletonCard()
-            SkeletonCard()
-            SkeletonCard()
-        }
-        .padding(.vertical, 16)
-    }
-}
+    var status: String?
 
-struct SkeletonRow: View {
     var body: some View {
-        HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.secondary.opacity(0.12))
-                .frame(width: 36, height: 36)
-            
-            VStack(alignment: .leading, spacing: 6) {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.secondary.opacity(0.12))
-                    .frame(width: 140, height: 16)
-                
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.secondary.opacity(0.08))
-                    .frame(width: 220, height: 12)
-            }
-            Spacer()
-        }
-        .shimmering()
-    }
-}
+        VStack(spacing: FormaSpacing.cardGap) {
+            if let status, !status.isEmpty {
+                HStack(spacing: FormaSpacing.xs) {
+                    FormaLoadingIndicator()
 
-struct SkeletonCard: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Header
-            VStack(alignment: .leading, spacing: 8) {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.secondary.opacity(0.15))
-                    .frame(width: 160, height: 20)
-                
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.secondary.opacity(0.08))
-                    .frame(width: 240, height: 14)
+                    Text(status)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            
-            // Visualization Area
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.secondary.opacity(0.05))
-                .frame(height: 150)
-            
-            // Separator
-            Rectangle()
-                .fill(Color.appSeparator)
-                .frame(height: 1)
-            
-            // Bottom Row
-            SkeletonRow()
+
+            FormaSkeletonCard(kind: .gauge)
+            FormaSkeletonCard(kind: .narrative)
+            FormaSkeletonCard(kind: .chart)
         }
-        .formaSurface(.card, padding: FormaSpacing.cardInset)
         .padding(.horizontal, FormaSpacing.screenGutter)
-    }
-}
-
-struct ShimmerModifier: ViewModifier {
-    @State private var phase: CGFloat = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    
-    func body(content: Content) -> some View {
-        content
-            .modifier(AnimatedShimmerModifier(phase: reduceMotion ? 0.5 : phase))
-            .onAppear {
-                guard !reduceMotion else { return }
-
-                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                    phase = 1
-                }
-            }
-    }
-}
-
-struct AnimatedShimmerModifier: AnimatableModifier {
-    var phase: CGFloat
-    
-    var animatableData: CGFloat {
-        get { phase }
-        set { phase = newValue }
-    }
-    
-    func body(content: Content) -> some View {
-        content
-            .overlay(
-                GeometryReader { geo in
-                    let w = geo.size.width
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0.3),
-                            .init(color: .white.opacity(0.3), location: 0.5),
-                            .init(color: .clear, location: 0.7)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: w * 2)
-                    .offset(x: -w + (w * 2 * phase))
-                    .blendMode(.overlay)
-                }
-                .mask(content)
-            )
-    }
-}
-
-extension View {
-    func shimmering() -> some View {
-        self.modifier(ShimmerModifier())
+        .padding(.top, FormaSpacing.xxs)
+        .padding(.bottom, FormaSpacing.xl)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(status.flatMap { $0.isEmpty ? nil : $0 } ?? "Preparing your report")
+        .accessibilityIdentifier("metrics-loading")
     }
 }
 
@@ -452,13 +308,10 @@ extension View {
         reportStore: MetricsReportStore()
     )
         .background(Color.appBackground)
+        .environmentObject(FormaSoundPlayer())
 }
 
 #Preview("Report loading") {
-    MetricsReportStatusScreen(
-        title: "Preparing report",
-        message: "Waiting for report generation.",
-        isLoading: true
-    )
-    .background(FormaBackground())
+    MetricsSkeletonView(status: "Preparing your report…")
+        .background(FormaBackground(accent: .sleekAccent))
 }

@@ -10,6 +10,7 @@ import ClerkKitUI
 
 struct ClerkSignInView: View {
     @State private var authIsPresented = false
+    @State private var continueFeedbackNonce = 0
 
     var body: some View {
         ZStack {
@@ -30,6 +31,7 @@ struct ClerkSignInView: View {
                 }
 
                 Button {
+                    continueFeedbackNonce += 1
                     authIsPresented = true
                 } label: {
                     Label("Continue with Clerk", systemImage: "person.crop.circle.badge.checkmark")
@@ -38,7 +40,7 @@ struct ClerkSignInView: View {
                         .frame(minHeight: 54)
                 }
                 .buttonStyle(.glassProminent)
-                .buttonBorderShape(.roundedRectangle(radius: FormaRadius.inset))
+                .buttonBorderShape(.roundedRectangle(radius: FormaRadius.action))
                 .tint(.sleekAccent)
             }
             .formaSurface(.hero, padding: FormaSpacing.xxl)
@@ -48,9 +50,11 @@ struct ClerkSignInView: View {
         .sheet(isPresented: $authIsPresented) {
             AuthView()
         }
+        .formaFeedback(.confirm, trigger: continueFeedbackNonce)
     }
 }
 
 #Preview {
     ClerkSignInView()
+        .environmentObject(FormaSoundPlayer())
 }
