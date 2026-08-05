@@ -36,7 +36,7 @@ The interface is built entirely in SwiftUI, uses Swift Charts for data visualiza
 | **Native experience** | Uses SwiftUI navigation, Swift Charts, adaptive system colors, Liquid Glass controls, Reduce Motion support, and iPhone/iPad layouts. |
 
 > [!NOTE]
-> Metrics, recording, authentication, profiles, and settings are implemented. The **Workouts** and **Vitals** tabs currently provide navigation shells for future modules.
+> Metrics, recording, authentication, profiles, and settings are implemented.
 
 ## From scale to insight
 
@@ -100,8 +100,7 @@ graph TB
         GATE --> ROOT[TabView]
         ROOT --> METRICS[MetricsView]
         ROOT --> RECORD[RecordView]
-        ROOT --> WORKOUTS[WorkoutsView]
-        ROOT --> VITALS[VitalsView]
+        ROOT --> SETTINGS[Settings]
     end
 
     subgraph Services
@@ -219,8 +218,6 @@ The unit suite covers BLE packet decoding, ordered measurement presentation, idl
 
 ## Roadmap
 
-- Build the Workouts experience
-- Add vitals history and HealthKit integration
 - Expand supported smart-scale protocols
 - Add screenshot and UI regression coverage
 - Make backend and Clerk environments configurable per build configuration
