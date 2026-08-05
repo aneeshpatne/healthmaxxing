@@ -36,31 +36,20 @@ final class FormaUITests: XCTestCase {
     }
 
     @MainActor
-    func testFeaturePreviewTabs() throws {
-        let workouts = launchShell(tab: "workouts")
-        XCTAssertTrue(workouts.staticTexts["COMING SOON"].waitForExistence(timeout: 8))
-        XCTAssertTrue(
-            workouts.staticTexts[
-                "Guided strength sessions and training analytics are being shaped for a future update."
-            ].exists
-        )
-        workouts.terminate()
+    func testSettingsTabShowsSettings() throws {
+        let app = launchShell(tab: "settings")
 
-        let vitals = launchShell(tab: "vitals")
-        XCTAssertTrue(vitals.staticTexts["COMING SOON"].waitForExistence(timeout: 8))
-        XCTAssertTrue(
-            vitals.staticTexts[
-                "Heart-rate history, recovery, and Apple Health trends are being prepared for a future update."
-            ].exists
-        )
+        XCTAssertTrue(app.tabBars.buttons["Settings"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["Manage Profiles"].waitForExistence(timeout: 8))
     }
 
     @MainActor
     func testRecordTabShowsExplicitAction() throws {
         let app = launchShell(tab: "record")
 
-        XCTAssertTrue(app.buttons["Record"].waitForExistence(timeout: 8))
-        XCTAssertEqual(app.buttons["Record"].value as? String, "Ready")
+        let recordControl = app.buttons["record-primary-control"]
+        XCTAssertTrue(recordControl.waitForExistence(timeout: 8))
+        XCTAssertEqual(recordControl.value as? String, "Ready")
     }
 
     @MainActor
@@ -69,13 +58,13 @@ final class FormaUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Consistency"].waitForExistence(timeout: 8))
 
-        app.buttons["metrics-tab-performance"].tap()
+        app.buttons["Performance"].tap()
         XCTAssertTrue(app.staticTexts["Balanced muscularity"].waitForExistence(timeout: 3))
 
-        app.buttons["metrics-tab-fat"].tap()
+        app.buttons["Fat"].tap()
         XCTAssertTrue(app.staticTexts["Body Fat Ratio"].waitForExistence(timeout: 3))
 
-        app.buttons["metrics-tab-muscle"].tap()
+        app.buttons["Muscle"].tap()
         XCTAssertTrue(app.staticTexts["Strong foundation"].waitForExistence(timeout: 3))
 
         let attachment = XCTAttachment(screenshot: app.screenshot())
