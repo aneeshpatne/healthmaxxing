@@ -163,6 +163,31 @@ const emptyProgressTrends: BodyCompositionProgressTrends = {
   muscle_mass_kg: [],
 };
 
+function progressConsistency(
+  progressTrends: BodyCompositionProgressTrends,
+): { score: number; signals: Record<string, number | null> } {
+  const delta = (points: BodyCompositionProgressTrendPoint[]) =>
+    points.length < 2
+      ? null
+      : Number((points.at(-1)!.value - points[0]!.value).toFixed(2));
+  const signals = {
+    body_fat_pct: delta(progressTrends.body_fat_pct),
+    fat_mass_kg: delta(progressTrends.fat_mass_kg),
+    muscle_mass_kg: delta(progressTrends.muscle_mass_kg),
+  };
+  const directions = [
+    signals.body_fat_pct === null ? null : -Math.sign(signals.body_fat_pct),
+    signals.fat_mass_kg === null ? null : -Math.sign(signals.fat_mass_kg),
+    signals.muscle_mass_kg === null ? null : Math.sign(signals.muscle_mass_kg),
+  ].filter((value): value is number => value !== null);
+  const score = directions.length === 0
+    ? 50
+    : Math.round(
+        50 + directions.reduce((sum, direction) => sum + direction * 12, 0),
+      );
+  return { score: Math.min(100, Math.max(0, score)), signals };
+}
+
 /**
  * Formats the lean non-muscle series used for muscle.bone_mass_trend so the
  * agent can write about it. Bone mass here is fat_free_mass - muscle_mass.
@@ -264,14 +289,11 @@ export const insights_schema = z.object({
     excess_fat_gauge: display_card_schema.describe(
       "Excess fat vs target (supportive)",
     ),
-    body_ratios: display_card_schema.describe(
-      "Available waist-to-height and torso ratios; acknowledge missing values",
-    ),
   }),
   fat: z.object({
     fat_ratio: gauge_card_schema.describe("Fat ratio gauge"),
     fat_ratio_trend: display_card_schema.describe("Fat ratio trend"),
-    fat_distribution_context: display_card_schema.describe(
+    visceral_vs_subcutaneous: display_card_schema.describe(
       "Visceral device index and subcutaneous fat estimates shown separately; never compare their magnitudes because units differ",
     ),
     visceral_trend: display_card_schema.describe("Visceral fat trend"),
@@ -279,9 +301,6 @@ export const insights_schema = z.object({
       "Subcutaneous fat mass trend",
     ),
     fat_mass_trend: display_card_schema.describe("Fat mass trend"),
-    waist_context: display_card_schema.describe(
-      "Waist-to-height context when circumference data is available",
-    ),
   }),
   muscle: z.object({
     skeletal_muscle_gauge: z.object({
@@ -437,11 +456,6 @@ export function preprocessProfileAiReportPayload({
         performanceReport?.excessFatGauge ?? null,
         evidence,
       ),
-      body_ratios: withValue(
-        performance.body_ratios,
-        performanceReport?.lastBodyRatios ?? null,
-        evidence,
-      ),
     },
     fat: {
       fat_ratio: withValueAndTrends(
@@ -491,11 +505,6 @@ export function preprocessProfileAiReportPayload({
         { fatMassKg: fatReport?.last30Days.fatMassKg ?? [] },
         evidence,
       ),
-      waist_context: withValue(
-        fat.waist_context,
-        performanceReport?.lastBodyRatios.waistHeight ?? null,
-        evidence,
-      ),
     },
     muscle: {
       skeletal_muscle_gauge: withValue(
@@ -531,14 +540,6 @@ export function preprocessProfileAiReportPayload({
             muscleReport?.last30Days.skeletalMuscleMassKg ?? [],
           skeletalMuscleRatio:
             muscleReport?.last30Days.skeletalMuscleRatio ?? [],
-        },
-        evidence,
-      ),
-      hydration_context: withValue(
-        muscle.hydration_context,
-        {
-          waterPct: latestBodyComposition?.water_pct ?? null,
-          proteinPct: latestBodyComposition?.protein_pct ?? null,
         },
         evidence,
       ),

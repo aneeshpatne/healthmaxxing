@@ -82,24 +82,21 @@ const payload = insights_schema.parse({
     composition_trends: card("composition trends"),
     target_vs_current_weight: card("target vs current"),
     excess_fat_gauge: card("excess fat"),
-    body_ratios: card("body ratios"),
   },
   fat: {
     fat_ratio: gaugeCard("fat ratio", "yellow"),
     fat_ratio_trend: card("fat ratio trend"),
-    fat_distribution_context: card("fat distribution context"),
+    visceral_vs_subcutaneous: card("fat distribution context"),
     visceral_trend: card("visceral trend"),
     subcutaneous_fat_mass_trend: card("subcutaneous trend"),
     fat_mass_trend: card("fat mass trend"),
-    waist_context: card("waist context"),
   },
   muscle: {
     skeletal_muscle_gauge: gaugeCard("skeletal muscle gauge"),
     muscle_mass: card("muscle mass"),
-    lean_mass_balance: card("lean mass balance"),
+    bone_mass_trend: card("bone mass trend"),
     muscle_ratio_trend: card("muscle ratio trend"),
     skeletal_muscle_mass_trend: card("skeletal muscle trend"),
-    hydration_context: card("hydration context"),
   },
 });
 
@@ -290,7 +287,7 @@ test("preprocessProfileAiReportPayload marks fat and muscle with values and tren
     value: 56,
     trends: { muscleRatio: sources.muscleReport.last30Days.muscleRatio },
   });
-  expect(preprocessed.muscle.lean_mass_balance.preprocess).toEqual({
+  expect(preprocessed.muscle.bone_mass_trend.preprocess).toEqual({
     value: 12,
     trends: {
       leanNonMuscleMassKg:
