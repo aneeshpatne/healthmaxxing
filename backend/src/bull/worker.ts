@@ -24,14 +24,11 @@ export function startWorker() {
 
         try {
           const agentResult = await runAgentOrchestratorNew(profileId, reportId);
-          if (agentResult.toolCallCount !== 1) {
-            throw new Error(
-              `Report agent must call profile_ai_report exactly once; received ${agentResult.toolCallCount}`,
-            );
-          }
           const persisted = await getProfileAiReportById({ profileId, reportId });
           if (persisted?.data === null || persisted === null) {
-            throw new Error("Report agent completed without persisting structured output");
+            throw new Error(
+              `Report agent completed without persisting structured output; tool calls: ${agentResult.toolCallCount}`,
+            );
           }
           await updateProfileInsightReportGenerationStatus({
             reportId,
