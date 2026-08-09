@@ -187,8 +187,15 @@ ALTER TABLE fat_report_comments DROP CONSTRAINT IF EXISTS fat_report_comments_re
 ALTER TABLE muscle_reports DROP CONSTRAINT IF EXISTS muscle_reports_profile_id_fkey;
 ALTER TABLE muscle_reports DROP CONSTRAINT IF EXISTS muscle_reports_body_composition_metrics_id_fkey;
 ALTER TABLE muscle_report_comments DROP CONSTRAINT IF EXISTS muscle_report_comments_report_id_fkey;
-ALTER TABLE profile_ai_report_jsonld DROP CONSTRAINT IF EXISTS profile_ai_report_jsonld_report_id_fkey;
-ALTER TABLE profile_ai_report_jsonld DROP CONSTRAINT IF EXISTS profile_ai_report_jsonld_profile_id_fkey;
+
+DO $$
+BEGIN
+  IF to_regclass('profile_ai_report_jsonld') IS NOT NULL THEN
+    ALTER TABLE profile_ai_report_jsonld DROP CONSTRAINT IF EXISTS profile_ai_report_jsonld_report_id_fkey;
+    ALTER TABLE profile_ai_report_jsonld DROP CONSTRAINT IF EXISTS profile_ai_report_jsonld_profile_id_fkey;
+  END IF;
+END;
+$$;
 
 ALTER TABLE accounts ALTER COLUMN id TYPE uuid USING migrate_text_to_uuid(id::text);
 ALTER TABLE profiles ALTER COLUMN id TYPE uuid USING migrate_text_to_uuid(id::text);
@@ -235,7 +242,20 @@ ALTER TABLE profile_insight_reports ALTER COLUMN profile_id TYPE uuid USING migr
 ALTER TABLE profile_insight_reports ALTER COLUMN body_composition_metrics_id TYPE uuid USING migrate_text_to_uuid(body_composition_metrics_id::text);
 ALTER TABLE profile_insight_report_comments ALTER COLUMN id TYPE uuid USING migrate_text_to_uuid(id::text);
 ALTER TABLE profile_insight_report_comments ALTER COLUMN report_id TYPE uuid USING migrate_text_to_uuid(report_id::text);
-ALTER TABLE profile_insight_report_comments ALTER COLUMN profile_id TYPE uuid USING migrate_text_to_uuid(profile_id::text);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'profile_insight_report_comments'
+      AND column_name = 'profile_id'
+  ) THEN
+    ALTER TABLE profile_insight_report_comments
+      ALTER COLUMN profile_id TYPE uuid USING migrate_text_to_uuid(profile_id::text);
+  END IF;
+END;
+$$;
 ALTER TABLE fat_reports ALTER COLUMN id TYPE uuid USING migrate_text_to_uuid(id::text);
 ALTER TABLE fat_reports ALTER COLUMN profile_id TYPE uuid USING migrate_text_to_uuid(profile_id::text);
 ALTER TABLE fat_reports ALTER COLUMN body_composition_metrics_id TYPE uuid USING migrate_text_to_uuid(body_composition_metrics_id::text);
@@ -246,8 +266,16 @@ ALTER TABLE muscle_reports ALTER COLUMN profile_id TYPE uuid USING migrate_text_
 ALTER TABLE muscle_reports ALTER COLUMN body_composition_metrics_id TYPE uuid USING migrate_text_to_uuid(body_composition_metrics_id::text);
 ALTER TABLE muscle_report_comments ALTER COLUMN id TYPE uuid USING migrate_text_to_uuid(id::text);
 ALTER TABLE muscle_report_comments ALTER COLUMN report_id TYPE uuid USING migrate_text_to_uuid(report_id::text);
-ALTER TABLE profile_ai_report_jsonld ALTER COLUMN report_id TYPE uuid USING migrate_text_to_uuid(report_id::text);
-ALTER TABLE profile_ai_report_jsonld ALTER COLUMN profile_id TYPE uuid USING migrate_text_to_uuid(profile_id::text);
+DO $$
+BEGIN
+  IF to_regclass('profile_ai_report_jsonld') IS NOT NULL THEN
+    ALTER TABLE profile_ai_report_jsonld
+      ALTER COLUMN report_id TYPE uuid USING migrate_text_to_uuid(report_id::text);
+    ALTER TABLE profile_ai_report_jsonld
+      ALTER COLUMN profile_id TYPE uuid USING migrate_text_to_uuid(profile_id::text);
+  END IF;
+END;
+$$;
 
 ALTER TABLE profiles ADD CONSTRAINT profiles_account_id_fkey FOREIGN KEY (account_id) REFERENCES accounts(id);
 ALTER TABLE profile_metadata ADD CONSTRAINT profile_metadata_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id);
@@ -274,14 +302,38 @@ ALTER TABLE performance_report_comments ADD CONSTRAINT performance_report_commen
 ALTER TABLE profile_insight_reports ADD CONSTRAINT profile_insight_reports_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
 ALTER TABLE profile_insight_reports ADD CONSTRAINT profile_insight_reports_body_composition_metrics_id_fkey FOREIGN KEY (body_composition_metrics_id) REFERENCES body_composition_metrics_new(id) ON DELETE CASCADE;
 ALTER TABLE profile_insight_report_comments ADD CONSTRAINT profile_insight_report_comments_report_id_fkey FOREIGN KEY (report_id) REFERENCES profile_insight_reports(id) ON DELETE CASCADE;
-ALTER TABLE profile_insight_report_comments ADD CONSTRAINT profile_insight_report_comments_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'profile_insight_report_comments'
+      AND column_name = 'profile_id'
+  ) THEN
+    ALTER TABLE profile_insight_report_comments
+      ADD CONSTRAINT profile_insight_report_comments_profile_id_fkey
+      FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
+  END IF;
+END;
+$$;
 ALTER TABLE fat_reports ADD CONSTRAINT fat_reports_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
 ALTER TABLE fat_reports ADD CONSTRAINT fat_reports_body_composition_metrics_id_fkey FOREIGN KEY (body_composition_metrics_id) REFERENCES body_composition_metrics_new(id) ON DELETE CASCADE;
 ALTER TABLE fat_report_comments ADD CONSTRAINT fat_report_comments_report_id_fkey FOREIGN KEY (report_id) REFERENCES fat_reports(id) ON DELETE CASCADE;
 ALTER TABLE muscle_reports ADD CONSTRAINT muscle_reports_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
 ALTER TABLE muscle_reports ADD CONSTRAINT muscle_reports_body_composition_metrics_id_fkey FOREIGN KEY (body_composition_metrics_id) REFERENCES body_composition_metrics_new(id) ON DELETE CASCADE;
 ALTER TABLE muscle_report_comments ADD CONSTRAINT muscle_report_comments_report_id_fkey FOREIGN KEY (report_id) REFERENCES muscle_reports(id) ON DELETE CASCADE;
-ALTER TABLE profile_ai_report_jsonld ADD CONSTRAINT profile_ai_report_jsonld_report_id_fkey FOREIGN KEY (report_id) REFERENCES profile_insight_reports(id) ON DELETE CASCADE;
-ALTER TABLE profile_ai_report_jsonld ADD CONSTRAINT profile_ai_report_jsonld_profile_id_fkey FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
+DO $$
+BEGIN
+  IF to_regclass('profile_ai_report_jsonld') IS NOT NULL THEN
+    ALTER TABLE profile_ai_report_jsonld
+      ADD CONSTRAINT profile_ai_report_jsonld_report_id_fkey
+      FOREIGN KEY (report_id) REFERENCES profile_insight_reports(id) ON DELETE CASCADE;
+    ALTER TABLE profile_ai_report_jsonld
+      ADD CONSTRAINT profile_ai_report_jsonld_profile_id_fkey
+      FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE;
+  END IF;
+END;
+$$;
 
 DROP FUNCTION migrate_text_to_uuid(text);

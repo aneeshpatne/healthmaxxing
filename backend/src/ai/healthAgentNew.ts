@@ -1,17 +1,28 @@
-import { createAgent, HumanMessage, SystemMessage } from "langchain";
+import {
+  createAgent,
+  HumanMessage,
+  SystemMessage,
+  toolStrategy,
+} from "langchain";
+import { upsertProfileAiReportJsonLd } from "../db/commands";
 import { model } from "./model";
-import { createTools } from "./toolsNew";
+import {
+  formatBoneMassTrendForAgent,
+  getProfileAiReportPreprocessSources,
+  insights_schema,
+  preprocessProfileAiReportPayload,
+} from "./toolsNew";
 
 const systemMsg = new SystemMessage(
-  `You are a calm, observant fitness coach reviewing a person's progress. Call profile_ai_report exactly once with a complete structured report. Field roles and required values are defined in the tool schema.
+  `You are a fitness coach reviewing someone's progress. Return one complete, structured report. Follow the field descriptions in the output schema; they already define what each field should contain.
 
-VOICE
-- Warm and direct. Supportive without empty praise, candid without sounding clinical.
-- Write like a coach who noticed the person's actual results, not a report template or fitness influencer.
-- Future-focused and achievable. Lead with what is working before introducing a course correction.
-- The user should finish thinking: "I'm doing some things right, and I know what to focus on next."
-- Never imply that the user is broken or that their work is finished.
-- Use plain language, short sentences, and natural contractions. Never use em dashes.
+BONE MASS TREND
+- muscle.bone_mass_trend is backed by the "Bone Mass Trend" section in the user message.
+- That series is lean non-muscle mass (fat-free mass minus muscle mass), used as the bone-mass proxy.
+- When that section includes a current value or last-30-day points, interpret the direction. Never claim bone-mass or trend data is missing in that case.
+
+CORE FORMULA — every insight follows: Strength → Progress → Opportunity → Payoff.
+Example: "Solid muscle base with body fat trending down — trimming the waistline will reveal the definition you're building."
 
 EVIDENCE FIRST
 - Ground every claim in a supplied current value, comparison, or trend. Specificity should feel earned by the data.
@@ -198,20 +209,37 @@ export async function analyzeHealthDataNew(input: {
 }) {
   const healthAgent = createAgent({
     model,
-    tools: createTools(input.reportId, input.profileId),
+    responseFormat: toolStrategy(insights_schema),
   });
+
+  // Load preprocess sources before generation so bone-mass trend series is in
+  // the prompt (it is not part of the general body-composition delta tables).
+  const sources = await getProfileAiReportPreprocessSources(input.profileId);
+  const boneMassTrend = formatBoneMassTrendForAgent(sources.muscleReport);
 
   const result = await healthAgent.invoke({
     messages: [
       systemMsg,
       new HumanMessage(
-        `Data legend: m=metric key, v=current value, all/y1/d30/d7=current minus the earliest reading available in that period. NA means unavailable or insufficient readings.
-bc=body composition, bm=body measurements (cm).
-Units: *_kg=kilograms, *_pct=percent, bmi/fmi/ffmi=kg/m², bmr_kcal=kilocalories/day, visceral_fat=device-estimated index.
-
-${input.userContext}`,
+        `User MetaData - ${input.profileMetadata}
+Body Composition Delta - ${input.bodyCompositionDelta}
+Body Measurement Delta - ${input.bodyMeasurementDelta}
+First Health Data Entry - ${input.firstHealthDataEntryDate}
+Latest Body Measurement - ${input.latestBodyMeasurement}
+Latest Body Composition Measurement - ${input.latestBodyCompositionMeasurement}
+${boneMassTrend}`,
       ),
     ],
+  });
+
+  const report = preprocessProfileAiReportPayload(
+    result.structuredResponse,
+    sources,
+  );
+  await upsertProfileAiReportJsonLd({
+    reportId: input.reportId,
+    profileId: input.profileId,
+    data: report,
   });
 
   const tokenUsage = getTokenUsage(result);

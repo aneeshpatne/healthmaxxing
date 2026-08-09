@@ -1,9 +1,10 @@
 import { initChatModel } from "langchain";
 export const openaiApiKey = process.env.OPENAI_API_KEY;
-
-if (!openaiApiKey) {
-  throw new Error("OPENAI_API_KEY is not set");
-}
+export const googleApiKey = process.env.GOOGLE_API_KEY;
+export const openRouterApiKey = process.env.OPENROUTER_API_KEY;
+export const ollamaApiKey = process.env.OLLAMA_API_KEY;
+export const ollamaBaseUrl =
+  process.env.OLLAMA_BASE_URL ?? "http://localhost:11434/v1";
 
 // export const model = new ChatOpenAI({
 //   apiKey: process.env.CEREBRAS_API_KEY,
@@ -42,6 +43,14 @@ export const model = await initChatModel("gpt-5.6-terra", {
 // export const model = new ChatOpenRouter({
 //   apiKey: openRouterApiKey,
 //   model: "google/gemini-3.5-flash",
+// });
+
+// export const model = new ChatOpenAI({
+//   apiKey: ollamaApiKey ?? "ollama",
+//   model: "gpt-oss:20b-cloud",
+//   configuration: {
+//     baseURL: ollamaBaseUrl,
+//   },
 // });
 
 // const response = await model.invoke("Why do parrots talk?");

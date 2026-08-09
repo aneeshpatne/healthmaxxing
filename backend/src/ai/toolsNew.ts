@@ -163,29 +163,46 @@ const emptyProgressTrends: BodyCompositionProgressTrends = {
   muscle_mass_kg: [],
 };
 
-function progressConsistency(
-  progressTrends: BodyCompositionProgressTrends,
-): { score: number; signals: Record<string, number | null> } {
-  const delta = (points: BodyCompositionProgressTrendPoint[]) =>
-    points.length < 2
-      ? null
-      : Number((points.at(-1)!.value - points[0]!.value).toFixed(2));
-  const signals = {
-    body_fat_pct: delta(progressTrends.body_fat_pct),
-    fat_mass_kg: delta(progressTrends.fat_mass_kg),
-    muscle_mass_kg: delta(progressTrends.muscle_mass_kg),
-  };
-  const directions = [
-    signals.body_fat_pct === null ? null : -Math.sign(signals.body_fat_pct),
-    signals.fat_mass_kg === null ? null : -Math.sign(signals.fat_mass_kg),
-    signals.muscle_mass_kg === null ? null : Math.sign(signals.muscle_mass_kg),
-  ].filter((value): value is number => value !== null);
-  const score = directions.length === 0
-    ? 50
-    : Math.round(
-        50 + directions.reduce((sum, direction) => sum + direction * 12, 0),
-      );
-  return { score: Math.min(100, Math.max(0, score)), signals };
+/**
+ * Formats the lean non-muscle series used for muscle.bone_mass_trend so the
+ * agent can write about it. Bone mass here is fat_free_mass - muscle_mass.
+ */
+export function formatBoneMassTrendForAgent(
+  muscleReport: MuscleReport | null | undefined,
+): string {
+  const currentKg = muscleReport?.metrics.leanNonMuscleMassKg ?? null;
+  const points = muscleReport?.last30Days.leanNonMuscleMassKg ?? [];
+
+  if (currentKg === null && points.length === 0) {
+    return "Bone Mass Trend - no lean non-muscle (bone-mass proxy) readings available yet.";
+  }
+
+  const lines = [
+    "Bone Mass Trend - lean non-muscle mass kg (fat_free_mass_kg - muscle_mass_kg). Use this series for muscle.bone_mass_trend.",
+    `current_kg\t${currentKg ?? "null"}`,
+    "created_at\tvalue_kg",
+    ...points.map((point) => `${point.createdAt}\t${point.value}`),
+  ];
+
+  return lines.join("\n");
+}
+
+function logOptionalSourceError(source: string, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn(`[profile_ai_report] ${source} unavailable`, { message });
+}
+
+async function optionalSource<T>(
+  source: string,
+  load: () => Promise<T>,
+  fallback: T,
+): Promise<T> {
+  try {
+    return await load();
+  } catch (error) {
+    logOptionalSourceError(source, error);
+    return fallback;
+  }
 }
 
 export const insights_schema = z.object({
@@ -267,20 +284,87 @@ export const insights_schema = z.object({
     ),
   }),
   muscle: z.object({
-    skeletal_muscle_gauge: gauge_card_schema.describe(
-      "Skeletal muscle % gauge",
-    ),
-    muscle_mass: display_card_schema.describe("Muscle mass"),
-    lean_mass_balance: display_card_schema.describe(
-      "Fat-free mass not classified as muscle; never call this bone mass",
-    ),
-    muscle_ratio_trend: display_card_schema.describe("Muscle % trend"),
-    skeletal_muscle_mass_trend: display_card_schema.describe(
-      "Skeletal muscle mass trend",
-    ),
-    hydration_context: display_card_schema.describe(
-      "Water and protein percentages as supporting BIA context, not a diagnosis",
-    ),
+    skeletal_muscle_gauge: z.object({
+      heading: z
+        .string()
+        .describe("Short display heading for skeletal muscle percentage."),
+      title: z
+        .string()
+        .describe("Short title interpreting skeletal muscle percentage."),
+      comment: z
+        .string()
+        .describe(
+          "One concise sentence explaining the skeletal muscle percentage gauge result.",
+        ),
+      remark: remark_schema.describe(
+        "One concise coaching sentence explaining what skeletal muscle percentage means for the user's physique.",
+      ),
+      factor_color: factor_color_enum.describe(
+        "AI-selected gauge status: green is strong, yellow is a mild opportunity, orange needs meaningful attention, and red is the highest-priority opportunity.",
+      ),
+    }),
+    muscle_mass: z.object({
+      heading: z.string().describe("Short display heading for muscle mass."),
+      title: z
+        .string()
+        .describe("Short title interpreting the user's muscle mass."),
+      comment: z
+        .string()
+        .describe("One concise sentence explaining the muscle mass result."),
+      remark: remark_schema.describe(
+        "One concise coaching sentence interpreting muscle mass in a supportive way.",
+      ),
+    }),
+    bone_mass_trend: z.object({
+      heading: z
+        .string()
+        .describe("Short display heading for bone mass trend."),
+      title: z
+        .string()
+        .describe(
+          "Short title interpreting bone mass trend from the provided lean non-muscle series. Never claim the series is missing when points are present.",
+        ),
+      comment: z
+        .string()
+        .describe(
+          "One concise sentence explaining how bone mass (lean non-muscle mass) is trending from the provided series.",
+        ),
+      remark: remark_schema.describe(
+        "One concise coaching sentence explaining what the bone mass trend means.",
+      ),
+    }),
+    muscle_ratio_trend: z.object({
+      heading: z
+        .string()
+        .describe("Short display heading for muscle percentage trend."),
+      title: z
+        .string()
+        .describe("Short title interpreting the muscle percentage trend."),
+      comment: z
+        .string()
+        .describe(
+          "One concise sentence explaining how muscle percentage is trending.",
+        ),
+      remark: remark_schema.describe(
+        "One concise coaching sentence explaining what the muscle percentage trend means.",
+      ),
+    }),
+    skeletal_muscle_mass_trend: z.object({
+      heading: z
+        .string()
+        .describe("Short display heading for skeletal muscle mass trend."),
+      title: z
+        .string()
+        .describe("Short title interpreting skeletal muscle mass trend."),
+      comment: z
+        .string()
+        .describe(
+          "One concise sentence explaining how skeletal muscle mass is trending.",
+        ),
+      remark: remark_schema.describe(
+        "One concise coaching sentence explaining what the skeletal muscle mass trend means.",
+      ),
+    }),
   }),
 });
 
@@ -372,16 +456,9 @@ export function preprocessProfileAiReportPayload({
         { fatPercent: fatReport?.last30Days.fatPercent ?? [] },
         evidence,
       ),
-      fat_distribution_context: withValueAndTrends(
-        fat.fat_distribution_context,
-        {
-          visceralFatIndex: fatReport?.metrics.visceralFatIndex ?? null,
-          subcutaneousFatMassKg:
-            fatReport?.metrics.subcutaneousFatMassKg ?? null,
-          subcutaneousFatRatio:
-            fatReport?.metrics.subcutaneousFatRatio ?? null,
-          deltas: fatReport?.metrics.fatDistribution30dDelta ?? null,
-        },
+      visceral_vs_subcutaneous: withValueAndTrends(
+        fat.visceral_vs_subcutaneous,
+        fatReport?.metrics.fatDistribution30dDelta ?? null,
         {
           visceralFatIndex: fatReport?.last30Days.visceralFatIndex ?? [],
           subcutaneousFatMassKg:
@@ -432,11 +509,13 @@ export function preprocessProfileAiReportPayload({
         { muscleMassKg: muscleReport?.last30Days.muscleMassKg ?? [] },
         evidence,
       ),
-      lean_mass_balance: withValueAndTrends(
-        muscle.lean_mass_balance,
+      bone_mass_trend: withValueAndTrends(
+        muscle.bone_mass_trend,
         muscleReport?.metrics.leanNonMuscleMassKg ?? null,
-        { leanNonMuscleMassKg: muscleReport?.last30Days.leanNonMuscleMassKg ?? [] },
-        evidence,
+        {
+          leanNonMuscleMassKg:
+            muscleReport?.last30Days.leanNonMuscleMassKg ?? [],
+        },
       ),
       muscle_ratio_trend: withValueAndTrends(
         muscle.muscle_ratio_trend,

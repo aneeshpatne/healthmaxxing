@@ -1,5 +1,41 @@
 import { backfillBodyCompositionFromGrpc } from "../src/lib/backfillBodyComposition";
+import { calculateFfmi, calculateFmi } from "../src/calculations/proprietaryMetrics";
+import { createSnapshotReports } from "../src/db/commands";
 import { sql } from "../src/db/client";
+
+async function ensureSnapshotReports() {
+  const rows = await sql`
+    SELECT
+      metrics.id,
+      metrics.profile_id,
+      metrics.fat_mass_kg,
+      metrics.fat_free_mass_kg,
+      metadata.height_cm
+    FROM body_composition_metrics_new AS metrics
+    INNER JOIN profile_metadata AS metadata
+      ON metadata.profile_id = metrics.profile_id
+    WHERE metadata.height_cm IS NOT NULL
+      AND metadata.height_cm > 0
+  `;
+
+  let ensured = 0;
+  for (const row of rows) {
+    await createSnapshotReports({
+      profileId: String(row.profile_id),
+      bodyCompositionMetricsId: String(row.id),
+      derivedMetrics: {
+        fmi: calculateFmi(Number(row.fat_mass_kg), Number(row.height_cm)),
+        ffmi: calculateFfmi(
+          Number(row.fat_free_mass_kg),
+          Number(row.height_cm),
+        ),
+      },
+    });
+    ensured += 1;
+  }
+
+  console.log(`Ensured snapshot reports for ${ensured} body-composition rows`);
+}
 
 async function updatePerformanceReports() {
   const result = await sql.unsafe(`
@@ -27,18 +63,13 @@ async function updateFatReports() {
     SET
       fat_percent = latest.body_fat_pct,
       fat_mass_kg = latest.fat_mass_kg,
-      visceral_fat_mass_kg = ROUND((latest.fat_mass_kg - latest.subcutaneous_fat_mass_kg)::numeric, 2),
-      visceral_fat_percent = ROUND((latest.body_fat_pct - latest.subcutaneous_fat_pct)::numeric, 2),
+      visceral_fat_index = latest.visceral_fat,
       subcutaneous_fat_mass_kg = latest.subcutaneous_fat_mass_kg,
       subcutaneous_fat_ratio = CASE
         WHEN latest.fat_mass_kg <= 0 THEN 0
         ELSE ROUND((latest.subcutaneous_fat_mass_kg / latest.fat_mass_kg)::numeric, 2)
       END,
-      visceral_fat_delta_30d_kg = ROUND(
-        ((latest.fat_mass_kg - latest.subcutaneous_fat_mass_kg) -
-         (base.fat_mass_kg - base.subcutaneous_fat_mass_kg))::numeric,
-        2
-      ),
+      visceral_fat_index_delta_30d = ROUND((latest.visceral_fat - base.visceral_fat)::numeric, 2),
       subcutaneous_fat_delta_30d_kg = ROUND(
         (latest.subcutaneous_fat_mass_kg - base.subcutaneous_fat_mass_kg)::numeric,
         2
@@ -46,7 +77,7 @@ async function updateFatReports() {
       updated_at = CURRENT_TIMESTAMP
     FROM body_composition_metrics_new AS latest
     INNER JOIN LATERAL (
-      SELECT oldest.fat_mass_kg, oldest.subcutaneous_fat_mass_kg
+      SELECT oldest.visceral_fat, oldest.subcutaneous_fat_mass_kg
       FROM body_composition_metrics_new AS oldest
       WHERE oldest.profile_id = latest.profile_id
         AND oldest.created_at >= latest.created_at - INTERVAL '30 days'
@@ -64,7 +95,7 @@ async function updateMuscleReports() {
     UPDATE muscle_reports
     SET
       total_muscle_kg = metrics.muscle_mass_kg,
-      bone_mass_kg = ROUND(GREATEST(metrics.fat_free_mass_kg - metrics.muscle_mass_kg, 0)::numeric, 2),
+      lean_non_muscle_mass_kg = ROUND(GREATEST(metrics.fat_free_mass_kg - metrics.muscle_mass_kg, 0)::numeric, 2),
       muscle_ratio = metrics.muscle_rate_pct,
       skeletal_muscle_mass_kg = metrics.skeletal_muscle_kg,
       skeletal_muscle_ratio = CASE
@@ -79,13 +110,22 @@ async function updateMuscleReports() {
 }
 
 async function main() {
-  console.log("Starting metrics recalculation...");
+  console.log(
+    `Starting metrics recalculation via ${process.env.METRICS_MODEL_ADDRESS ?? "localhost:50054"}...`,
+  );
 
   console.log("\n--- Phase 1: Backfilling body composition metrics via gRPC ---");
   const result = await backfillBodyCompositionFromGrpc();
   console.log("Backfill result:", JSON.stringify(result, null, 2));
 
-  console.log("\n--- Phase 2: Updating snapshot report metrics ---");
+  if (result.skipped > 0) {
+    throw new Error(`Backfill skipped ${result.skipped} measurement(s)`);
+  }
+
+  console.log("\n--- Phase 2: Ensuring snapshot reports ---");
+  await ensureSnapshotReports();
+
+  console.log("\n--- Phase 3: Updating snapshot report metrics ---");
   await updatePerformanceReports();
   await updateFatReports();
   await updateMuscleReports();

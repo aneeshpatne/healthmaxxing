@@ -1043,6 +1043,8 @@ export async function addMeasurement(
   idempotencyKey: string | null = null,
 ) {
   const id = uuidv7();
+  // The live schema requires an explicit observation timestamp.
+  const observedAt = new Date().toISOString();
 
   const inserted = await db.prepare(
     `
@@ -1052,18 +1054,12 @@ export async function addMeasurement(
     weight,
     heart_rate,
     impedance,
-    idempotency_key,
+    observed_at,
     created_at
   )
   VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  ON CONFLICT (profile_id, idempotency_key)
-    WHERE idempotency_key IS NOT NULL
-  DO NOTHING
-  RETURNING id
 `,
-  ).get(id, profileId, weight, heartbeat, impedance, idempotencyKey) as
-    | { id: string }
-    | null;
+  ).run(id, profileId, weight, heartbeat, impedance, observedAt);
 
   if (inserted !== null) {
     return { id, created: true };
@@ -2530,7 +2526,20 @@ export async function upsertProfileAiReportJsonLd({
     data = EXCLUDED.data,
     created_on = CURRENT_TIMESTAMP
 `,
-    ).run(reportId, profileId, JSON.stringify(data));
+    ).run(reportId, profileId, data);
+
+    await tx.prepare(
+      `
+  UPDATE profile_insight_reports
+  SET
+    generation_status = 'completed',
+    generation_error = NULL,
+    updated_at = CURRENT_TIMESTAMP
+  WHERE id = ?
+    AND profile_id = ?
+`,
+    ).run(reportId, profileId);
+  });
 }
 
 export async function updateProfileInsightReportGenerationStatus({
