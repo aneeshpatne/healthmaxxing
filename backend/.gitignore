@@ -41,3 +41,6 @@ src/calculations/proprietaryMetricsV2.ts
 
 report.md
 testing.ts
+
+# local database dumps
+healthmaxxing-correct-2026-07-24.dump
