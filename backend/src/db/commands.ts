@@ -1903,6 +1903,7 @@ async function getOrCreateProfileInsightReport(
   SELECT id
   FROM profile_insight_reports
   WHERE body_composition_metrics_id = ?
+    AND schema_version = 1
   LIMIT 1
 `,
     )
@@ -1920,11 +1921,12 @@ async function getOrCreateProfileInsightReport(
     id,
     profile_id,
     body_composition_metrics_id,
+    schema_version,
     generation_status,
     created_at,
     updated_at
   )
-  SELECT ?, ?, ?, 'pending', created_at, CURRENT_TIMESTAMP
+  SELECT ?, ?, ?, 1, 'pending', created_at, CURRENT_TIMESTAMP
   FROM body_composition_metrics_new
   WHERE id = ?
 `,
@@ -2513,20 +2515,23 @@ export async function upsertProfileAiReportJsonLd({
   profileId,
   data,
 }: ProfileAiReportJsonLd) {
-  await db.prepare(
+  await db.transaction(async (tx) => {
+    await tx.prepare(
       `
   INSERT INTO profile_ai_report_jsonld (
     report_id,
     profile_id,
-    data
+    data,
+    schema_version
   )
-  VALUES (?, ?, ?::jsonb)
+  VALUES (?, ?, ?::text::jsonb, 1)
   ON CONFLICT (report_id) DO UPDATE SET
     profile_id = EXCLUDED.profile_id,
     data = EXCLUDED.data,
+    schema_version = 1,
     created_on = CURRENT_TIMESTAMP
 `,
-    ).run(reportId, profileId, data);
+    ).run(reportId, profileId, JSON.stringify(data));
 
     await tx.prepare(
       `
@@ -2593,6 +2598,7 @@ export async function getProfileInsightReportSource({
     ON body_composition_metrics_new.id = profile_insight_reports.body_composition_metrics_id
   WHERE profile_insight_reports.id = ?
     AND profile_insight_reports.profile_id = ?
+    AND profile_insight_reports.schema_version = 1
   LIMIT 1
 `,
   ).get(reportId, profileId) as ProfileInsightReportSource | null;
@@ -2623,6 +2629,22 @@ export async function failActiveProfileInsightReportJobsOnStartup() {
   ).run();
 }
 
+export async function failStaleProfileInsightReportJobs(profileId: ProfileId) {
+  await db.prepare(
+    `
+  UPDATE profile_insight_reports
+  SET
+    generation_status = 'failed',
+    generation_error = 'Report job expired before completion',
+    updated_at = CURRENT_TIMESTAMP
+  WHERE profile_id = ?
+    AND schema_version = 1
+    AND generation_status IN ('pending', 'queued', 'running')
+    AND updated_at < CURRENT_TIMESTAMP - INTERVAL '30 minutes'
+`,
+  ).run(profileId);
+}
+
 function parseJsonData(raw: unknown): unknown {
   return typeof raw === "string" ? JSON.parse(raw) : raw;
 }
@@ -2650,6 +2672,11 @@ export async function getProfileAiReportById({
     ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
   WHERE profile_insight_reports.id = ?
     AND profile_insight_reports.profile_id = ?
+    AND profile_insight_reports.schema_version = 1
+    AND (
+      profile_ai_report_jsonld.schema_version IS NULL
+      OR profile_ai_report_jsonld.schema_version = 1
+    )
   LIMIT 1
 `,
     )
@@ -2689,6 +2716,7 @@ export async function listRecentProfileAiReports({
   LEFT JOIN profile_ai_report_jsonld
     ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
   WHERE profile_insight_reports.profile_id = ?
+    AND profile_insight_reports.schema_version = 1
   ORDER BY profile_insight_reports.created_at DESC
   LIMIT ?
 `,
@@ -2717,6 +2745,7 @@ export async function listActiveProfileAiReportJobs({
   LEFT JOIN profile_ai_report_jsonld
     ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
   WHERE profile_insight_reports.profile_id = ?
+    AND profile_insight_reports.schema_version = 1
     AND profile_insight_reports.generation_status IN ('pending', 'queued', 'running')
   ORDER BY profile_insight_reports.created_at DESC
 `,
@@ -2748,6 +2777,8 @@ export async function listLatestCompletedProfileAiReportIds({
     ON profile_ai_report_jsonld.report_id = profile_insight_reports.id
   WHERE profile_insight_reports.profile_id = ?
     AND profile_insight_reports.generation_status = 'completed'
+    AND profile_insight_reports.schema_version = 1
+    AND profile_ai_report_jsonld.schema_version = 1
   ORDER BY profile_ai_report_jsonld.created_on DESC
   LIMIT ?
 `,
@@ -3219,7 +3250,7 @@ export async function getProfilePerformance(
     created_at AS createdAt
   FROM body_composition_metrics_new
   WHERE profile_id = ?
-    AND (? IS NULL OR id = ?)
+    AND (?::uuid IS NULL OR id = ?)
   ORDER BY created_at DESC
   LIMIT 1
 `,
@@ -3240,7 +3271,7 @@ export async function getProfilePerformance(
     created_at AS createdAt
   FROM body_composition_metrics_new
   WHERE profile_id = ?
-    AND (? IS NULL OR created_at <= ?)
+    AND (?::timestamptz IS NULL OR created_at <= ?)
   ORDER BY created_at ASC
   LIMIT 1
 `,
@@ -3260,7 +3291,7 @@ export async function getProfilePerformance(
     created_at AS createdAt
   FROM performance_reports
   WHERE profile_id = ?
-    AND (? IS NULL OR body_composition_metrics_id = ?)
+    AND (?::uuid IS NULL OR body_composition_metrics_id = ?)
   ORDER BY created_at DESC
   LIMIT 1
 `,
@@ -3280,8 +3311,8 @@ export async function getProfilePerformance(
     fat_mass_kg AS fatMassKg
   FROM body_composition_metrics_new
   WHERE profile_id = ?
-    AND (? IS NULL OR created_at <= ?)
-    AND (? IS NULL OR created_at >= ?::timestamptz - INTERVAL '30 days')
+    AND (?::timestamptz IS NULL OR created_at <= ?)
+    AND (?::timestamptz IS NULL OR created_at >= ?::timestamptz - INTERVAL '30 days')
   ORDER BY created_at ASC
 `,
     )
@@ -3489,7 +3520,7 @@ export async function getProfileFatReport(
     created_at AS createdAt
   FROM fat_reports
   WHERE profile_id = ?
-    AND (? IS NULL OR body_composition_metrics_id = ?)
+    AND (?::uuid IS NULL OR body_composition_metrics_id = ?)
   ORDER BY created_at DESC
   LIMIT 1
 `,
@@ -3650,7 +3681,7 @@ export async function getProfileMuscleReport(
     created_at AS createdAt
   FROM muscle_reports
   WHERE profile_id = ?
-    AND (? IS NULL OR body_composition_metrics_id = ?)
+    AND (?::uuid IS NULL OR body_composition_metrics_id = ?)
   ORDER BY created_at DESC
   LIMIT 1
 `,
