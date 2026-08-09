@@ -214,19 +214,17 @@ export async function analyzeHealthDataNew(input: {
 
   // Load preprocess sources before generation so bone-mass trend series is in
   // the prompt (it is not part of the general body-composition delta tables).
-  const sources = await getProfileAiReportPreprocessSources(input.profileId);
+  const sources = await getProfileAiReportPreprocessSources(
+    input.profileId,
+    input.reportId,
+  );
   const boneMassTrend = formatBoneMassTrendForAgent(sources.muscleReport);
 
   const result = await healthAgent.invoke({
     messages: [
       systemMsg,
       new HumanMessage(
-        `User MetaData - ${input.profileMetadata}
-Body Composition Delta - ${input.bodyCompositionDelta}
-Body Measurement Delta - ${input.bodyMeasurementDelta}
-First Health Data Entry - ${input.firstHealthDataEntryDate}
-Latest Body Measurement - ${input.latestBodyMeasurement}
-Latest Body Composition Measurement - ${input.latestBodyCompositionMeasurement}
+        `${input.userContext}
 ${boneMassTrend}`,
       ),
     ],
