@@ -2,8 +2,10 @@ import { closeDatabase } from "./db/client.ts";
 import { migrateDatabase } from "./db/migrate.ts";
 import { buildApp } from "./app.ts";
 import { startWorker } from "./bull/worker.ts";
+import { failActiveProfileInsightReportJobsOnStartup } from "./db/commands.ts";
 
 await migrateDatabase();
+await failActiveProfileInsightReportJobsOnStartup();
 
 const app = buildApp();
 const worker = startWorker();
