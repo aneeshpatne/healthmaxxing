@@ -1043,7 +1043,7 @@ export async function addMeasurement(
   idempotencyKey: string | null = null,
 ) {
   const id = uuidv7();
-  // Live DB: measurements.observed_at is NOT NULL without a column default.
+  // The live schema requires an explicit observation timestamp.
   const observedAt = new Date().toISOString();
 
   const inserted = await db.prepare(
