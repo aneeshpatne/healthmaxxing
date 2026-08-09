@@ -11,6 +11,7 @@ import {
   getProfileAiOverview,
   getProfileAiReportById,
   getProfileEffortScore,
+  failStaleProfileInsightReportJobs,
   getProfileFatReport,
   getProfileFormaScore,
   getProfileMuscleReport,
@@ -888,6 +889,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         return;
       }
 
+      await failStaleProfileInsightReportJobs(profileId);
       const jobs = await listActiveProfileAiReportJobs({ profileId });
 
       return reply.send({
