@@ -55,8 +55,9 @@ const dbCols = new Map<string, Set<string>>();
 for (const line of raw.split("\n")) {
   if (!line.includes("|")) continue;
   const [t, c] = line.split("|");
+  if (!t || !c) continue;
   if (!dbCols.has(t)) dbCols.set(t, new Set());
-  dbCols.get(t)!.add(c);
+  dbCols.get(t)?.add(c);
 }
 
 // Ideal columns from migrations (CREATE TABLE + ADD COLUMN)
@@ -67,10 +68,12 @@ for (const f of migFiles) migSql += "\n" + (await Bun.file(join(migDir, f)).text
 
 const ideal = new Map<string, Set<string>>();
 for (const m of migSql.matchAll(/CREATE TABLE (\w+)\s*\(([\s\S]*?)\);/gi)) {
-  const table = m[1].toLowerCase();
+  const table = m[1]?.toLowerCase();
+  const definition = m[2];
+  if (!table || !definition) continue;
   if (!ideal.has(table)) ideal.set(table, new Set());
-  for (const part of m[2].split(",")) {
-    const col = part.trim().split(/\s+/)[0].replace(/[()]/g, "");
+  for (const part of definition.split(",")) {
+    const col = part.trim().split(/\s+/)[0]?.replace(/[()]/g, "");
     if (
       col &&
       /^[a-z_][a-z0-9_]*$/i.test(col) &&
@@ -81,9 +84,11 @@ for (const m of migSql.matchAll(/CREATE TABLE (\w+)\s*\(([\s\S]*?)\);/gi)) {
   }
 }
 for (const m of migSql.matchAll(/ALTER TABLE (\w+)\s+ADD COLUMN (\w+)/gi)) {
-  const table = m[1].toLowerCase();
+  const table = m[1]?.toLowerCase();
+  const column = m[2]?.toLowerCase();
+  if (!table || !column) continue;
   if (!ideal.has(table)) ideal.set(table, new Set());
-  ideal.get(table)!.add(m[2].toLowerCase());
+  ideal.get(table)?.add(column);
 }
 
 // Code INSERT / UPDATE targets
@@ -92,25 +97,30 @@ const codeTables = new Set<string>();
 for (const f of await walk(join(import.meta.dir, "..", "src"))) {
   const t = await Bun.file(f).text();
   for (const m of t.matchAll(/INSERT\s+(?:INTO|into)\s+(\w+)\s*\(([^)]+)\)/gi)) {
-    const table = m[1].toLowerCase();
+    const table = m[1]?.toLowerCase();
+    const columns = m[2];
+    if (!table || !columns) continue;
     codeTables.add(table);
     if (!codeWrites.has(table)) codeWrites.set(table, new Set());
-    for (const c of m[2].split(",")) {
-      const col = c.trim().replace(/[`'"]/g, "").split(/\s+/)[0].toLowerCase();
-      if (col && /^[a-z_][a-z0-9_]*$/.test(col)) codeWrites.get(table)!.add(col);
+    for (const c of columns.split(",")) {
+      const col = c.trim().replace(/[`'"]/g, "").split(/\s+/)[0]?.toLowerCase();
+      if (col && /^[a-z_][a-z0-9_]*$/.test(col)) codeWrites.get(table)?.add(col);
     }
   }
   for (const m of t.matchAll(/UPDATE\s+(\w+)\s+SET\s+([\s\S]*?)(?:WHERE|RETURNING|;|`)/gi)) {
-    const table = m[1].toLowerCase();
+    const table = m[1]?.toLowerCase();
+    const assignments = m[2];
+    if (!table || !assignments) continue;
     codeTables.add(table);
     if (!codeWrites.has(table)) codeWrites.set(table, new Set());
-    for (const part of m[2].split(",")) {
-      const col = part.trim().split(/\s*=/)[0].trim().toLowerCase().replace(/[`'"]/g, "");
-      if (col && /^[a-z_][a-z0-9_]*$/.test(col)) codeWrites.get(table)!.add(col);
+    for (const part of assignments.split(",")) {
+      const col = part.trim().split(/\s*=/)[0]?.trim().toLowerCase().replace(/[`'"]/g, "");
+      if (col && /^[a-z_][a-z0-9_]*$/.test(col)) codeWrites.get(table)?.add(col);
     }
   }
   for (const m of t.matchAll(/(?:FROM|JOIN)\s+(\w+)/gi)) {
-    codeTables.add(m[1].toLowerCase());
+    const table = m[1]?.toLowerCase();
+    if (table) codeTables.add(table);
   }
 }
 
