@@ -22,6 +22,33 @@ Healthmaxxing receives authenticated profile data, smart-scale measurements, cir
 
 The service is a TypeScript application running on Bun and Fastify, with Clerk authentication, PostgreSQL persistence, gRPC-based metric calculation, and BullMQ-backed report jobs. Its API is divided into write-oriented `/ingest` routes and client-facing `/client` routes; startup migrations, UUIDv7 identifiers, strict account scoping, and persisted job states keep the data flow explicit.
 
+## Proof points
+
+The repository is a personal project rather than a production-traffic system, so the most honest scale signals are the exercised data model and the constraints enforced in code. The figures below were read from the configured PostgreSQL database on August 21, 2026; they are development-dataset counts, not claims about users or production adoption.
+
+| Scope | Concrete fact |
+| --- | --- |
+| **Data volume** | 2 accounts, 3 profiles, 174 scale measurements, 1 body-measurement record, and 14 workouts. |
+| **Derived history** | 174 body-composition snapshots, 174 FMI/FFMI rows, and 174 each of performance, fat, and muscle report snapshots. |
+| **Insight pipeline** | 167 profile-insight reports: 115 completed and 52 failed; 113 structured JSON-LD outputs are persisted. |
+| **Report detail** | 3 imported health reports, 8 sections, 38 observations, and 13 catalogued observation fields. |
+| **Database footprint** | PostgreSQL reports a 13 MB database; measurements span April 20–August 21, 2026. |
+| **API surface** | 27 registered HTTP handlers: 22 client routes, 4 ingest routes, and 1 database health check. |
+| **Schema evolution** | 27 initial tables and 17 initial indexes; 15 migrations are applied in the live database, including 2 historical migrations not present in the current checkout. |
+| **Reliability controls** | A 10 MB request cap, per-profile measurement idempotency keys, persisted calculation/report states, three report attempts with exponential 2-second backoff, and row-count verification for SQLite imports. |
+| **Async behavior** | Insight jobs are polled at 1-second intervals, with a 25-second default wait and a hard 30-second maximum. |
+| **Verification** | 26 focused Bun tests across 5 test files, plus a strict TypeScript typecheck command. |
+
+The older `mydb.sqlite` file remains a legacy export; its 29 measurements are not used as the current scale figure. The live PostgreSQL database is the source of truth for the runtime counts above.
+
+### Impact in practice
+
+- **Turns isolated readings into a longitudinal product surface.** The live dataset spans April 20–August 21, 2026, with 174 scale measurements feeding 174 body-composition snapshots and matching performance, fat, and muscle reports.
+- **Makes one ingestion event useful across the client experience.** A stored measurement can fan out into derived BMI, fat, lean-mass, hydration, muscle, FMI, and FFMI values, then create a queued profile-insight job for asynchronous interpretation.
+- **Keeps model-dependent work observable and recoverable.** The database records explicit job outcomes—115 completed and 52 failed profile-insight jobs—while persisting 113 structured JSON-LD outputs for later retrieval instead of making report generation an opaque request-time side effect.
+- **Supports more than a single happy-path profile.** The current PostgreSQL data includes 2 accounts and 3 profiles, while shared authentication middleware and profile ownership checks keep profile-scoped reads and writes isolated.
+- **Preserves delivery safety as the system evolves.** Per-profile measurement idempotency, persisted calculation status, queued retries with exponential backoff, stale-job cleanup, and 15 applied migrations protect the path from raw input to client-visible insight.
+
 ## Features
 
 | Area | What the project provides |
@@ -55,7 +82,7 @@ flowchart LR
     K -->|queued or running| K
 ```
 
-Measurement ingestion persists the raw reading before calling the metric service, so a downstream calculation failure can leave a reading without its derived snapshot; the authenticated backfill endpoint can recompute that history. Report state is stored as `queued`, `running`, `completed`, or `failed`. The wait endpoint checks once per second for up to 30 seconds, while clients can also list active or recent jobs and retry later.
+Measurement ingestion persists the raw reading before calling the metric service, so a downstream calculation failure can leave a reading without its derived snapshot; the authenticated backfill endpoint can recompute that history. Report state is stored as `queued`, `running`, `completed`, or `failed`. The wait endpoint checks once per second, defaults to 25 seconds, and caps a request at 30 seconds; clients can also list active or recent jobs and retry later.
 
 ## Product map
 
@@ -145,7 +172,7 @@ Fastify route schemas validate the principal request shapes, while shared pre-ha
 | **Async jobs** | BullMQ 5.79 with Redis |
 | **Metric calculation** | gRPC, Protocol Buffers, and an external `MetricsModel` service |
 | **Report generation** | LangChain 1.5 with the configured model provider |
-| **Testing** | Bun's built-in test runner and TypeScript type checking |
+| **Testing** | Bun's built-in test runner with 26 focused tests and TypeScript type checking |
 | **Local operations** | Docker Compose for PostgreSQL; optional macOS `launchd` agent |
 
 ## Project structure
@@ -280,7 +307,7 @@ Run the compiler check separately:
 bun run typecheck
 ```
 
-The current suite covers PostgreSQL query translation and insight-report payload normalization. It does not yet provide end-to-end coverage for Clerk authentication, gRPC calculation, Redis jobs, or the HTTP routes.
+The current suite has 26 focused tests across 5 files covering PostgreSQL query translation, trend calculations, profile-context formatting, composition-target calculations, metric validation, and insight-report payload normalization. It does not yet provide end-to-end coverage for Clerk authentication, gRPC calculation, Redis jobs, or the HTTP routes.
 
 ## Roadmap
 
