@@ -3,7 +3,9 @@ import { BODY_COMPOSITION_METRICS_NEW_FACTORS, db } from "./db";
 import type { DatabaseClient } from "./client";
 import {
   calculateCompositionSummary,
+  calculateTargetComposition,
   type CompositionSummary,
+  type MuscularityGoal,
 } from "../calculations/compositionSummary";
 import {
   calculateFormaScore,
@@ -545,8 +547,12 @@ export type ProfilePerformance = {
   };
   weightPair: {
     target: {
+      weightKg: number | null;
       leanMassKg: number | null;
       fatMassKg: number | null;
+      bodyFatPct: number | null;
+      ffmi: number | null;
+      muscularityGoal: MuscularityGoal;
     };
     current: {
       leanMassKg: number | null;
@@ -717,6 +723,7 @@ export type Users = {
   gender: "male" | "female" | null;
   profileImage: string | null;
   preferredBodyFatPct: number;
+  muscularityGoal: MuscularityGoal;
   createdAt: string;
 };
 
@@ -742,6 +749,7 @@ export type RegisterProfileMetadataInput = {
   peopleType: "standard" | "athlete";
   profileImage?: string | null;
   preferredBodyFatPct?: number;
+  muscularityGoal?: MuscularityGoal;
 };
 
 export type UpdateProfileInput = {
@@ -755,6 +763,7 @@ export type UpdateProfileInput = {
   gender?: "male" | "female";
   profileImage?: string | null;
   preferredBodyFatPct?: number;
+  muscularityGoal?: MuscularityGoal;
 };
 
 export type BodyMeasurementInput = {
@@ -941,6 +950,7 @@ export type profile = {
   gender: "male" | "female";
   profileImage: string | null;
   preferredBodyFatPct: number;
+  muscularityGoal: MuscularityGoal;
 };
 
 type ProfileRow = Omit<profile, "isPrimary"> & {
@@ -1393,6 +1403,7 @@ export async function registerProfileMetadata({
   peopleType,
   profileImage = null,
   preferredBodyFatPct = 18,
+  muscularityGoal = "athletic",
 }: RegisterProfileMetadataInput) {
   await db.prepare(
     `
@@ -1404,9 +1415,10 @@ export async function registerProfileMetadata({
     gender,
     profile_image,
     preferred_body_fat_pct,
+    muscularity_goal,
     updated_at
   )
-  VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
   ON CONFLICT(profile_id) DO UPDATE SET
     height_cm = excluded.height_cm,
     date_of_birth = excluded.date_of_birth,
@@ -1414,6 +1426,7 @@ export async function registerProfileMetadata({
     gender = excluded.gender,
     profile_image = excluded.profile_image,
     preferred_body_fat_pct = excluded.preferred_body_fat_pct,
+    muscularity_goal = excluded.muscularity_goal,
     updated_at = CURRENT_TIMESTAMP
 `,
   ).run(
@@ -1424,6 +1437,7 @@ export async function registerProfileMetadata({
     gender,
     profileImage,
     preferredBodyFatPct,
+    muscularityGoal,
   );
 }
 
@@ -1438,6 +1452,7 @@ export async function updateProfile({
   gender,
   profileImage,
   preferredBodyFatPct,
+  muscularityGoal,
 }: UpdateProfileInput) {
   await db.transaction(async (tx) => {
     if (isPrimary === true) {
@@ -1492,6 +1507,10 @@ export async function updateProfile({
     if (preferredBodyFatPct !== undefined) {
       metadataUpdates.push("preferred_body_fat_pct = ?");
       metadataValues.push(preferredBodyFatPct);
+    }
+    if (muscularityGoal !== undefined) {
+      metadataUpdates.push("muscularity_goal = ?");
+      metadataValues.push(muscularityGoal);
     }
 
     if (metadataUpdates.length > 0) {
@@ -3239,7 +3258,12 @@ type DerivedMetricsCommentsRow = {
 export async function getProfilePerformance(
   profileId: ProfileId,
   bodyCompositionMetricsId?: string,
-  profileHeightCm?: number | null,
+  profileContext?: {
+    heightCm?: number | null;
+    gender?: "male" | "female" | null;
+    preferredBodyFatPct?: number | null;
+    muscularityGoal?: MuscularityGoal | null;
+  },
 ) {
   const latestComposition = await db    .prepare(
       `
@@ -3340,7 +3364,12 @@ export async function getProfilePerformance(
   );
   const latestMeasurement = bodyMeasurements[0] ?? null;
   const profile = await getProfileById(profileId);
-  const heightCm = profileHeightCm ?? profile.heightCm;
+  const heightCm = profileContext?.heightCm ?? profile.heightCm;
+  const gender = profileContext?.gender ?? profile.gender;
+  const preferredBodyFatPct =
+    profileContext?.preferredBodyFatPct ?? profile.preferredBodyFatPct;
+  const muscularityGoal =
+    profileContext?.muscularityGoal ?? profile.muscularityGoal;
   const fallbackFmi =
     latestComposition === null || heightCm === null
       ? null
@@ -3351,16 +3380,17 @@ export async function getProfilePerformance(
       : calculateFfmi(latestComposition.leanMassKg, heightCm);
   const fmi = performanceReport?.fmi ?? fallbackFmi;
   const ffmi = performanceReport?.ffmi ?? fallbackFfmi;
-  const targetFatKg =
-    latestComposition === null
+  const targetComposition =
+    latestComposition === null || heightCm === null || gender === null
       ? null
-      : roundMetric(
-          Math.max(
-            latestComposition.desiredWeightKg - latestComposition.leanMassKg,
-            0,
-          ),
-          2,
-        );
+      : calculateTargetComposition({
+          currentLeanMassKg: latestComposition.leanMassKg,
+          heightCm,
+          gender,
+          targetBodyFatPct: preferredBodyFatPct,
+          muscularityGoal,
+        });
+  const targetFatKg = targetComposition?.fatMassKg ?? null;
   const excessFatKg =
     latestComposition === null || targetFatKg === null
       ? null
@@ -3390,8 +3420,12 @@ export async function getProfilePerformance(
     },
     weightPair: {
       target: {
-        leanMassKg: latestComposition?.leanMassKg ?? null,
+        weightKg: targetComposition?.weightKg ?? null,
+        leanMassKg: targetComposition?.leanMassKg ?? null,
         fatMassKg: targetFatKg,
+        bodyFatPct: targetComposition?.bodyFatPct ?? null,
+        ffmi: targetComposition?.ffmi ?? null,
+        muscularityGoal,
       },
       current: {
         leanMassKg: latestComposition?.leanMassKg ?? null,
@@ -3841,6 +3875,7 @@ export async function listUsers() {
     profile_metadata.gender,
     profile_metadata.profile_image AS profileImage,
     profile_metadata.preferred_body_fat_pct AS preferredBodyFatPct,
+    profile_metadata.muscularity_goal AS muscularityGoal,
     profiles.created_at AS createdAt
   FROM profiles
   INNER JOIN accounts
@@ -3872,6 +3907,7 @@ export async function listUsersByAccountId(accountId: AccountId) {
     profile_metadata.gender,
     profile_metadata.profile_image AS profileImage,
     profile_metadata.preferred_body_fat_pct AS preferredBodyFatPct,
+    profile_metadata.muscularity_goal AS muscularityGoal,
     profiles.created_at AS createdAt
   FROM profiles
   LEFT JOIN profile_metadata
@@ -3902,7 +3938,8 @@ export async function getProfileById(id: ProfileId) {
     profile_metadata.people_type AS peopleType,
     profile_metadata.gender,
     profile_metadata.profile_image AS profileImage,
-    profile_metadata.preferred_body_fat_pct AS preferredBodyFatPct
+    profile_metadata.preferred_body_fat_pct AS preferredBodyFatPct,
+    profile_metadata.muscularity_goal AS muscularityGoal
   FROM profiles
   INNER JOIN accounts
     ON accounts.id = profiles.account_id

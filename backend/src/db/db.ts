@@ -190,12 +190,15 @@ export async function getProfileMetadata(profileId: string) {
     .prepare(
       `
     SELECT
+      profiles.name,
       height_cm AS heightCm,
       date_of_birth AS dateOfBirth,
       people_type AS peopleType,
       gender,
-      preferred_body_fat_pct AS preferredBodyFatPct
+      preferred_body_fat_pct AS preferredBodyFatPct,
+      muscularity_goal AS muscularityGoal
     FROM profile_metadata
+    INNER JOIN profiles ON profiles.id = profile_metadata.profile_id
     WHERE profile_id = ?
     LIMIT 1
     `,
@@ -799,6 +802,7 @@ export function formatProfileMetadataCompact(
   if (!record) return "";
 
   const parts: string[] = [];
+  const name = typeof record.name === "string" ? record.name.trim() : "";
   const height = record.heightCm;
   const dob = record.dateOfBirth == null ? null : new Date(String(record.dateOfBirth));
   const storedAge = Number(record.ageYears);
@@ -818,12 +822,15 @@ export function formatProfileMetadataCompact(
   const peopleType = record.peopleType;
   const gender = record.gender;
   const targetBf = record.preferredBodyFatPct;
+  const muscularityGoal = record.muscularityGoal;
 
+  if (name) parts.push(`name=${JSON.stringify(name)}`);
   if (height != null) parts.push(`h_cm=${height}`);
   if (age != null) parts.push(`age_y=${age}`);
   if (peopleType != null) parts.push(`type=${peopleType}`);
   if (gender != null) parts.push(`sex=${gender}`);
   if (targetBf != null) parts.push(`targetBF_pct=${targetBf}`);
+  if (muscularityGoal != null) parts.push(`muscularity=${muscularityGoal}`);
 
   return parts.join(" ");
 }

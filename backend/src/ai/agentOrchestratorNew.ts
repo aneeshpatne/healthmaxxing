@@ -97,8 +97,11 @@ export async function runAgentOrchestratorNew(
       source.bodyCompositionMetricsId,
     ),
   ]);
-  const profileMetadata =
-    source.profileContext ?? await getProfileMetadata(userId);
+  const currentProfileMetadata = await getProfileMetadata(userId);
+  const profileMetadata = {
+    ...(currentProfileMetadata as Record<string, unknown> | null),
+    ...(source.profileContext ?? {}),
+  };
 
   const userContext = buildHealthAgentUserContext({
     profileMetadata: profileMetadata as Record<string, unknown> | null,

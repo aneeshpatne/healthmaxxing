@@ -39,6 +39,7 @@ test("one reading does not produce a trend", () => {
 
 test("profile context sends age instead of date of birth", () => {
   const compact = formatProfileMetadataCompact({
+    name: "Aneesh Patne",
     heightCm: 175,
     ageYears: 31,
     dateOfBirth: "1995-01-01",
@@ -47,7 +48,13 @@ test("profile context sends age instead of date of birth", () => {
     preferredBodyFatPct: 15,
   });
   expect(compact).toBe(
-    "h_cm=175 age_y=31 type=athlete sex=male targetBF_pct=15",
+    'name="Aneesh Patne" h_cm=175 age_y=31 type=athlete sex=male targetBF_pct=15',
   );
   expect(compact.includes("1995")).toBe(false);
+});
+
+test("profile context omits a blank name", () => {
+  expect(formatProfileMetadataCompact({ name: "   ", heightCm: 175 })).toBe(
+    "h_cm=175",
+  );
 });

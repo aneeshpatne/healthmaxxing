@@ -1,5 +1,8 @@
 import { v7 as uuidv7 } from "uuid";
-import { calculateDesiredWeightKg } from "../calculations/compositionSummary";
+import {
+  calculateTargetComposition,
+  type MuscularityGoal,
+} from "../calculations/compositionSummary";
 import {
   calculateFfmi,
   calculateFmi,
@@ -22,9 +25,10 @@ type MeasurementRow = {
   createdAt: string;
   heightCm: number;
   dateOfBirth: string;
-  gender: string;
+  gender: "male" | "female";
   peopleType: string | null;
   preferredBodyFatPct: number;
+  muscularityGoal: MuscularityGoal;
 };
 
 type ExistingMetricRow = {
@@ -76,7 +80,8 @@ async function listMeasurements({
     profile_metadata.date_of_birth AS dateOfBirth,
     profile_metadata.gender,
     profile_metadata.people_type AS peopleType,
-    profile_metadata.preferred_body_fat_pct AS preferredBodyFatPct
+    profile_metadata.preferred_body_fat_pct AS preferredBodyFatPct,
+    profile_metadata.muscularity_goal AS muscularityGoal
   FROM measurements
   INNER JOIN profiles
     ON profiles.id = measurements.profile_id
@@ -171,10 +176,13 @@ export async function backfillBodyCompositionFromGrpc({
           sex: measurement.gender,
           people_type: measurement.peopleType,
         });
-        const desiredWeightKg = calculateDesiredWeightKg({
-          fat_free_mass_kg: metricsBase.fat_free_mass_kg,
-          target_body_fat_pct: measurement.preferredBodyFatPct,
-        });
+        const desiredWeightKg = calculateTargetComposition({
+          currentLeanMassKg: metricsBase.fat_free_mass_kg,
+          heightCm: measurement.heightCm,
+          gender: measurement.gender,
+          targetBodyFatPct: measurement.preferredBodyFatPct,
+          muscularityGoal: measurement.muscularityGoal,
+        }).weightKg;
         const fmi = calculateFmi(metricsBase.fat_mass_kg, measurement.heightCm);
         const ffmi = calculateFfmi(
           metricsBase.fat_free_mass_kg,
@@ -285,6 +293,7 @@ export async function backfillBodyCompositionFromGrpc({
               gender: measurement.gender,
               peopleType: measurement.peopleType,
               preferredBodyFatPct: measurement.preferredBodyFatPct,
+              muscularityGoal: measurement.muscularityGoal,
             }),
             metricsBase.bmi,
             metricsBase.body_fat_pct,

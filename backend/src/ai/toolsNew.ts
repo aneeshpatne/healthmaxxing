@@ -24,14 +24,6 @@ const marker_enum = z.enum([
   "complement",
 ]);
 
-const body_type_enum = z.enum([
-  "muscular",
-  "fit",
-  "balanced",
-  "lean",
-  "building",
-]);
-
 /** green=strong, yellow=mild opp, orange=meaningful, red=highest priority */
 const factor_color_enum = z.enum(["red", "orange", "yellow", "green"]);
 const trends = z.enum(BODY_COMPOSITION_METRICS_NEW_FACTORS);
@@ -71,12 +63,15 @@ const gauge_card_schema = display_card_schema.extend({
   },
 );
 
-const PROFILE_PROGRESS_TRENDS = [
+export const PROFILE_INSIGHT_TRENDS = [
   "body_fat_pct",
   "fat_mass_kg",
   "muscle_mass_kg",
+  "skeletal_muscle_kg",
+  "visceral_fat",
+  "subcutaneous_fat_mass_kg",
 ] as const;
-const progress_trends = z.enum(PROFILE_PROGRESS_TRENDS);
+const insight_trends = z.enum(PROFILE_INSIGHT_TRENDS);
 
 type ProfileAiReportPayload = z.infer<typeof insights_schema>;
 type PreprocessMetadata = {
@@ -134,16 +129,31 @@ type BodyCompositionProgressTrendPoint = {
   value: number;
 };
 
-type BodyCompositionProgressTrends = Record<
-  (typeof PROFILE_PROGRESS_TRENDS)[number],
+export type BodyCompositionInsightTrends = Record<
+  (typeof PROFILE_INSIGHT_TRENDS)[number],
   BodyCompositionProgressTrendPoint[]
 >;
+
+export type ProfileAiTrendSources = {
+  fullHistory: BodyCompositionInsightTrends;
+  recent30Days: BodyCompositionInsightTrends;
+};
+
+type BodyCompositionInsightTrendRow = {
+  createdAt: string;
+  bodyFatPct: number;
+  fatMassKg: number;
+  muscleMassKg: number;
+  skeletalMuscleKg: number;
+  visceralFat: number;
+  subcutaneousFatMassKg: number;
+};
 
 type ProfileAiReportPreprocessSources = {
   performanceReport?: ProfilePerformance | null;
   fatReport?: FatReport | null;
   muscleReport?: MuscleReport | null;
-  progressTrends?: BodyCompositionProgressTrends;
+  trendSources?: ProfileAiTrendSources;
   latestBodyComposition?: Record<string, unknown> | null;
   evidence?: ReportEvidence;
 };
@@ -152,41 +162,24 @@ type ProfileAiReportResolvedSources = {
   performanceReport: ProfilePerformance | null;
   fatReport: FatReport | null;
   muscleReport: MuscleReport | null;
-  progressTrends: BodyCompositionProgressTrends;
+  trendSources: ProfileAiTrendSources;
   latestBodyComposition: Record<string, unknown> | null;
   evidence: ReportEvidence;
 };
 
-const emptyProgressTrends: BodyCompositionProgressTrends = {
+const emptyInsightTrends: BodyCompositionInsightTrends = {
   body_fat_pct: [],
   fat_mass_kg: [],
   muscle_mass_kg: [],
+  skeletal_muscle_kg: [],
+  visceral_fat: [],
+  subcutaneous_fat_mass_kg: [],
 };
 
-function progressConsistency(
-  progressTrends: BodyCompositionProgressTrends,
-): { score: number; signals: Record<string, number | null> } {
-  const delta = (points: BodyCompositionProgressTrendPoint[]) =>
-    points.length < 2
-      ? null
-      : Number((points.at(-1)!.value - points[0]!.value).toFixed(2));
-  const signals = {
-    body_fat_pct: delta(progressTrends.body_fat_pct),
-    fat_mass_kg: delta(progressTrends.fat_mass_kg),
-    muscle_mass_kg: delta(progressTrends.muscle_mass_kg),
-  };
-  const directions = [
-    signals.body_fat_pct === null ? null : -Math.sign(signals.body_fat_pct),
-    signals.fat_mass_kg === null ? null : -Math.sign(signals.fat_mass_kg),
-    signals.muscle_mass_kg === null ? null : Math.sign(signals.muscle_mass_kg),
-  ].filter((value): value is number => value !== null);
-  const score = directions.length === 0
-    ? 50
-    : Math.round(
-        50 + directions.reduce((sum, direction) => sum + direction * 12, 0),
-      );
-  return { score: Math.min(100, Math.max(0, score)), signals };
-}
+const emptyTrendSources: ProfileAiTrendSources = {
+  fullHistory: emptyInsightTrends,
+  recent30Days: emptyInsightTrends,
+};
 
 /**
  * Formats the lean non-muscle series used for muscle.bone_mass_trend so the
@@ -232,20 +225,6 @@ async function optionalSource<T>(
 
 export const insights_schema = z.object({
   insights: z.object({
-    overview: insight_card_schema.describe(
-      "Achievement / potential overview",
-    ),
-    foundation: insight_card_schema.describe("What is already working"),
-    momentum: insight_card_schema.describe("Strongest recent trend signal"),
-    progress: insight_card_schema
-      .extend({
-        trends: z
-          .array(progress_trends)
-          .max(3)
-          .describe("Body-comp metric keys supporting this progress read"),
-      })
-      .describe("Overall progress pattern"),
-    lever: insight_card_schema.describe("Single highest-ROI next move"),
     factor: z.object({
       factor: trends.describe(
         "Outstanding metric key or best improvement potential",
@@ -260,20 +239,21 @@ export const insights_schema = z.object({
         path: ["remark", "factor_color"],
       },
     ),
-    physique_archetype: z.object({
-      title: shortLabel,
-      headline: concise,
-      comment: concise,
-      body_type: body_type_enum,
-    }),
-    effort_score: z.object({
-      title: shortLabel,
-      headline: concise,
-      score: z.number().int().min(0).max(100),
-      comment: concise,
-      remark: remark_schema,
-    }),
-  }),
+    key_trend: insight_card_schema.extend({
+      metric: insight_trends.describe(
+        "One body-composition metric for the all-time trend",
+      ),
+    }).describe("One all-time body-composition trend"),
+    progress: insight_card_schema
+      .extend({
+        trends: z
+          .array(insight_trends)
+          .min(1)
+          .max(3)
+          .describe("Body-comp metric keys supporting this progress read"),
+      })
+      .describe("Recent 30-day progress direction"),
+  }).strict(),
   performance: z.object({
     ffmi_gauge: gauge_card_schema.describe("FFMI lean-mass gauge"),
     fmi_vs_ffmi: display_card_schema.describe("FMI vs FFMI map"),
@@ -396,35 +376,42 @@ export function preprocessProfileAiReportPayload({
   performanceReport = null,
   fatReport = null,
   muscleReport = null,
-  progressTrends = emptyProgressTrends,
+  trendSources = emptyTrendSources,
   latestBodyComposition = null,
   evidence,
 }: ProfileAiReportPreprocessSources = {}) {
-  const consistency = progressConsistency(progressTrends);
+  const selectedRecent = Object.fromEntries(
+    insights.progress.trends.map((metric) => [
+      metric,
+      normalizeProgressTrend(trendSources.recent30Days[metric]),
+    ]),
+  );
+  const keyTrendPoints = trendSources.fullHistory[insights.key_trend.metric];
+  const progressEvidencePoints = insights.progress.trends
+    .map((metric) => trendSources.recent30Days[metric])
+    .sort((left, right) => right.length - left.length)[0] ?? [];
   return {
     insights: {
-      ...insights,
-      report_context: evidence ?? null,
       factor: withValue(
         insights.factor,
         latestBodyComposition?.[insights.factor.factor] ?? null,
         evidence,
       ),
-      progress: withTrends(
-        insights.progress,
-        Object.fromEntries(
-          insights.progress.trends.map((metric) => [metric, progressTrends[metric]]),
-        ),
-        evidence,
+      key_trend: withTrends(
+        withInsufficientHistoryCopy(insights.key_trend, keyTrendPoints.length),
+        { [insights.key_trend.metric]: keyTrendPoints },
+        trendEvidence(evidence, keyTrendPoints),
       ),
-      effort_score: {
-        ...insights.effort_score,
-        score: consistency.score,
-        preprocess: {
-          trends: consistency.signals,
-          ...(evidence ? { evidence } : {}),
-        },
-      },
+      progress: withTrends(
+        withInsufficientHistoryCopy(
+          insights.progress,
+          Math.max(...insights.progress.trends.map(
+            (metric) => trendSources.recent30Days[metric].length,
+          )),
+        ),
+        selectedRecent,
+        trendEvidence(evidence, progressEvidencePoints),
+      ),
     },
     performance: {
       ffmi_gauge: withValue(performance.ffmi_gauge, performanceReport?.ffmi ?? null, evidence),
@@ -547,10 +534,46 @@ export function preprocessProfileAiReportPayload({
   };
 }
 
-export async function getProfileAiProgressTrends(
+export function normalizeProgressTrend(
+  points: BodyCompositionProgressTrendPoint[],
+): BodyCompositionProgressTrendPoint[] {
+  const baseline = points[0]?.value;
+  if (baseline === undefined) return [];
+  return points.map((point) => ({
+    createdAt: point.createdAt,
+    value: Number((point.value - baseline).toFixed(2)),
+  }));
+}
+
+function withInsufficientHistoryCopy<T extends { comment: string }>(
+  card: T,
+  readingCount: number,
+): T {
+  if (readingCount >= 2 || /insufficient history/i.test(card.comment)) return card;
+  return {
+    ...card,
+    comment: "Insufficient history for a directional trend.",
+  };
+}
+
+function trendEvidence(
+  base: ReportEvidence | undefined,
+  points: BodyCompositionProgressTrendPoint[],
+): ReportEvidence | undefined {
+  if (!base) return undefined;
+  const readingCount = points.length;
+  return {
+    ...base,
+    periodStart: points[0]?.createdAt ?? null,
+    readingCount,
+    confidence: readingCount >= 6 ? "high" : readingCount >= 3 ? "medium" : "low",
+  };
+}
+
+export async function getProfileAiTrendSources(
   profileId: string,
   asOf: string = new Date().toISOString(),
-): Promise<BodyCompositionProgressTrends> {
+): Promise<ProfileAiTrendSources> {
   const rows = (await db
     .prepare(
       `
@@ -558,34 +581,51 @@ export async function getProfileAiProgressTrends(
     created_at AS createdAt,
     body_fat_pct AS bodyFatPct,
     fat_mass_kg AS fatMassKg,
-    muscle_mass_kg AS muscleMassKg
+    muscle_mass_kg AS muscleMassKg,
+    skeletal_muscle_kg AS skeletalMuscleKg,
+    visceral_fat AS visceralFat,
+    subcutaneous_fat_mass_kg AS subcutaneousFatMassKg
   FROM body_composition_metrics_new
   WHERE profile_id = ?
     AND created_at <= ?
-    AND created_at >= ?::timestamptz - INTERVAL '30 days'
   ORDER BY created_at ASC
 `,
     )
-    .all(profileId, asOf, asOf)) as Array<{
-    createdAt: string;
-    bodyFatPct: number;
-    fatMassKg: number;
-    muscleMassKg: number;
-  }>;
+    .all(profileId, asOf)) as BodyCompositionInsightTrendRow[];
+  return buildProfileAiTrendSources(rows, asOf);
+}
 
-  return {
-    body_fat_pct: rows.map((row) => ({
+export function buildProfileAiTrendSources(
+  sourceRows: BodyCompositionInsightTrendRow[],
+  asOf: string,
+): ProfileAiTrendSources {
+  const asOfTime = new Date(asOf).getTime();
+  const rows = sourceRows
+    .filter((row) => new Date(row.createdAt).getTime() <= asOfTime)
+    .toSorted((left, right) =>
+      new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+    );
+  const build = (selectedRows: typeof rows): BodyCompositionInsightTrends => ({
+    body_fat_pct: selectedRows.map((row) => ({
       createdAt: row.createdAt,
       value: row.bodyFatPct,
     })),
-    fat_mass_kg: rows.map((row) => ({
+    fat_mass_kg: selectedRows.map((row) => ({
       createdAt: row.createdAt,
       value: row.fatMassKg,
     })),
-    muscle_mass_kg: rows.map((row) => ({
+    muscle_mass_kg: selectedRows.map((row) => ({
       createdAt: row.createdAt,
       value: row.muscleMassKg,
     })),
+    skeletal_muscle_kg: selectedRows.map((row) => ({ createdAt: row.createdAt, value: row.skeletalMuscleKg })),
+    visceral_fat: selectedRows.map((row) => ({ createdAt: row.createdAt, value: row.visceralFat })),
+    subcutaneous_fat_mass_kg: selectedRows.map((row) => ({ createdAt: row.createdAt, value: row.subcutaneousFatMassKg })),
+  });
+  const cutoff = asOfTime - 30 * 24 * 60 * 60 * 1000;
+  return {
+    fullHistory: build(rows),
+    recent30Days: build(rows.filter((row) => new Date(row.createdAt).getTime() >= cutoff)),
   };
 }
 
@@ -598,20 +638,18 @@ export async function getProfileAiReportPreprocessSources(
     performanceReport,
     fatReport,
     muscleReport,
-    progressTrends,
+    trendSources,
     latestBodyComposition,
   ] =
     await Promise.all([
       getProfilePerformance(
         profileId,
         source.bodyCompositionMetricsId,
-        typeof source.profileContext?.heightCm === "number"
-          ? source.profileContext.heightCm
-          : null,
+        source.profileContext ?? undefined,
       ),
       getProfileFatReport(profileId, source.bodyCompositionMetricsId),
       getProfileMuscleReport(profileId, source.bodyCompositionMetricsId),
-      getProfileAiProgressTrends(profileId, source.asOf),
+      getProfileAiTrendSources(profileId, source.asOf),
       getBodyCompositionMeasurementByIdV2(
         profileId,
         source.bodyCompositionMetricsId,
@@ -621,19 +659,17 @@ export async function getProfileAiReportPreprocessSources(
     ]);
 
   const readingCount = Math.max(
-    progressTrends.body_fat_pct.length,
-    progressTrends.fat_mass_kg.length,
-    progressTrends.muscle_mass_kg.length,
+    ...Object.values(trendSources.recent30Days).map((points) => points.length),
   );
   return {
     performanceReport,
     fatReport,
     muscleReport,
-    progressTrends,
+    trendSources,
     latestBodyComposition,
     evidence: {
       asOf: source.asOf,
-      periodStart: progressTrends.body_fat_pct[0]?.createdAt ?? null,
+      periodStart: trendSources.recent30Days.body_fat_pct[0]?.createdAt ?? null,
       periodEnd: source.asOf,
       readingCount,
       confidence: readingCount >= 6 ? "high" : readingCount >= 3 ? "medium" : "low",
@@ -664,7 +700,7 @@ export function createTools(reportId: string, profileId: string) {
     {
       name: "profile_ai_report",
       description:
-        "Generate the complete structured profile AI report. Cards: short title/headline/heading, one-sentence comment, remark{marker,factor_color,text}. Markers: trend_up|trend_down|ai_recommendation|caution|complement. factor_color: green|yellow|orange|red (strong→highest priority). When a card also has a top-level factor_color, it must match remark.factor_color. Supportive coach tone; no clinical/risk language.",
+        "Generate the complete structured profile AI report. Cards: short title/headline/heading, one-sentence comment, remark{marker,factor_color,text}. Markers: trend_up|trend_down|ai_recommendation|caution|complement. factor_color: green|yellow|orange|red (strong→highest priority). When a card also has a top-level factor_color, it must match remark.factor_color. Candid coach tone: supportive but direct about unfavorable or stalled results; no clinical/risk language.",
       schema: insights_schema,
     },
   );

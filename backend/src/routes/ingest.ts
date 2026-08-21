@@ -14,7 +14,7 @@ import {
   type WorkoutInput,
   type profile,
 } from "../db/commands";
-import { calculateDesiredWeightKg } from "../calculations/compositionSummary";
+import { calculateTargetComposition } from "../calculations/compositionSummary";
 import {
   calculateFfmi,
   calculateFmi,
@@ -62,12 +62,16 @@ async function deriveMeasurementAndQueueReport({
       sex: profile.gender,
       people_type: profile.peopleType,
     });
+    const targetComposition = calculateTargetComposition({
+      currentLeanMassKg: metricsBase.fat_free_mass_kg,
+      heightCm: profile.heightCm,
+      gender: profile.gender,
+      targetBodyFatPct: profile.preferredBodyFatPct,
+      muscularityGoal: profile.muscularityGoal,
+    });
     const metrics = {
       ...metricsBase,
-      desired_weight_kg: calculateDesiredWeightKg({
-        fat_free_mass_kg: metricsBase.fat_free_mass_kg,
-        target_body_fat_pct: profile.preferredBodyFatPct,
-      }),
+      desired_weight_kg: targetComposition.weightKg,
     };
     const derivedMetrics = {
       fmi: calculateFmi(metricsBase.fat_mass_kg, profile.heightCm),
@@ -79,11 +83,13 @@ async function deriveMeasurementAndQueueReport({
       metrics,
       derivedMetrics,
       profileContext: {
+        name: profile.name,
         heightCm: profile.heightCm,
         ageYears: calculateAgeYears(profile.dateOfBirth),
         peopleType: profile.peopleType,
         gender: profile.gender,
         preferredBodyFatPct: profile.preferredBodyFatPct,
+        muscularityGoal: profile.muscularityGoal,
       },
     });
     const reports = await createSnapshotReports({

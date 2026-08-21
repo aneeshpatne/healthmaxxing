@@ -226,6 +226,11 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
               type: "number",
               default: 18,
             },
+            muscularityGoal: {
+              type: "string",
+              enum: ["maintain", "athletic", "muscular", "very_muscular"],
+              default: "athletic",
+            },
           },
         },
       },
@@ -243,6 +248,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         gender,
         profileImage = null,
         preferredBodyFatPct = 18,
+        muscularityGoal = "athletic",
       } = request.body as {
         profileId: string;
         heightCm: number;
@@ -251,6 +257,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         gender: "male" | "female";
         profileImage?: string | null;
         preferredBodyFatPct?: number;
+        muscularityGoal?: "maintain" | "athletic" | "muscular" | "very_muscular";
       };
 
       if (
@@ -271,6 +278,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         gender,
         profileImage,
         preferredBodyFatPct,
+        muscularityGoal,
       });
 
       app.log.info(
@@ -282,6 +290,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
           gender,
           profileImage,
           preferredBodyFatPct,
+          muscularityGoal,
         },
         "Registered profile metadata",
       );
@@ -295,6 +304,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         gender,
         profileImage,
         preferredBodyFatPct,
+        muscularityGoal,
       });
     },
   );
@@ -305,7 +315,14 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
       schema: {
         body: {
           type: "object",
-          required: ["name", "heightCm", "dateOfBirth", "peopleType", "gender"],
+          required: [
+            "name",
+            "heightCm",
+            "dateOfBirth",
+            "peopleType",
+            "gender",
+            "muscularityGoal",
+          ],
           properties: {
             name: {
               type: "string",
@@ -336,6 +353,10 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
               type: "number",
               default: 18,
             },
+            muscularityGoal: {
+              type: "string",
+              enum: ["maintain", "athletic", "muscular", "very_muscular"],
+            },
           },
         },
       },
@@ -350,6 +371,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         gender,
         profileImage = null,
         preferredBodyFatPct = 18,
+        muscularityGoal,
       } = request.body as {
         name: string;
         isPrimary?: boolean;
@@ -359,6 +381,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         gender: "male" | "female";
         profileImage?: string | null;
         preferredBodyFatPct?: number;
+        muscularityGoal: "maintain" | "athletic" | "muscular" | "very_muscular";
       };
       const accountId = request.auth.account.id;
 
@@ -379,6 +402,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         gender,
         profileImage,
         preferredBodyFatPct,
+        muscularityGoal,
       });
 
       app.log.info(
@@ -393,6 +417,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
           gender,
           profileImage,
           preferredBodyFatPct,
+          muscularityGoal,
         },
         "Registered profile with metadata",
       );
@@ -409,6 +434,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         gender,
         profileImage,
         preferredBodyFatPct,
+        muscularityGoal,
       });
     },
   );
@@ -456,6 +482,10 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
             preferredBodyFatPct: {
               type: "number",
             },
+            muscularityGoal: {
+              type: "string",
+              enum: ["maintain", "athletic", "muscular", "very_muscular"],
+            },
           },
         },
       },
@@ -474,6 +504,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         gender,
         profileImage,
         preferredBodyFatPct,
+        muscularityGoal,
       } = request.body as {
         name?: string;
         isPrimary?: boolean;
@@ -483,6 +514,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         gender?: "male" | "female";
         profileImage?: string | null;
         preferredBodyFatPct?: number;
+        muscularityGoal?: "maintain" | "athletic" | "muscular" | "very_muscular";
       };
 
       if (
@@ -506,6 +538,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         gender,
         profileImage,
         preferredBodyFatPct,
+        muscularityGoal,
       });
 
       app.log.info(
@@ -519,6 +552,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
           gender,
           profileImage,
           preferredBodyFatPct,
+          muscularityGoal,
         },
         "Updated profile",
       );
@@ -534,6 +568,7 @@ const clientRoutes: FastifyPluginAsync = async (app) => {
         gender,
         profileImage,
         preferredBodyFatPct,
+        muscularityGoal,
       });
     },
   );

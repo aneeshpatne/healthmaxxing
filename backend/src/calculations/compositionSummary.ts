@@ -14,6 +14,29 @@ export type DesiredWeightInput = {
   target_body_fat_pct?: number;
 };
 
+export const MUSCULARITY_GOALS = [
+  "maintain",
+  "athletic",
+  "muscular",
+  "very_muscular",
+] as const;
+
+export type MuscularityGoal = (typeof MUSCULARITY_GOALS)[number];
+
+export type TargetComposition = {
+  weightKg: number;
+  leanMassKg: number;
+  fatMassKg: number;
+  bodyFatPct: number;
+  ffmi: number;
+  muscularityGoal: MuscularityGoal;
+};
+
+const TARGET_FFMI: Record<"male" | "female", Record<Exclude<MuscularityGoal, "maintain">, number>> = {
+  male: { athletic: 20, muscular: 22, very_muscular: 24 },
+  female: { athletic: 16.5, muscular: 18.5, very_muscular: 20.5 },
+};
+
 function round(value: number, digits: number): number {
   return Number(value.toFixed(digits));
 }
@@ -100,4 +123,40 @@ export function calculateDesiredWeightKg({
   }
 
   return round(fat_free_mass_kg / (1 - target_body_fat_pct / 100), 2);
+}
+
+export function calculateTargetComposition({
+  currentLeanMassKg,
+  heightCm,
+  gender,
+  targetBodyFatPct,
+  muscularityGoal,
+}: {
+  currentLeanMassKg: number;
+  heightCm: number;
+  gender: "male" | "female";
+  targetBodyFatPct: number;
+  muscularityGoal: MuscularityGoal;
+}): TargetComposition {
+  if (!Number.isFinite(heightCm) || heightCm <= 0) {
+    throw new Error("heightCm must be positive");
+  }
+  const heightM = heightCm / 100;
+  const currentFfmi = currentLeanMassKg / (heightM * heightM);
+  const desiredFfmi = muscularityGoal === "maintain"
+    ? currentFfmi
+    : Math.max(currentFfmi, TARGET_FFMI[gender][muscularityGoal]);
+  const leanMassKg = round(desiredFfmi * heightM * heightM, 2);
+  const weightKg = calculateDesiredWeightKg({
+    fat_free_mass_kg: leanMassKg,
+    target_body_fat_pct: targetBodyFatPct,
+  });
+  return {
+    weightKg,
+    leanMassKg,
+    fatMassKg: round(weightKg - leanMassKg, 2),
+    bodyFatPct: targetBodyFatPct,
+    ffmi: round(desiredFfmi, 2),
+    muscularityGoal,
+  };
 }

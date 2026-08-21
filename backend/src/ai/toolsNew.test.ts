@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import {
   formatBoneMassTrendForAgent,
+  buildProfileAiTrendSources,
   insights_schema,
+  normalizeProgressTrend,
   preprocessProfileAiReportPayload,
 } from "./toolsNew";
 
@@ -49,14 +51,6 @@ function insightCard(label: string) {
 
 const payload = insights_schema.parse({
   insights: {
-    overview: insightCard("overview"),
-    foundation: insightCard("foundation"),
-    momentum: insightCard("momentum"),
-    progress: {
-      ...insightCard("progress"),
-      trends: ["body_fat_pct", "fat_mass_kg"],
-    },
-    lever: insightCard("lever"),
     factor: {
       factor: "skeletal_muscle_kg",
       factor_color: "yellow",
@@ -66,13 +60,13 @@ const payload = insights_schema.parse({
         "yellow",
       ),
     },
-    physique_archetype: {
-      ...insightCard("physique"),
-      body_type: "fit",
+    key_trend: {
+      ...insightCard("key trend"),
+      metric: "skeletal_muscle_kg",
     },
-    effort_score: {
-      ...insightCard("effort"),
-      score: 72,
+    progress: {
+      ...insightCard("progress"),
+      trends: ["body_fat_pct", "fat_mass_kg"],
     },
   },
   performance: {
@@ -111,7 +105,14 @@ const sources = {
       fatMass30Days: [{ createdAt: "2026-06-01", value: -0.4 }],
     },
     weightPair: {
-      target: { leanMassKg: 54, fatMassKg: 12 },
+      target: {
+        weightKg: 79.39,
+        leanMassKg: 65.12,
+        fatMassKg: 14.27,
+        bodyFatPct: 18,
+        ffmi: 22,
+        muscularityGoal: "muscular" as const,
+      },
       current: { leanMassKg: 54, fatMassKg: 18 },
       initial: { leanMassKg: 52, fatMassKg: 20 },
     },
@@ -173,10 +174,32 @@ const sources = {
     },
     comments: {},
   },
-  progressTrends: {
-    body_fat_pct: [{ createdAt: "2026-06-01", value: 24.5 }],
-    fat_mass_kg: [{ createdAt: "2026-06-01", value: 18 }],
-    muscle_mass_kg: [{ createdAt: "2026-06-01", value: 42 }],
+  trendSources: {
+    fullHistory: {
+      body_fat_pct: [{ createdAt: "2026-01-01", value: 28 }],
+      fat_mass_kg: [{ createdAt: "2026-01-01", value: 20 }],
+      muscle_mass_kg: [{ createdAt: "2026-01-01", value: 40 }],
+      skeletal_muscle_kg: [
+        { createdAt: "2026-01-01", value: 29 },
+        { createdAt: "2026-06-01", value: 31 },
+      ],
+      visceral_fat: [{ createdAt: "2026-01-01", value: 9 }],
+      subcutaneous_fat_mass_kg: [{ createdAt: "2026-01-01", value: 14 }],
+    },
+    recent30Days: {
+      body_fat_pct: [
+        { createdAt: "2026-05-01", value: 24.555 },
+        { createdAt: "2026-06-01", value: 23.444 },
+      ],
+      fat_mass_kg: [
+        { createdAt: "2026-05-01", value: 18 },
+        { createdAt: "2026-06-01", value: 18 },
+      ],
+      muscle_mass_kg: [],
+      skeletal_muscle_kg: [],
+      visceral_fat: [],
+      subcutaneous_fat_mass_kg: [],
+    },
   },
   latestBodyComposition: {
     skeletal_muscle_kg: 31,
@@ -191,7 +214,7 @@ test("insight factor and gauge colors are constrained enums", () => {
   expect(payload.performance.ffmi_gauge.factor_color).toBe("green");
   expect(payload.fat.fat_ratio.factor_color).toBe("yellow");
   expect(payload.muscle.skeletal_muscle_gauge.factor_color).toBe("green");
-  expect(payload.insights.overview.remark.factor_color).toBe("green");
+  expect(payload.insights.key_trend.remark.factor_color).toBe("green");
 
   const invalidFactor = structuredClone(payload) as any;
   invalidFactor.insights.factor.factor = "unknown_metric";
@@ -202,8 +225,16 @@ test("insight factor and gauge colors are constrained enums", () => {
   expect(insights_schema.safeParse(invalidColor).success).toBe(false);
 
   const invalidRemarkColor = structuredClone(payload) as any;
-  invalidRemarkColor.insights.overview.remark.factor_color = "blue";
+  invalidRemarkColor.insights.key_trend.remark.factor_color = "blue";
   expect(insights_schema.safeParse(invalidRemarkColor).success).toBe(false);
+
+  const invalidTrend = structuredClone(payload) as any;
+  invalidTrend.insights.key_trend.metric = "water_pct";
+  expect(insights_schema.safeParse(invalidTrend).success).toBe(false);
+
+  const oldShape = structuredClone(payload) as any;
+  oldShape.insights.overview = insightCard("old overview");
+  expect(insights_schema.safeParse(oldShape).success).toBe(false);
 });
 
 test("preprocessProfileAiReportPayload resolves the selected insight factor", () => {
@@ -227,12 +258,90 @@ test("preprocessProfileAiReportPayload keeps only selected progress trends", () 
   ]);
   expect(preprocessed.insights.progress.preprocess).toEqual({
     trends: {
-      body_fat_pct: sources.progressTrends.body_fat_pct,
-      fat_mass_kg: sources.progressTrends.fat_mass_kg,
+      body_fat_pct: [
+        { createdAt: "2026-05-01", value: 0 },
+        { createdAt: "2026-06-01", value: -1.11 },
+      ],
+      fat_mass_kg: [
+        { createdAt: "2026-05-01", value: 0 },
+        { createdAt: "2026-06-01", value: 0 },
+      ],
     },
   });
   expect("value" in preprocessed.insights.progress.preprocess).toBe(false);
   expect(preprocessed.insights.progress.comment).toBe("progress comment");
+});
+
+test("preprocess attaches only the selected absolute all-time key trend", () => {
+  const preprocessed = preprocessProfileAiReportPayload(payload, sources);
+
+  expect(preprocessed.insights.key_trend.metric).toBe("skeletal_muscle_kg");
+  expect(preprocessed.insights.key_trend.preprocess).toEqual({
+    trends: {
+      skeletal_muscle_kg: sources.trendSources.fullHistory.skeletal_muscle_kg,
+    },
+  });
+  expect(preprocessed.insights).toEqual({
+    factor: preprocessed.insights.factor,
+    key_trend: preprocessed.insights.key_trend,
+    progress: preprocessed.insights.progress,
+  });
+});
+
+test("progress normalization handles empty, sparse, positive, negative, flat, and rounding", () => {
+  const raw = [
+    { createdAt: "a", value: 10.005 },
+    { createdAt: "b", value: 11.239 },
+    { createdAt: "c", value: 8.001 },
+    { createdAt: "d", value: 10.005 },
+  ];
+  expect(normalizeProgressTrend([])).toEqual([]);
+  expect(normalizeProgressTrend(raw.slice(0, 1))).toEqual([
+    { createdAt: "a", value: 0 },
+  ]);
+  expect(normalizeProgressTrend(raw)).toEqual([
+    { createdAt: "a", value: 0 },
+    { createdAt: "b", value: 1.23 },
+    { createdAt: "c", value: -2 },
+    { createdAt: "d", value: 0 },
+  ]);
+  expect(raw[0]?.value).toBe(10.005);
+});
+
+test("trend source assembly is ordered, snapshot-safe, and keeps absolute all-time values", () => {
+  const rows = [
+    { createdAt: "2026-08-10T00:00:00Z", bodyFatPct: 19, fatMassKg: 14, muscleMassKg: 44, skeletalMuscleKg: 33, visceralFat: 7, subcutaneousFatMassKg: 10 },
+    { createdAt: "2026-07-01T00:00:00Z", bodyFatPct: 22, fatMassKg: 16, muscleMassKg: 42, skeletalMuscleKg: 31, visceralFat: 8, subcutaneousFatMassKg: 12 },
+    { createdAt: "2026-08-01T00:00:00Z", bodyFatPct: 20, fatMassKg: 15, muscleMassKg: 43, skeletalMuscleKg: 32, visceralFat: 7, subcutaneousFatMassKg: 11 },
+  ];
+  const trends = buildProfileAiTrendSources(rows, "2026-08-09T00:00:00Z");
+
+  expect(trends.fullHistory.body_fat_pct).toEqual([
+    { createdAt: "2026-07-01T00:00:00Z", value: 22 },
+    { createdAt: "2026-08-01T00:00:00Z", value: 20 },
+  ]);
+  expect(trends.recent30Days.skeletal_muscle_kg).toEqual([
+    { createdAt: "2026-08-01T00:00:00Z", value: 32 },
+  ]);
+});
+
+test("sparse trend cards explicitly report insufficient history", () => {
+  const sparse = structuredClone(sources);
+  sparse.trendSources.fullHistory.skeletal_muscle_kg = [
+    { createdAt: "2026-06-01", value: 31 },
+  ];
+  sparse.trendSources.recent30Days.body_fat_pct = [];
+  sparse.trendSources.recent30Days.fat_mass_kg = [
+    { createdAt: "2026-06-01", value: 18 },
+  ];
+
+  const preprocessed = preprocessProfileAiReportPayload(payload, sparse);
+  expect(preprocessed.insights.key_trend.comment).toMatch(/insufficient history/i);
+  expect(preprocessed.insights.progress.comment).toMatch(/insufficient history/i);
+  expect(preprocessed.insights.progress.preprocess.trends).toEqual({
+    body_fat_pct: [],
+    fat_mass_kg: [{ createdAt: "2026-06-01", value: 0 }],
+  });
 });
 
 test("preprocessProfileAiReportPayload marks performance source types", () => {
