@@ -41,22 +41,23 @@ The client is SwiftUI with Swift Charts, a dark glass-inspired visual system, Re
 ## From scale to insight
 
 ```mermaid
-flowchart LR
-    U([User]) --> A[Clerk sign-in]
+flowchart TB
+    U([User])
+    U --> A[Clerk sign-in]
     A --> P[Primary profile]
     P --> R[Forma Record]
     R --> B{BLE scale}
     B --> W[Weight]
     W --> I[Impedance]
     I --> H[Heart rate]
-    H --> API["POST /ingest/add_measurement/v2"]
+    H --> API["POST /ingest/<br/>add_measurement/v2"]
     API --> D[(Raw measurement)]
     D --> E[gRPC MetricsModel]
     E --> F[Derived composition]
     F --> Q[Redis / BullMQ]
     Q --> J[Report worker]
     J --> C[(Insight report)]
-    C --> W2["GET .../insights/jobs/{id}/wait"]
+    C --> W2["GET .../jobs/{id}/wait"]
     W2 -->|pending / running| W2
     W2 -->|completed| UI[Forma Metrics]
 ```
@@ -66,29 +67,42 @@ Forma keeps each scale stage on screen even when packets arrive almost together,
 ## Product map
 
 ```mermaid
-flowchart TD
+flowchart TB
     P[Health profile]
-    P --> IN[Inputs]
-    P --> CO[Composition]
-    P --> PR[Progress]
-    P --> RP[Reports]
 
-    IN --> IN1[Scale readings]
-    IN --> IN2[Body measurements]
-    IN --> IN3[Workouts on the server]
+    subgraph IN[Inputs]
+        direction TB
+        IN1[Scale readings]
+        IN2[Body measurements]
+        IN3[Workouts on the server]
+    end
 
-    CO --> CO1[Fat and lean mass]
-    CO --> CO2[Muscle and hydration]
-    CO --> CO3[FMI and FFMI]
+    subgraph CO[Composition]
+        direction TB
+        CO1[Fat and lean mass]
+        CO2[Muscle and hydration]
+        CO3[FMI and FFMI]
+    end
 
-    PR --> PR1[Weight summary]
-    PR --> PR2[7d / 30d / all trends]
-    PR --> PR3[Effort score]
+    subgraph PR[Progress]
+        direction TB
+        PR1[Weight summary]
+        PR2[7d / 30d / all trends]
+        PR3[Effort score]
+    end
 
-    RP --> RP1[Insights]
-    RP --> RP2[Performance]
-    RP --> RP3[Fat]
-    RP --> RP4[Muscle]
+    subgraph RP[Reports]
+        direction TB
+        RP1[Insights]
+        RP2[Performance]
+        RP3[Fat]
+        RP4[Muscle]
+    end
+
+    P --> IN
+    IN --> CO
+    CO --> PR
+    PR --> RP
 ```
 
 ## Architecture
@@ -96,50 +110,40 @@ flowchart TD
 ```mermaid
 flowchart TB
     subgraph IOS["Forma — ios/"]
-        APP[FormaApp]
-        AUTH{Authenticated?}
-        GATE[Primary profile gate]
-        TABS[Metrics / Record / Settings]
-        BLE[ScaleBLEManager]
-        CLIENT[APIClient]
-        TOKEN[ClerkTokenProvider]
-        STORE[MetricsReportStore]
-        APP --> AUTH
+        direction TB
+        APP[FormaApp] --> AUTH{Authenticated?}
         AUTH -->|No| SIGNIN[ClerkSignInView]
-        AUTH -->|Yes| GATE
-        GATE --> TABS
-        TABS --> BLE
-        TABS --> STORE
-        STORE --> CLIENT
-        CLIENT --> TOKEN
+        AUTH -->|Yes| GATE[Primary profile gate]
+        GATE --> TABS["Metrics / Record / Settings"]
+        TABS --> BLE[ScaleBLEManager]
+        TABS --> STORE[MetricsReportStore]
+        STORE --> CLIENT[APIClient]
+        CLIENT --> TOKEN[ClerkTokenProvider]
     end
 
-    subgraph SERVER["Healthmaxxing Server — backend/"]
-        FASTIFY[Fastify app]
-        INGEST["/ingest"]
-        CLIENTAPI["/client"]
-        HEALTH["/health"]
-        MW[Clerk middleware]
-        CMD[Database commands]
-        QUEUE[BullMQ worker]
-        FASTIFY --> INGEST
-        FASTIFY --> CLIENTAPI
-        FASTIFY --> HEALTH
-        INGEST --> MW
+    subgraph SERVER["Healthmaxxing Server"]
+        direction TB
+        FASTIFY[Fastify app] --> INGEST["/ingest"]
+        FASTIFY --> CLIENTAPI["/client"]
+        FASTIFY --> HEALTH["/health"]
+        INGEST --> MW[Clerk middleware]
         CLIENTAPI --> MW
-        MW --> CMD
-        INGEST --> QUEUE
+        MW --> CMD[Database commands]
+        INGEST --> QUEUE[BullMQ worker]
     end
 
     subgraph INFRA[Infrastructure]
-        CLERK[Clerk]
+        direction TB
         SCALE[BLE scale]
+        CLERK[Clerk]
         GRPC[MetricsModel gRPC]
         REDIS[(Redis)]
         PG[(PostgreSQL 17)]
         LLM[Report model provider]
     end
 
+    IOS --> SERVER
+    SERVER --> INFRA
     BLE --> SCALE
     CLIENT --> INGEST
     CLIENT --> CLIENTAPI
