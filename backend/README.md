@@ -1,10 +1,10 @@
 <div align="center">
 
-# Healthmaxxing
+# Healthmaxxing Server
 
 **Turn health measurements into a clear view of progress.**
 
-An authenticated health-data service that converts scale readings, body measurements, and workouts into body-composition history, progress summaries, and structured insight reports.
+An authenticated health-data service that converts scale readings, body measurements, and workouts into body-composition history, progress summaries, and structured insight reports. This package is the API Forma talks to in the Healthmaxxing monorepo.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/runtime-Bun_1.3-000000?logo=bun&logoColor=white)](https://bun.sh/)
@@ -221,8 +221,8 @@ No dedicated hardware or UI simulator is required: clients send measurements ove
 1. Clone the repository.
 
    ```bash
-   git clone https://github.com/aneeshpatne/healthmaxxing.git
-   cd healthmaxxing
+   git clone https://github.com/aneeshpatne/healthmaxxing-server.git
+   cd healthmaxxing-server
    ```
 
 2. Install dependencies with Bun.
@@ -320,7 +320,7 @@ The current suite has 26 focused tests across 5 files covering PostgreSQL query 
 
 ## License
 
-Healthmaxxing is licensed under the [Apache License 2.0](./LICENSE). It permits use, modification, and redistribution under the license's notice and attribution conditions; modified files must be identified, and any applicable patent and NOTICE terms remain in effect.
+Healthmaxxing Server is licensed under the [Apache License 2.0](./LICENSE). It permits use, modification, and redistribution under the license's notice and attribution conditions; modified files must be identified, and any applicable patent and NOTICE terms remain in effect.
 
 ---
 
