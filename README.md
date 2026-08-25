@@ -12,6 +12,10 @@
   [![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20iPadOS-111111.svg?style=flat-square)](https://developer.apple.com/ios/)
   [![Bun](https://img.shields.io/badge/runtime-Bun_1.3-000000?logo=bun&logoColor=white)](https://bun.sh/)
   [![License](https://img.shields.io/badge/license-Apache--2.0%20%2F%20AGPL--3.0-4B5563.svg?style=flat-square)](./LICENSE)
+
+  [![database rows](https://img.shields.io/badge/database_rows-2%2C104-111111.svg?style=flat-square)](#by-the-numbers)
+  [![reports generated](https://img.shields.io/badge/reports_generated-720-111111.svg?style=flat-square)](#by-the-numbers)
+  [![scale measurements](https://img.shields.io/badge/scale_measurements-181-111111.svg?style=flat-square)](#by-the-numbers)
 </div>
 
 ---
@@ -21,6 +25,32 @@
 Forma, the iOS app, signs the user in, selects a primary profile, and records weight, impedance, and heart rate from a Bluetooth Low Energy scale. Healthmaxxing Server authenticates that session, checks profile ownership, stores the raw reading, derives composition metrics, and queues an insight report. The app polls the job and presents gauges, trend charts, composition maps, and recommendations so a single weigh-in becomes a longitudinal record instead of an isolated number.
 
 The client is SwiftUI with Swift Charts, a dark glass-inspired visual system, Reduce Motion support, and a custom Cormorant Garamond wordmark. The server is TypeScript on Bun and Fastify, with Clerk authentication, PostgreSQL persistence, an external gRPC metrics model, and BullMQ-backed report jobs. Writes go through `/ingest`; profile, trend, and report reads go through `/client`.
+
+## By the numbers
+
+Counts below were read from the live PostgreSQL database on August 25, 2026. A single weigh-in writes a raw measurement, a composition snapshot, FMI/FFMI values, and performance, fat, and muscle reports, then queues an insight job — so the store grows with history, not just with new readings.
+
+<p align="center">
+  <strong>2,104</strong> database rows &nbsp;·&nbsp;
+  <strong>720</strong> reports generated &nbsp;·&nbsp;
+  <strong>181</strong> scale measurements &nbsp;·&nbsp;
+  <strong>181</strong> composition snapshots
+</p>
+
+| Metric | Count |
+| --- | ---: |
+| **Database rows** | 2,104 |
+| **Scale measurements** | 181 |
+| **Body-composition snapshots** | 181 |
+| **FMI / FFMI rows** | 181 |
+| **Reports generated** | 720 |
+| **Insight reports completed** | 122 |
+| **Structured JSON-LD outputs** | 120 |
+| **Report comments** | 517 |
+| **Workouts synced** | 14 |
+| **Imported health reports** | 3 |
+
+720 reports is the sum of 181 performance, 181 fat, 181 muscle, 174 profile-insight, and 3 imported health reports. 122 insight reports completed with 120 structured JSON-LD payloads persisted for later retrieval. Measurements in this dataset span April 20–August 25, 2026; the database is 13 MB.
 
 ## Features
 

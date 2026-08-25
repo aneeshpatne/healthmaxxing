@@ -24,15 +24,16 @@ The service is a TypeScript application running on Bun and Fastify, with Clerk a
 
 ## Proof points
 
-The repository is a personal project rather than a production-traffic system, so the most honest scale signals are the exercised data model and the constraints enforced in code. The figures below were read from the configured PostgreSQL database on August 21, 2026; they are development-dataset counts, not claims about users or production adoption.
+The repository is a personal project rather than a production-traffic system, so the most honest scale signals are the exercised data model and the constraints enforced in code. The figures below were read from the configured PostgreSQL database on August 25, 2026; they are dataset counts, not claims about production adoption.
 
 | Scope | Concrete fact |
 | --- | --- |
-| **Data volume** | 2 accounts, 3 profiles, 174 scale measurements, 1 body-measurement record, and 14 workouts. |
-| **Derived history** | 174 body-composition snapshots, 174 FMI/FFMI rows, and 174 each of performance, fat, and muscle report snapshots. |
-| **Insight pipeline** | 167 profile-insight reports: 115 completed and 52 failed; 113 structured JSON-LD outputs are persisted. |
+| **Data volume** | 2,104 database rows across 30 tables: 181 scale measurements, 1 body-measurement record, and 14 workouts. |
+| **Derived history** | 181 body-composition snapshots, 181 FMI/FFMI rows, and 181 each of performance, fat, and muscle report snapshots. |
+| **Insight pipeline** | 174 profile-insight reports: 122 completed and 52 failed; 120 structured JSON-LD outputs are persisted. |
+| **Reports generated** | 720 reports in total (181 performance + 181 fat + 181 muscle + 174 profile-insight + 3 imported health reports), plus 517 report comments. |
 | **Report detail** | 3 imported health reports, 8 sections, 38 observations, and 13 catalogued observation fields. |
-| **Database footprint** | PostgreSQL reports a 13 MB database; measurements span April 20–August 21, 2026. |
+| **Database footprint** | PostgreSQL reports a 13 MB database; measurements span April 20–August 25, 2026. |
 | **API surface** | 27 registered HTTP handlers: 22 client routes, 4 ingest routes, and 1 database health check. |
 | **Schema evolution** | 27 initial tables and 17 initial indexes; 15 migrations are applied in the live database, including 2 historical migrations not present in the current checkout. |
 | **Reliability controls** | A 10 MB request cap, per-profile measurement idempotency keys, persisted calculation/report states, three report attempts with exponential 2-second backoff, and row-count verification for SQLite imports. |
@@ -43,10 +44,10 @@ The older `mydb.sqlite` file remains a legacy export; its 29 measurements are no
 
 ### Impact in practice
 
-- **Turns isolated readings into a longitudinal product surface.** The live dataset spans April 20–August 21, 2026, with 174 scale measurements feeding 174 body-composition snapshots and matching performance, fat, and muscle reports.
+- **Turns isolated readings into a longitudinal product surface.** The live dataset spans April 20–August 25, 2026, with 181 scale measurements feeding 181 body-composition snapshots and matching performance, fat, and muscle reports.
 - **Makes one ingestion event useful across the client experience.** A stored measurement can fan out into derived BMI, fat, lean-mass, hydration, muscle, FMI, and FFMI values, then create a queued profile-insight job for asynchronous interpretation.
-- **Keeps model-dependent work observable and recoverable.** The database records explicit job outcomes—115 completed and 52 failed profile-insight jobs—while persisting 113 structured JSON-LD outputs for later retrieval instead of making report generation an opaque request-time side effect.
-- **Supports more than a single happy-path profile.** The current PostgreSQL data includes 2 accounts and 3 profiles, while shared authentication middleware and profile ownership checks keep profile-scoped reads and writes isolated.
+- **Keeps model-dependent work observable and recoverable.** The database records explicit job outcomes—122 completed and 52 failed profile-insight jobs—while persisting 120 structured JSON-LD outputs for later retrieval instead of making report generation an opaque request-time side effect.
+- **Keeps profile-scoped reads and writes isolated.** Shared authentication middleware and ownership checks return `404` when a requested profile does not belong to the caller.
 - **Preserves delivery safety as the system evolves.** Per-profile measurement idempotency, persisted calculation status, queued retries with exponential backoff, stale-job cleanup, and 15 applied migrations protect the path from raw input to client-visible insight.
 
 ## Features
