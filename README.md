@@ -13,9 +13,10 @@
   [![Bun](https://img.shields.io/badge/runtime-Bun_1.3-000000?logo=bun&logoColor=white)](https://bun.sh/)
   [![License](https://img.shields.io/badge/license-Apache--2.0%20%2F%20AGPL--3.0-4B5563.svg?style=flat-square)](./LICENSE)
 
-  [![database rows](https://img.shields.io/badge/database_rows-2%2C104-111111.svg?style=flat-square)](#by-the-numbers)
-  [![reports generated](https://img.shields.io/badge/reports_generated-720-111111.svg?style=flat-square)](#by-the-numbers)
-  [![scale measurements](https://img.shields.io/badge/scale_measurements-181-111111.svg?style=flat-square)](#by-the-numbers)
+  [![reports generated](https://img.shields.io/badge/reports_generated-720-111111.svg?style=flat-square)](#project-impact)
+  [![observations extracted](https://img.shields.io/badge/observations_extracted-38-111111.svg?style=flat-square)](#project-impact)
+  [![months of history](https://img.shields.io/badge/longitudinal_history-4_months-111111.svg?style=flat-square)](#project-impact)
+  [![scale measurements](https://img.shields.io/badge/scale_measurements-181-111111.svg?style=flat-square)](#project-impact)
 </div>
 
 ---
@@ -26,16 +27,18 @@ Forma, the iOS app, signs the user in, selects a primary profile, and records we
 
 The client is SwiftUI with Swift Charts, a dark glass-inspired visual system, Reduce Motion support, and a custom Cormorant Garamond wordmark. The server is TypeScript on Bun and Fastify, with Clerk authentication, PostgreSQL persistence, an external gRPC metrics model, and BullMQ-backed report jobs. Writes go through `/ingest`; profile, trend, and report reads go through `/client`.
 
-## By the numbers
+## Project impact
 
-Counts below were read from the live PostgreSQL database on August 25, 2026. A single weigh-in writes a raw measurement, a composition snapshot, FMI/FFMI values, and performance, fat, and muscle reports, then queues an insight job — so the store grows with history, not just with new readings.
+The following snapshot is written in the style of resume-ready project evidence. Counts were read from the live PostgreSQL database on August 25, 2026; they describe the current dataset, not production adoption.
 
-<p align="center">
-  <strong>2,104</strong> database rows &nbsp;·&nbsp;
-  <strong>720</strong> reports generated &nbsp;·&nbsp;
-  <strong>181</strong> scale measurements &nbsp;·&nbsp;
-  <strong>181</strong> composition snapshots
-</p>
+- **Turned 181 scale readings into a longitudinal health product** across four months of history, from April 20 through August 25, 2026.
+- **Generated 720 reports** across performance, fat, muscle, profile insights, and imported health data from a single measurement pipeline.
+- **Extracted 38 structured observations** from 3 imported health reports, organized across 8 report sections and 13 catalogued observation fields.
+- **Persisted 181 body-composition snapshots and 181 FMI/FFMI rows**, making each check-in useful for historical comparison rather than just a one-time readout.
+- **Completed 122 insight jobs and persisted 120 structured JSON-LD outputs** for reliable client retrieval and later inspection.
+- **Synced 14 workouts and 517 report comments** while keeping the full record in a 13 MB PostgreSQL database.
+
+### Dataset detail
 
 | Metric | Count |
 | --- | ---: |
@@ -49,8 +52,8 @@ Counts below were read from the live PostgreSQL database on August 25, 2026. A s
 | **Report comments** | 517 |
 | **Workouts synced** | 14 |
 | **Imported health reports** | 3 |
-
-720 reports is the sum of 181 performance, 181 fat, 181 muscle, 174 profile-insight, and 3 imported health reports. 122 insight reports completed with 120 structured JSON-LD payloads persisted for later retrieval. Measurements in this dataset span April 20–August 25, 2026; the database is 13 MB.
+| **Extracted observations** | 38 |
+| **Active history** | 4 months |
 
 ## Features
 
