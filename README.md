@@ -5,7 +5,7 @@
 
   **From a scale reading to a body you can track over time.**
 
-  A SwiftUI iOS client and a Bun/Fastify server that capture Bluetooth smart-scale measurements, derive body composition, and return insights, charts, and structured reports.
+  A SwiftUI iOS client and Bun/Fastify server that capture Bluetooth smart-scale measurements, derive body composition over gRPC, and fan each reading into asynchronous insight reports with gauges, trend charts, and structured JSON-LD outputs.
 
   [![Swift](https://img.shields.io/badge/Swift-5-orange.svg?style=flat-square)](https://www.swift.org)
   [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -13,60 +13,84 @@
   [![Bun](https://img.shields.io/badge/runtime-Bun_1.3-000000?logo=bun&logoColor=white)](https://bun.sh/)
   [![License](https://img.shields.io/badge/license-Apache--2.0%20%2F%20AGPL--3.0-4B5563.svg?style=flat-square)](./LICENSE)
 
-  [![reports generated](https://img.shields.io/badge/reports_generated-720-111111.svg?style=flat-square)](#project-impact)
-  [![observations extracted](https://img.shields.io/badge/observations_extracted-38-111111.svg?style=flat-square)](#project-impact)
-  [![months of history](https://img.shields.io/badge/longitudinal_history-4_months-111111.svg?style=flat-square)](#project-impact)
-  [![scale measurements](https://img.shields.io/badge/scale_measurements-181-111111.svg?style=flat-square)](#project-impact)
+  [![reports generated](https://img.shields.io/badge/reports_generated-736-111111.svg?style=flat-square)](#project-impact)
+  [![API handlers](https://img.shields.io/badge/HTTP_handlers-27-111111.svg?style=flat-square)](#engineering-highlights)
+  [![automated tests](https://img.shields.io/badge/automated_tests-53-111111.svg?style=flat-square)](#running-tests)
+  [![scale measurements](https://img.shields.io/badge/scale_measurements-185-111111.svg?style=flat-square)](#project-impact)
 </div>
 
 ---
 
 ## Overview
 
-Forma, the iOS app, signs the user in, selects a primary profile, and records weight, impedance, and heart rate from a Bluetooth Low Energy scale. Healthmaxxing Server authenticates that session, checks profile ownership, stores the raw reading, derives composition metrics, and queues an insight report. The app polls the job and presents gauges, trend charts, composition maps, and recommendations so a single weigh-in becomes a longitudinal record instead of an isolated number.
+Forma, the iOS app, signs the user in, selects a primary profile, and records weight, impedance, and heart rate from a Bluetooth Low Energy scale. Healthmaxxing Server authenticates that session, checks profile ownership, stores the raw reading, derives composition metrics through an external gRPC `MetricsModel`, and queues a BullMQ insight job on Redis. The app long-polls the job and presents gauges, trend charts, composition maps, and recommendations so a single weigh-in becomes a longitudinal record instead of an isolated number.
 
-The client is SwiftUI with Swift Charts, a dark glass-inspired visual system, Reduce Motion support, and a custom Cormorant Garamond wordmark. The server is TypeScript on Bun and Fastify, with Clerk authentication, PostgreSQL persistence, an external gRPC metrics model, and BullMQ-backed report jobs. Writes go through `/ingest`; profile, trend, and report reads go through `/client`.
+In the live PostgreSQL dataset (queried August 27, 2026), that pipeline has turned **185 scale measurements** spanning **April 20–August 27, 2026** into **736 reports**, **185 body-composition snapshots**, and **124 structured JSON-LD insight payloads**, across **27 HTTP handlers**, **30 tables**, and **15 applied migrations**. Insight jobs retry **3 times** with exponential **2-second** backoff; clients wait with a **1-second** poll interval, **25-second** default timeout, and **30-second** hard cap.
+
+The client is SwiftUI with Swift Charts, a dark glass-inspired visual system, Reduce Motion support, and a custom Cormorant Garamond wordmark. The server is TypeScript on Bun and Fastify, with Clerk authentication, PostgreSQL persistence, LangChain-backed report generation, and persisted job states (`queued` → `running` → `completed` / `failed`). Writes go through `/ingest`; profile, trend, and report reads go through `/client`.
+
+## Engineering highlights
+
+Concrete facts from the implementation and the live database. Dataset counts describe the current personal dataset, not production multi-tenant adoption.
+
+| Area | Evidence |
+| --- | --- |
+| **API surface** | **27** registered HTTP handlers: **22** `/client`, **4** `/ingest`, and **1** `GET /health` database probe. |
+| **Async report pipeline** | BullMQ queue `jobs` with **3** attempts, exponential backoff starting at **2,000 ms**, `removeOnComplete: 100`, and `removeOnFail: 500`. |
+| **Client wait contract** | Long-poll wait endpoint checks every **1 s**, defaults to **25 s**, and clamps `timeoutMs` to **30 s**. |
+| **Reliability controls** | **10 MB** Fastify body limit; per-profile measurement idempotency keys; stale insight jobs fail after **30 minutes**; in-flight jobs are failed on process startup; graceful `SIGINT`/`SIGTERM` shutdown closes API, worker, and DB. |
+| **Data model** | **30** PostgreSQL tables, **68** indexes (**29** secondary `idx_*`), **15** applied migrations (**13** SQL files in this checkout, plus **2** historical migrations retained in the live DB). |
+| **Composition depth** | Each snapshot stores **19** trendable body-composition factors across periods `7d`, `30d`, and `all`, plus FMI/FFMI and target-composition calculations. |
+| **Report fan-out** | One ingested measurement can produce performance, fat, muscle, and profile-insight report rows—about **4 reports per reading** in the live set (**736 / 185 ≈ 3.98**). |
+| **Insight outcomes** | **126** completed and **52** failed profile-insight jobs (**70.8%** completion of **178** insight reports); **124** structured JSON-LD outputs persisted for client retrieval. |
+| **Integrations** | Clerk auth, Redis/BullMQ workers, external gRPC `MetricsModel`, LangChain report agent with **24 h** prompt-cache retention, and optional document conversion via gRPC MarkItDown. |
+| **Verification** | **53** automated tests: **26** Bun tests across **5** files and **27** iOS tests (**20** Swift Testing unit cases + **7** XCUITest cases), plus `tsc --noEmit`. |
 
 ## Project impact
 
-The following snapshot is written in the style of resume-ready project evidence. Counts were read from the live PostgreSQL database on August 25, 2026; they describe the current dataset, not production adoption.
+The following snapshot was read from the live PostgreSQL database on **August 27, 2026**.
 
-- **Turned 181 scale readings into a longitudinal health product** across four months of history, from April 20 through August 25, 2026.
-- **Generated 720 reports** across performance, fat, muscle, profile insights, and imported health data from a single measurement pipeline.
-- **Extracted 38 structured observations** from 3 imported health reports, organized across 8 report sections and 13 catalogued observation fields.
-- **Persisted 181 body-composition snapshots and 181 FMI/FFMI rows**, making each check-in useful for historical comparison rather than just a one-time readout.
-- **Completed 122 insight jobs and persisted 120 structured JSON-LD outputs** for reliable client retrieval and later inspection.
-- **Synced 14 workouts and 517 report comments** while keeping the full record in a 13 MB PostgreSQL database.
+- **Turned 185 scale readings into a longitudinal health product** across four months of history, from April 20 through August 27, 2026 (~**1.4 readings/day** over **130** days).
+- **Generated 736 reports** across performance, fat, muscle, profile insights, and imported health data from a single measurement pipeline.
+- **Extracted 38 structured observations** from **3** imported health reports, organized across **8** report sections and **13** catalogued observation fields.
+- **Persisted 185 body-composition snapshots and 185 FMI/FFMI rows**, making each check-in useful for historical comparison rather than just a one-time readout.
+- **Completed 126 insight jobs and persisted 124 structured JSON-LD outputs** for reliable client retrieval and later inspection (**52** failed jobs remain observable in the database).
+- **Synced 14 workouts and 516 report comments** while keeping the full record in a **13 MB** PostgreSQL database (**2,151** rows across **30** tables; **2** accounts / **3** profiles).
 
 ### Dataset detail
 
 | Metric | Count |
 | --- | ---: |
-| **Database rows** | 2,104 |
-| **Scale measurements** | 181 |
-| **Body-composition snapshots** | 181 |
-| **FMI / FFMI rows** | 181 |
-| **Reports generated** | 720 |
-| **Insight reports completed** | 122 |
-| **Structured JSON-LD outputs** | 120 |
-| **Report comments** | 517 |
+| **Database rows** | 2,151 |
+| **Database size** | 13 MB |
+| **Tables / indexes** | 30 / 68 |
+| **Applied migrations** | 15 |
+| **Scale measurements** | 185 |
+| **Body-composition snapshots** | 185 |
+| **FMI / FFMI rows** | 185 |
+| **Reports generated** | 736 |
+| **Performance / fat / muscle reports** | 185 each |
+| **Profile-insight reports** | 178 |
+| **Insight jobs completed / failed** | 126 / 52 |
+| **Structured JSON-LD outputs** | 124 |
+| **Report comments** | 516 |
 | **Workouts synced** | 14 |
 | **Imported health reports** | 3 |
 | **Extracted observations** | 38 |
-| **Active history** | 4 months |
+| **Active history** | 4 months (Apr 20–Aug 27, 2026) |
 
 ## Features
 
 | Area | What the project provides |
 | --- | --- |
-| **Smart-scale recording** | Forma discovers a BLE scale on service `FFF0` / characteristic `FFF4`, streams weight → impedance → heart rate, validates packets, and submits `POST /ingest/add_measurement/v2` with profile id, weight, heartbeat, and impedance. |
+| **Smart-scale recording** | Forma discovers a BLE scale on service `FFF0` / characteristic `FFF4`, streams weight → impedance → heart rate, validates packets, and submits `POST /ingest/add_measurement/v2` with profile id, weight, heartbeat, impedance, and an optional `Idempotency-Key`. |
 | **Accounts and profiles** | Clerk signs the user in on device and on the server. Healthmaxxing Server upserts the Clerk identity into a local account, supports multiple profiles, and returns `404` when a profile does not belong to the caller. Forma stores the primary profile locally and gates the main tabs on it. |
-| **Body composition** | The server persists the raw measurement, then records BMI, fat and lean mass, water and protein percentages, muscle values, BMR, body age, visceral fat, FMI, FFMI, and target weight before the client renders them. |
+| **Body composition** | The server persists the raw measurement, then records BMI, fat and lean mass, water and protein percentages, muscle values, BMR, body age, visceral fat, FMI, FFMI, and target weight before the client renders them—**19** named factors are available for trend queries. |
 | **Personal insights** | Forma’s Insights tab shows overview, foundation, progress, recommended focus, physique archetype, and a 0–100 effort score from the latest completed report. |
 | **Performance, fat, and muscle** | Performance includes FFMI and excess-fat gauges, an FMI-vs-FFMI quadrant, composition flow, trends, and recomp vectors. Fat and muscle tabs show ratio, mass, visceral/subcutaneous split, skeletal muscle, and bone-mass trends when the report contains them. |
-| **Resilient report pipeline** | Ingest returns `jobId` and report ids. The server stores job state as `queued`, `running`, `completed`, or `failed`, retries three times with exponential 2-second backoff, and exposes a wait endpoint that polls once per second (25 s default, 30 s cap). Forma polls that job, supports pull-to-refresh, remembers pending jobs, and caches the latest completed report in protected Application Support storage. |
-| **Progress and recovery** | The server returns essentials, weight history, 30-day summaries, circumference history, and trends over `7d`, `30d`, or all history. An authenticated backfill recomputes missing or stale composition rows from stored measurements. |
-| **Native client experience** | SwiftUI tabs for Metrics, Record, and Settings; Swift Charts; adaptive system colors; Liquid Glass controls; sound and haptic preferences; iPhone and iPad layouts. |
+| **Resilient report pipeline** | Ingest returns `jobId` and report ids. The server stores job state as `queued`, `running`, `completed`, or `failed`, retries **three** times with exponential **2-second** backoff, expires jobs still pending after **30 minutes**, and exposes a wait endpoint that polls once per second (**25 s** default, **30 s** cap). Forma polls that job, supports pull-to-refresh, remembers pending jobs, and caches the latest completed report in protected Application Support storage. |
+| **Progress and recovery** | The server returns essentials, weight history, 30-day summaries, circumference history (up to **9** sites), and trends over `7d`, `30d`, or all history. An authenticated backfill recomputes missing or stale composition rows from stored measurements. |
+| **Native client experience** | SwiftUI tabs for Metrics, Record, and Settings; Swift Charts; adaptive system colors; Liquid Glass controls; sound and haptic preferences; iPhone and iPad layouts. Forma’s networking layer currently ships **8** typed `APIRequest` clients for profiles, ingest, and insight-job polling. |
 
 > [!NOTE]
 > Recording, Clerk authentication, profiles, settings, metrics dashboards, measurement ingestion, composition snapshots, and queued insight reports are implemented. Workout upsert exists on Healthmaxxing Server but is not exposed in Forma; the Workouts and Vitals tabs were removed. The `MetricsModel` gRPC calculator is a separate service and is not in this repository. Redis is required for report jobs and is not defined in `backend/docker-compose.yml`. Legacy split profile-registration routes and `GET /client/users` are deprecated, with a June 30, 2026 sunset; Forma already uses `/client/register/profiles/v2` and `/client/profiles`.
@@ -191,7 +215,7 @@ flowchart TB
 
 Forma networking is request-driven: each endpoint conforms to `APIRequest`, and `APIClient` builds `APIConfig.baseURL` + path, attaches a Clerk bearer token, encodes JSON, and decodes the typed response. UI state stays on the main actor; `InsightReportPayload` turns stored report JSON into presentation sections.
 
-On the server, Fastify schemas validate the main request shapes. Shared pre-handlers authenticate every `/ingest` and `/client` call, upsert the Clerk user into a local account, and scope profile access to that account. Database access goes through Bun’s SQL client and an adapter that rewrites positional query syntax for PostgreSQL; multi-row ownership changes and backfills use transactions. Insight generation is asynchronous: the worker requires persisted structured output before marking a job `completed`, and errors stay on the job row for the client to poll.
+On the server, Fastify schemas validate the main request shapes under a **10 MB** body limit. Shared pre-handlers authenticate every `/ingest` and `/client` call, upsert the Clerk user into a local account, and scope profile access to that account. Database access goes through Bun’s SQL client and an adapter that rewrites positional query syntax for PostgreSQL; multi-row ownership changes and backfills use transactions. Insight generation is asynchronous: the worker requires persisted structured output before marking a job `completed`, retries failed generations up to **3** times, and errors stay on the job row for the client to poll. Local PostgreSQL is managed by Docker Compose with a `pg_isready` health check every **2 s** (timeout **3 s**, **20** retries) and `restart: unless-stopped`.
 
 The two trees are independent runtimes. Forma currently targets the hosted API at `https://forma.aneeshpatne.com`; pointing it at a local Healthmaxxing Server means changing `ios/Forma/Networking/APIConfig.swift`.
 
@@ -206,8 +230,8 @@ The two trees are independent runtimes. Forma currently targets the hosted API a
 | **Networking** | URLSession, async/await, Codable; HTTP JSON to `/ingest` and `/client` |
 | **Device integration** | CoreBluetooth (`FFF0` / `FFF4`) |
 | **Persistence** | UserDefaults and protected JSON files on device; PostgreSQL 17 with Bun `SQL` |
-| **Jobs and metrics** | BullMQ 5.79 with Redis; gRPC `MetricsModel`; LangChain 1.5 with the configured model provider |
-| **Testing** | Swift Testing, XCUITest; 26 Bun tests across 5 files plus `tsc --noEmit` |
+| **Jobs and metrics** | BullMQ 5.79 with Redis; gRPC `MetricsModel`; LangChain 1.5 with the configured model provider (**24 h** prompt-cache retention) |
+| **Testing** | Swift Testing, XCUITest; **26** Bun tests across **5** files plus `tsc --noEmit`; **20** iOS unit tests and **7** UI tests |
 | **Local operations** | Docker Compose for PostgreSQL 17; optional macOS `launchd` agent for the server |
 
 ## Project structure
@@ -337,7 +361,7 @@ bun run test
 bun run typecheck
 ```
 
-`bun test` is equivalent. The suite has 26 focused tests across 5 files covering PostgreSQL query translation, trend calculations, profile-context formatting, composition-target calculations, metric validation, and insight-report payload normalization. It does not cover Clerk authentication, gRPC calculation, Redis jobs, or HTTP routes end to end.
+`bun test` is equivalent. The suite has **26** focused tests across **5** files covering PostgreSQL query translation, trend calculations, profile-context formatting, composition-target calculations, metric validation, and insight-report payload normalization. It does not cover Clerk authentication, gRPC calculation, Redis jobs, or HTTP routes end to end.
 
 **Forma**
 
@@ -352,7 +376,7 @@ xcodebuild test \
   -destination 'platform=iOS Simulator,name=<your simulator>'
 ```
 
-The unit suite covers BLE packet decoding, ordered measurement presentation, idle-timer restoration, chart helpers, and report payload/cache round-trips.
+The unit suite contains **20** Swift Testing cases covering BLE packet decoding, ordered measurement presentation, idle-timer restoration, chart helpers, and report payload/cache round-trips. The UI suite adds **7** XCUITest cases for tab shells, metrics loading/error states, and launch performance measurement. Combined with the Bun suite, the monorepo ships **53** automated tests.
 
 ## Roadmap
 
@@ -364,6 +388,7 @@ The unit suite covers BLE packet decoding, ordered measurement presentation, idl
 - Remove deprecated split registration and `/client/users` after remaining clients migrate
 - Add screenshot and UI regression coverage for Forma
 - Publish an OpenAPI reference from the existing Fastify route schemas
+- Capture API latency percentiles and report-job duration histograms in production observability
 
 ## License
 
