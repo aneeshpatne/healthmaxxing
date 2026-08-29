@@ -43,6 +43,7 @@ Concrete facts from the implementation and the live database. Dataset counts des
 | **Composition depth** | Each snapshot stores **19** trendable body-composition factors across periods `7d`, `30d`, and `all`, plus FMI/FFMI and target-composition calculations. |
 | **Report fan-out** | One ingested measurement can produce performance, fat, muscle, and profile-insight report rows—about **4 reports per reading** in the live set (**736 / 185 ≈ 3.98**). |
 | **Insight outcomes** | **126** completed and **52** failed profile-insight jobs (**70.8%** completion of **178** insight reports); **124** structured JSON-LD outputs persisted for client retrieval. |
+| **Token efficiency** | Jul 19 schema streamline cut structured cards **42→20 (−52%)** and observed mean total tokens / run **24,997→10,356 (−59%)**; median total **26,507→8,136 (−69%)**. See [Engineering outcomes](#engineering-outcomes). |
 | **Integrations** | Clerk auth, Redis/BullMQ workers, external gRPC `MetricsModel`, LangChain report agent with **24 h** prompt-cache retention, and optional document conversion via gRPC MarkItDown. |
 | **Verification** | **53** automated tests: **26** Bun tests across **5** files and **27** iOS tests (**20** Swift Testing unit cases + **7** XCUITest cases), plus `tsc --noEmit`. |
 
@@ -78,6 +79,98 @@ The following snapshot was read from the live PostgreSQL database on **August 27
 | **Imported health reports** | 3 |
 | **Extracted observations** | 38 |
 | **Active history** | 4 months (Apr 20–Aug 27, 2026) |
+
+## Engineering outcomes
+
+Aggregate improvements since inception across both packages in this monorepo: **Healthmaxxing Server** (`backend/`, from **2026-05-09**) and **Forma** (`ios/`, from **2026-06-19**). Dataset and token figures describe the personal/dev workload and observed worker logs — not production multi-tenant traffic or a controlled A/B on identical prompts.
+
+### Cross-stack ROI
+
+| Metric | Before → After | Delta |
+| --- | --- | --- |
+| Insight report structured cards | **42 → 20** top-level cards | **−52%** (Jul 19, 2026 schema streamline) |
+| Insights client cards (schema v2) | Broad narrative set → **3** (`factor` / `key_trend` / `progress`) | Lean coach brief Forma renders today |
+| Mean tokens / insight run | **24,997 → 10,356** | **−59%** (48 runs before vs 100 after Jul 19) |
+| Mean input tokens / run | **18,944 → 7,969** | **−58%** |
+| Median total tokens / run | **26,507 → 8,136** | **−69%** |
+| Measurement fan-out | 1 reading → composition + FMI/FFMI + perf/fat/muscle + insight job | **~4 reports / reading** in the live set (**736 / 185 ≈ 3.98**) |
+
+### Report schema compression (`backend/`)
+
+Card counts are the top-level keys under `insights`, `performance`, `fat`, and `muscle` in `backend/src/ai/toolsNew.ts`.
+
+| Schema revision | Date | Total cards | Insights | Performance | Fat | Muscle |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Before streamline | 2026-07-19 parent | 42 | 13 | 12 | 9 | 8 |
+| After streamline | 2026-07-19 | 20 | 7 | 6 | 5 | 2 |
+| Current `HEAD` (schema v2) | post Aug slims | 20 | 3 | 6 | 6 | 5 |
+
+July 19 cut the structured output surface in half. Later work kept the same **20**-card budget while reshaping Insights into the three-card layout and consolidating the agent `userContext` blob (Aug 9).
+
+### Observed token spend (`backend/` worker logs)
+
+Parsed from `[agentOrchestratorNew] total token spend` lines in the local launchd server log, timestamped from adjacent Pino records. The Jul 19 change day is excluded.
+
+| Cohort | Runs | Mean input | Mean output | Mean total | Median total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Before streamline (Jul 2–18, 2026) | 48 | 18,944 | 6,053 | 24,997 | 26,507 |
+| After streamline (Jul 20–Aug 29, 2026) | 100 | 7,969 | 2,387 | 10,356 | 8,136 |
+
+The immediate post-streamline window (Jul 20–Aug 8) was leanest—mean total about **8,041** across **43** runs—before later schema-v2 and prompt iterations raised August averages slightly while staying well below the pre-streamline baseline.
+
+### Server reliability & API surface (`backend/`)
+
+| Control | Metric |
+| --- | --- |
+| HTTP handlers | **27** (**22** `/client`, **4** `/ingest`, **1** `/health`) |
+| Migrations | **13** SQL files in checkout; **15** applied in the live DB |
+| Initial schema → now | **27** tables at birth → **30** tables / **68** indexes live |
+| Request body limit | **10 MB** |
+| Report retries | **3** attempts, exponential backoff from **2,000 ms** |
+| Stale job expiry | fail active jobs older than **30 minutes** |
+| Startup recovery | fail in-flight `pending`/`queued`/`running` jobs on process start |
+| Client wait contract | poll **1 s**; default **25 s**; hard cap **30 s** |
+| Idempotency | per-profile measurement keys; replay returns `replayed: true` |
+| Auth | Clerk on every `/ingest` and `/client` route; foreign profile → **404** |
+| Deprecated routes sunset | **2026-06-30** (split registration, `GET /client/users`) |
+| Source scale | **36** TypeScript files under `backend/src/` (~**11.0k** LOC) |
+| Bun tests | **26** across **5** files (+ `tsc --noEmit`) |
+
+### Forma client growth & product surface (`ios/`)
+
+| Metric | Value |
+| --- | --- |
+| App Swift files | **36** under `ios/Forma/` (~**9.6k** LOC) |
+| Design system | `FormaTheme.swift` ≈ **1,991** LOC; shared motion, spacing, typography, gauges, charts |
+| Root tabs | **3** — Metrics, Record, Settings (Workouts / Vitals placeholder shells removed) |
+| Metrics sub-tabs | **4** — Insights, Performance, Fat, Muscle |
+| Typed API routes | **8** (profiles ×3, ingest ×1, insight jobs/reports ×4) |
+| BLE contract | service **FFF0**, notify **FFF4**; weight → impedance → heart rate with checksum validation |
+| Report cache | per-profile JSON in Application Support with **atomic** + **completeFileProtection** writes |
+| Wait polling | `timeoutMs` default **25,000**, clamped to **≤30,000** |
+| Lazy metric lists | **6** `LazyVStack` sites across Insights / Fat / Muscle (and related chrome) |
+| Motion language | `FormaMotion.tap` **100 ms**, `fast` **160 ms**, `standard` **280 ms**, plus selection / data-reveal / brand tokens |
+| Reduce Motion | **14** `accessibilityReduceMotion` call sites |
+| Automation hooks | **13** `accessibilityIdentifier` values |
+| Unit tests | **20** Swift Testing `@Test` cases |
+| UI tests | **7** XCUITest methods (including launch-performance harness) |
+| Combined verification | **53** automated tests (26 Bun + 27 iOS) |
+
+### Timeline of high-signal improvements
+
+| When | Package | Outcome |
+| --- | --- | --- |
+| **2026-05-09** | Server | Fastify ingest / bootstrap |
+| **2026-06-19** | Client | Forma scaffold |
+| **2026-06-29–30** | Client | Clerk auth, BLE, networking, profiles, settings |
+| **2026-07-01** | Client | Insight payload + `MetricsReportStore` |
+| **2026-07-02–18** | Server | Pre-sweep agent spend ≈ **25k** tokens / run |
+| **2026-07-11–14** | Client | Design system; disk report cache; staged Record flow |
+| **2026-07-19** | Server | Cards **42→20**; token drop begins |
+| **2026-07-20** | Client | API harden + lazy Fat/Muscle charts + cheaper series updates |
+| **2026-08-03–05** | Client | Mint palette; native motion tokens; drop Workouts/Vitals shells |
+| **2026-08-09** | Both | Consolidated `userContext`; Insights **3-card** shape; stale-job + startup fail |
+| **2026-08-27** | Server | Live DB snapshot in Project impact (**185** measurements, **736** reports) |
 
 ## Features
 
