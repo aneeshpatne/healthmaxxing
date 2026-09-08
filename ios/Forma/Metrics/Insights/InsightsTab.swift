@@ -13,12 +13,70 @@ struct InsightsTab: View {
     var body: some View {
         // Match Fat and Muscle: defer off-screen narrative cards and charts.
         LazyVStack(spacing: FormaSpacing.cardGap) {
-            if let factor = reportPayload?.factor {
-                PriorityFactorCard(factor: factor)
-                    .formaEntrance(order: 0)
-            }
+            if reportPayload?.usesNewInsightsShape == true {
+                if let factor = reportPayload?.factor {
+                    PriorityFactorCard(factor: factor)
+                        .formaEntrance(order: 0)
+                }
 
-            if let overview = reportPayload?.overview {
+                if let keyTrend = reportPayload?.keyTrend {
+                    InsightSectionCard(
+                        title: keyTrend.title ?? "Key Trend",
+                        headline: keyTrend.headline,
+                        body: keyTrend.comment,
+                        calloutText: keyTrend.remark?.text ?? "",
+                        calloutIcon: keyTrend.remark?.marker?.iconName ?? "chart.xyaxis.line",
+                        calloutTint: keyTrend.remark?.color ?? .secondary
+                    ) {
+                        VStack(alignment: .leading, spacing: FormaSpacing.sm) {
+                            ProgressTrendChart(
+                                trendData: keyTrend.trendData,
+                                showsSignedValues: false,
+                                includeZero: false
+                            )
+                            InsightEvidenceLabel(evidence: keyTrend.evidence)
+                        }
+                    }
+                    .formaEntrance(order: 1)
+                }
+
+                if let progress = reportPayload?.progress {
+                    InsightSectionCard(
+                        title: progress.title ?? "Progress Direction",
+                        headline: progress.headline,
+                        body: progress.comment,
+                        calloutText: progress.remark?.text ?? "",
+                        calloutIcon: progress.remark?.marker?.iconName ?? "arrow.up.right",
+                        calloutTint: progress.remark?.color ?? .secondary
+                    ) {
+                        VStack(alignment: .leading, spacing: FormaSpacing.sm) {
+                            ProgressTrendChart(
+                                trendData: progress.trendData,
+                                showsSignedValues: true,
+                                includeZero: true
+                            )
+                            InsightEvidenceLabel(evidence: progress.evidence)
+                        }
+                    }
+                    .formaEntrance(order: 2)
+                }
+            } else {
+                legacyInsights
+            }
+        }
+        .padding(.top, FormaSpacing.xxs)
+        .padding(.bottom, FormaSpacing.xl)
+        .padding(.horizontal, FormaSpacing.screenGutter)
+    }
+
+    @ViewBuilder
+    private var legacyInsights: some View {
+        if let factor = reportPayload?.factor {
+            PriorityFactorCard(factor: factor)
+                .formaEntrance(order: 0)
+        }
+
+        if let overview = reportPayload?.overview {
                 InsightSectionCard(
                     title: overview.title ?? overview.displayTitle,
                     headline: overview.headline ?? overview.displayComment,
@@ -26,9 +84,9 @@ struct InsightsTab: View {
                     calloutIcon: overview.remark?.marker?.iconName ?? "flame.fill",
                     calloutTint: overview.remark?.marker?.color ?? .secondary
                 )
-            }
+        }
 
-            if let foundation = reportPayload?.foundation {
+        if let foundation = reportPayload?.foundation {
                 InsightSectionCard(
                     title: foundation.title ?? foundation.displayTitle,
                     headline: foundation.headline ?? foundation.displayComment,
@@ -37,9 +95,9 @@ struct InsightsTab: View {
                     calloutIcon: foundation.remark?.marker?.iconName ?? "checkmark.circle.fill",
                     calloutTint: foundation.remark?.marker?.color ?? .secondary
                 )
-            }
+        }
 
-            if let momentum = reportPayload?.momentum {
+        if let momentum = reportPayload?.momentum {
                 InsightSectionCard(
                     title: momentum.title ?? momentum.displayTitle,
                     headline: momentum.headline ?? momentum.displayComment,
@@ -48,9 +106,9 @@ struct InsightsTab: View {
                     calloutIcon: momentum.remark?.marker?.iconName ?? "bolt.fill",
                     calloutTint: momentum.remark?.marker?.color ?? .secondary
                 )
-            }
+        }
 
-            if let progress = reportPayload?.progress {
+        if let progress = reportPayload?.progress {
                 InsightSectionCard(
                     title: progress.title ?? progress.displayTitle,
                     headline: progress.headline ?? progress.displayComment,
@@ -61,9 +119,9 @@ struct InsightsTab: View {
                 ) {
                     ProgressTrendChart(trendData: progress.trendData)
                 }
-            }
+        }
 
-            if let lever = reportPayload?.lever {
+        if let lever = reportPayload?.lever {
                 InsightSectionCard(
                     title: lever.title ?? lever.displayTitle,
                     headline: lever.headline ?? lever.displayComment,
@@ -72,9 +130,9 @@ struct InsightsTab: View {
                     calloutIcon: lever.remark?.marker?.iconName ?? "arrow.up.forward.circle.fill",
                     calloutTint: lever.remark?.marker?.color ?? .secondary
                 )
-            }
+        }
 
-            if let physiqueArchetype = reportPayload?.physiqueArchetype {
+        if let physiqueArchetype = reportPayload?.physiqueArchetype {
                 InsightSectionCard(
                     title: physiqueArchetype.title ?? "Physique",
                     headline: physiqueArchetype.headline ?? physiqueArchetype.comment,
@@ -91,9 +149,9 @@ struct InsightsTab: View {
                         .formaSurface(.chart, padding: nil)
                         .accessibilityLabel("\(physiqueArchetype.bodyType?.displayName ?? "Typical") body type illustration")
                 }
-            }
+        }
 
-            if let effortScore, let effortSection = reportPayload?.effortScore {
+        if let effortScore, let effortSection = reportPayload?.effortScore {
                 EffortScoreCard(
                     score: effortScore,
                     title: effortSection.title ?? "Effort Score",
@@ -101,11 +159,7 @@ struct InsightsTab: View {
                     calloutIcon: effortSection.remark?.marker?.iconName ?? "chart.line.downtrend.xyaxis",
                     calloutTint: effortSection.remark?.marker?.color ?? .secondary
                 )
-            }
         }
-        .padding(.top, FormaSpacing.xxs)
-        .padding(.bottom, FormaSpacing.xl)
-        .padding(.horizontal, FormaSpacing.screenGutter)
     }
 }
 
@@ -116,7 +170,7 @@ private struct PriorityFactorCard: View {
     let factor: InsightReportFactorSection
 
     private var tint: Color {
-        factor.remark?.marker?.color ?? factor.factorColor?.color ?? .sleekAccent
+        factor.remark?.color ?? factor.factorColor?.color ?? .sleekAccent
     }
     private var calloutText: String {
         factor.remark?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -139,6 +193,10 @@ private struct PriorityFactorCard: View {
                     .foregroundStyle(.secondary)
                     .lineSpacing(FormaSpacing.xxs)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let evidence = factor.evidence {
+                InsightEvidenceLabel(evidence: evidence)
             }
 
             if !calloutText.isEmpty, calloutText != factor.comment {
@@ -334,6 +392,8 @@ private extension InsightReportFactorSection {
         switch factor {
         case "body_fat_pct", "fatPercent":
             return String(format: "%.1f%%", value)
+        case let metric? where metric.hasSuffix("_kg"):
+            return String(format: "%.1f kg", value)
         default:
             return String(format: value.truncatingRemainder(dividingBy: 1) == 0 ? "%.0f" : "%.1f", value)
         }
@@ -354,6 +414,8 @@ private extension InsightReportProgressSection {
 
 private struct ProgressTrendChart: View {
     let trendData: [String: [InsightReportTrendPoint]]?
+    var showsSignedValues = false
+    var includeZero = false
 
     private var data: [FatMetric] {
         let reportData = (trendData ?? [:]).flatMap { key, points in
@@ -376,13 +438,49 @@ private struct ProgressTrendChart: View {
                     metric: $0.metric,
                     color: colorForMetric($0.metric)
                 )
-            }
+            },
+            unitsByMetric: unitsByMetric,
+            showsSignedValues: showsSignedValues,
+            includeZero: includeZero
         )
+    }
+
+    private var unitsByMetric: [String: String] {
+        Dictionary(uniqueKeysWithValues: (trendData ?? [:]).keys.map {
+            ($0.displayTrendLabel, $0.insightTrendUnit)
+        })
     }
 
     private func colorForMetric(_ metric: String) -> Color {
         let lower = metric.lowercased()
         return FormaChartMetric.infer(from: lower).color
+    }
+}
+
+private struct InsightEvidenceLabel: View {
+    let evidence: InsightReportEvidence?
+
+    var body: some View {
+        if let evidence {
+            HStack(spacing: FormaSpacing.xs) {
+                Image(systemName: confidenceIcon(evidence.confidence))
+                Text("\(evidence.readingCount) \(evidence.readingCount == 1 ? "reading" : "readings")")
+                Text("·")
+                    .accessibilityHidden(true)
+                Text("\(evidence.confidence.capitalized) confidence")
+            }
+            .font(FormaTypography.micro)
+            .foregroundStyle(.tertiary)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    private func confidenceIcon(_ confidence: String) -> String {
+        switch confidence {
+        case "high": "checkmark.seal.fill"
+        case "medium": "circle.lefthalf.filled"
+        default: "info.circle.fill"
+        }
     }
 }
 

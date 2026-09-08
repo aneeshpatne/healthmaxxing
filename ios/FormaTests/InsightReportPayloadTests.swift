@@ -3,6 +3,31 @@ import Testing
 @testable import Forma
 
 struct InsightReportPayloadTests {
+    @Test func rejectsStructurallyInconsistentReportSchema() {
+        #expect(InsightReportPayload(data: .object([:])) == nil)
+        #expect(InsightReportPayload(data: .object([
+            "performance": .array([])
+        ])) == nil)
+        #expect(InsightReportPayload(data: .object([
+            "fat": .object([
+                "fat_ratio": .object([
+                    "preprocess": .string("unexpected")
+                ])
+            ])
+        ])) == nil)
+        #expect(InsightReportPayload(data: .object([
+            "muscle": .object([
+                "muscle_mass": .object([
+                    "preprocess": .object([
+                        "trends": .object([
+                            "muscleMassKg": .string("unexpected")
+                        ])
+                    ])
+                ])
+            ])
+        ])) == nil)
+    }
+
     @Test func reportRoundTripsForPersistentCache() throws {
         let report = InsightReport(
             reportId: UUID(),
@@ -23,6 +48,63 @@ struct InsightReportPayloadTests {
         let decoded = try JSONDecoder().decode(InsightReport.self, from: encoded)
 
         #expect(decoded == report)
+    }
+
+    @Test func parsesNewThreeCardInsightsShape() {
+        let evidence: JSONValue = .object([
+            "asOf": .string("2026-08-09T11:56:09.332Z"),
+            "readingCount": .number(10),
+            "confidence": .string("high")
+        ])
+        let remark: JSONValue = .object([
+            "marker": .string("complement"),
+            "factor_color": .string("green"),
+            "text": .string("Strong direction.")
+        ])
+        let point: JSONValue = .object([
+            "createdAt": .string("2026-08-09T11:56:09.332Z"),
+            "value": .number(31.4)
+        ])
+        let payload = InsightReportPayload(data: .object([
+            "insights": .object([
+                "factor": .object([
+                    "factor": .string("skeletal_muscle_kg"),
+                    "factor_color": .string("green"),
+                    "comment": .string("A clear strength."),
+                    "remark": remark,
+                    "preprocess": .object(["value": .number(31.4), "evidence": evidence])
+                ]),
+                "key_trend": .object([
+                    "title": .string("Key Trend"),
+                    "headline": .string("Muscle increased"),
+                    "comment": .string("A gradual increase."),
+                    "remark": remark,
+                    "metric": .string("skeletal_muscle_kg"),
+                    "preprocess": .object([
+                        "trends": .object(["skeletal_muscle_kg": .array([point])]),
+                        "evidence": evidence
+                    ])
+                ]),
+                "progress": .object([
+                    "title": .string("Progress Direction"),
+                    "headline": .string("Muscle holds"),
+                    "comment": .string("Useful direction."),
+                    "remark": remark,
+                    "trends": .array([.string("muscle_mass_kg")]),
+                    "preprocess": .object([
+                        "trends": .object(["muscle_mass_kg": .array([])]),
+                        "evidence": evidence
+                    ])
+                ])
+            ])
+        ]))
+
+        #expect(payload?.usesNewInsightsShape == true)
+        #expect(payload?.factor?.evidence?.readingCount == 10)
+        #expect(payload?.keyTrend?.metric == "skeletal_muscle_kg")
+        #expect(payload?.keyTrend?.trendData["skeletal_muscle_kg"]?.count == 1)
+        #expect(payload?.keyTrend?.remark?.factorColor == .green)
+        #expect(payload?.progress?.trendData["muscle_mass_kg"]?.isEmpty == true)
     }
 
     @Test func parsesUpdatedBodyFatAndMuscleTrends() {

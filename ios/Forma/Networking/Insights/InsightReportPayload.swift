@@ -85,24 +85,31 @@ struct InsightReportPayload: Equatable {
     let progress: InsightReportProgressSection?
     let lever: InsightReportSection?
     let factor: InsightReportFactorSection?
+    let keyTrend: InsightReportKeyTrendSection?
     let physiqueArchetype: InsightReportPhysiqueSection?
     let effortScore: InsightReportEffortScoreSection?
     let performance: [String: InsightReportMetricSection]
     let fat: [String: InsightReportMetricSection]
     let muscle: [String: InsightReportMetricSection]
+    let usesNewInsightsShape: Bool
 
     init?(data: JSONValue?) {
-        guard let root = data?.objectValue else {
+        guard let root = data?.objectValue,
+              Self.hasValidSchema(root) else {
             return nil
         }
 
         let insights = root["insights"]?.objectValue ?? [:]
+        self.usesNewInsightsShape = insights["factor"] != nil
+            && insights["key_trend"] != nil
+            && insights["progress"] != nil
         self.overview = InsightReportSection(json: insights["overview"])
         self.foundation = InsightReportSection(json: insights["foundation"])
         self.momentum = InsightReportSection(json: insights["momentum"])
         self.progress = InsightReportProgressSection(json: insights["progress"])
         self.lever = InsightReportSection(json: insights["lever"])
         self.factor = InsightReportFactorSection(json: insights["factor"])
+        self.keyTrend = InsightReportKeyTrendSection(json: insights["key_trend"])
         self.physiqueArchetype = InsightReportPhysiqueSection(json: insights["physique_archetype"])
         self.effortScore = InsightReportEffortScoreSection(json: insights["effort_score"])
         self.performance = Self.metricSections(from: root["performance"])
@@ -113,6 +120,182 @@ struct InsightReportPayload: Equatable {
     private static func metricSections(from json: JSONValue?) -> [String: InsightReportMetricSection] {
         (json?.objectValue ?? [:]).compactMapValues(InsightReportMetricSection.init(json:))
     }
+
+    private static func hasValidSchema(_ root: [String: JSONValue]) -> Bool {
+        let sectionKeys = ["insights", "performance", "fat", "muscle"]
+        guard sectionKeys.contains(where: { root[$0] != nil }) else { return false }
+
+        for key in sectionKeys {
+            guard let section = root[key] else { continue }
+            guard let object = section.objectValue else { return false }
+
+            if key == "insights" {
+                guard object.values.allSatisfy({ validateInsightSection($0) }) else { return false }
+            } else {
+                guard object.values.allSatisfy({ validateMetricSection($0) }) else { return false }
+            }
+        }
+
+        if let insights = root["insights"]?.objectValue {
+            let hasNewShape = insights["factor"] != nil
+                && insights["key_trend"] != nil
+                && insights["progress"] != nil
+            if insights["key_trend"] != nil && !hasNewShape { return false }
+            if hasNewShape && !validateNewInsights(insights) { return false }
+        }
+
+        return true
+    }
+
+    private static let insightTrendMetrics: Set<String> = [
+        "body_fat_pct",
+        "fat_mass_kg",
+        "muscle_mass_kg",
+        "skeletal_muscle_kg",
+        "visceral_fat",
+        "subcutaneous_fat_mass_kg"
+    ]
+
+    private static func validateNewInsights(_ insights: [String: JSONValue]) -> Bool {
+        guard let factor = insights["factor"]?.objectValue,
+              factor["factor"]?.stringValue != nil,
+              factor["comment"]?.stringValue != nil,
+              validateRequiredFactorColor(factor["factor_color"]),
+              validateRequiredRemark(factor["remark"]),
+              let factorPreprocess = factor["preprocess"]?.objectValue,
+              validateEvidence(factorPreprocess["evidence"]),
+              let keyTrend = insights["key_trend"]?.objectValue,
+              validateNarrativeFields(keyTrend),
+              validateRequiredRemark(keyTrend["remark"]),
+              let metric = keyTrend["metric"]?.stringValue,
+              insightTrendMetrics.contains(metric),
+              let keyTrendPreprocess = keyTrend["preprocess"]?.objectValue,
+              validateSelectedTrends(keyTrendPreprocess["trends"], allowedMetrics: [metric], maximumCount: 1),
+              validateEvidence(keyTrendPreprocess["evidence"]),
+              let progress = insights["progress"]?.objectValue,
+              validateNarrativeFields(progress),
+              validateRequiredRemark(progress["remark"]),
+              let selectedMetricValues = progress["trends"]?.arrayValue,
+              selectedMetricValues.allSatisfy({ $0.stringValue != nil }),
+              (1...3).contains(selectedMetricValues.count),
+              Set(selectedMetricValues.compactMap(\.stringValue)).count == selectedMetricValues.count,
+              selectedMetricValues.compactMap(\.stringValue).allSatisfy({ insightTrendMetrics.contains($0) }),
+              let progressPreprocess = progress["preprocess"]?.objectValue,
+              validateSelectedTrends(
+                progressPreprocess["trends"],
+                allowedMetrics: Set(selectedMetricValues.compactMap(\.stringValue)),
+                maximumCount: 3
+              ),
+              validateEvidence(progressPreprocess["evidence"])
+        else { return false }
+
+        return true
+    }
+
+    private static func validateNarrativeFields(_ object: [String: JSONValue]) -> Bool {
+        object["title"]?.stringValue != nil
+            && object["headline"]?.stringValue != nil
+            && object["comment"]?.stringValue != nil
+    }
+
+    private static func validateRequiredFactorColor(_ json: JSONValue?) -> Bool {
+        guard let color = json?.stringValue else { return false }
+        return FactorColor(rawValue: color) != nil
+    }
+
+    private static func validateRequiredRemark(_ json: JSONValue?) -> Bool {
+        guard let object = json?.objectValue,
+              let marker = object["marker"]?.stringValue,
+              RemarkMarker(rawValue: marker) != nil,
+              validateRequiredFactorColor(object["factor_color"]),
+              object["text"]?.stringValue != nil else { return false }
+        return true
+    }
+
+    private static func validateEvidence(_ json: JSONValue?) -> Bool {
+        guard let json else { return true }
+        guard let object = json.objectValue,
+              object["asOf"]?.stringValue != nil,
+              let readingCount = object["readingCount"]?.numberValue,
+              readingCount >= 0,
+              readingCount.rounded() == readingCount,
+              let confidence = object["confidence"]?.stringValue,
+              ["low", "medium", "high"].contains(confidence) else { return false }
+        if let periodStart = object["periodStart"], periodStart != .null, periodStart.stringValue == nil {
+            return false
+        }
+        if let periodEnd = object["periodEnd"], periodEnd.stringValue == nil { return false }
+        return true
+    }
+
+    private static func validateSelectedTrends(
+        _ json: JSONValue?,
+        allowedMetrics: Set<String>,
+        maximumCount: Int
+    ) -> Bool {
+        guard let trends = json?.objectValue,
+              !trends.isEmpty,
+              trends.count <= maximumCount,
+              Set(trends.keys).isSubset(of: allowedMetrics) else { return false }
+        return validateTrends(in: json)
+    }
+
+    private static func validateInsightSection(_ json: JSONValue) -> Bool {
+        guard let object = json.objectValue else { return false }
+
+        guard validateRemark(object["remark"]) else { return false }
+        if let colorJSON = object["factor_color"], colorJSON != .null {
+            guard let color = colorJSON.stringValue,
+                  FactorColor(rawValue: color) != nil else { return false }
+        }
+        if let bodyTypeJSON = object["body_type"], bodyTypeJSON != .null {
+            guard let bodyType = bodyTypeJSON.stringValue,
+                  BodyType(rawValue: bodyType) != nil else { return false }
+        }
+        if let preprocess = object["preprocess"], preprocess.objectValue == nil {
+            return false
+        }
+
+        return validateTrends(in: object["preprocess"]?.objectValue?["trends"])
+    }
+
+    private static func validateMetricSection(_ json: JSONValue) -> Bool {
+        guard let object = json.objectValue else { return false }
+
+        guard validateRemark(object["remark"]) else { return false }
+        if let colorJSON = object["factor_color"], colorJSON != .null {
+            guard let color = colorJSON.stringValue,
+                  FactorColor(rawValue: color) != nil else { return false }
+        }
+        if let preprocess = object["preprocess"], preprocess.objectValue == nil {
+            return false
+        }
+
+        return validateTrends(in: object["preprocess"]?.objectValue?["trends"])
+    }
+
+    private static func validateRemark(_ json: JSONValue?) -> Bool {
+        guard let json else { return true }
+        if case .null = json { return true }
+        guard let remark = json.objectValue else { return false }
+        guard let markerJSON = remark["marker"] else { return true }
+        guard let marker = markerJSON.stringValue else { return false }
+        return RemarkMarker(rawValue: marker) != nil
+    }
+
+    private static func validateTrends(in json: JSONValue?) -> Bool {
+        guard let json else { return true }
+        guard let trends = json.objectValue else { return false }
+
+        return trends.values.allSatisfy { trend in
+            guard let points = trend.arrayValue else { return false }
+            return points.allSatisfy { point in
+                guard let object = point.objectValue else { return false }
+                return object["createdAt"]?.stringValue != nil
+                    && object["value"]?.numberValue != nil
+            }
+        }
+    }
 }
 
 struct InsightReportFactorSection: Equatable {
@@ -121,6 +304,7 @@ struct InsightReportFactorSection: Equatable {
     let comment: String?
     let remark: InsightReportRemark?
     let value: Double?
+    let evidence: InsightReportEvidence?
 
     init?(json: JSONValue?) {
         guard let object = json?.objectValue else { return nil }
@@ -129,6 +313,51 @@ struct InsightReportFactorSection: Equatable {
         self.comment = object["comment"]?.stringValue
         self.remark = InsightReportRemark(json: object["remark"])
         self.value = object["preprocess"]?.objectValue?["value"]?.numberValue
+        self.evidence = InsightReportEvidence(json: object["preprocess"]?.objectValue?["evidence"])
+    }
+}
+
+struct InsightReportKeyTrendSection: Equatable {
+    let title: String?
+    let headline: String?
+    let comment: String?
+    let remark: InsightReportRemark?
+    let metric: String?
+    let trendData: [String: [InsightReportTrendPoint]]
+    let evidence: InsightReportEvidence?
+
+    init?(json: JSONValue?) {
+        guard let object = json?.objectValue else { return nil }
+        self.title = object["title"]?.stringValue
+        self.headline = object["headline"]?.stringValue
+        self.comment = object["comment"]?.stringValue
+        self.remark = InsightReportRemark(json: object["remark"])
+        self.metric = object["metric"]?.stringValue
+        self.trendData = InsightReportMetricSection.trendSections(
+            from: object["preprocess"]?.objectValue?["trends"]
+        )
+        self.evidence = InsightReportEvidence(json: object["preprocess"]?.objectValue?["evidence"])
+    }
+}
+
+struct InsightReportEvidence: Equatable {
+    let asOf: String
+    let periodStart: String?
+    let periodEnd: String?
+    let readingCount: Int
+    let confidence: String
+
+    init?(json: JSONValue?) {
+        guard let object = json?.objectValue,
+              let asOf = object["asOf"]?.stringValue,
+              let readingCount = object["readingCount"]?.numberValue,
+              let confidence = object["confidence"]?.stringValue else { return nil }
+
+        self.asOf = asOf
+        self.periodStart = object["periodStart"]?.stringValue
+        self.periodEnd = object["periodEnd"]?.stringValue
+        self.readingCount = Int(readingCount)
+        self.confidence = confidence
     }
 }
 
@@ -157,6 +386,7 @@ struct InsightReportProgressSection: Equatable {
     let remark: InsightReportRemark?
     let trends: [String]
     let trendData: [String: [InsightReportTrendPoint]]
+    let evidence: InsightReportEvidence?
 
     init?(json: JSONValue?) {
         guard let object = json?.objectValue else {
@@ -169,6 +399,7 @@ struct InsightReportProgressSection: Equatable {
         self.remark = InsightReportRemark(json: object["remark"])
         self.trends = object["trends"]?.arrayValue?.compactMap(\.stringValue) ?? []
         self.trendData = InsightReportMetricSection.trendSections(from: object["preprocess"]?.objectValue?["trends"])
+        self.evidence = InsightReportEvidence(json: object["preprocess"]?.objectValue?["evidence"])
     }
 }
 
@@ -212,6 +443,7 @@ struct InsightReportEffortScoreSection: Equatable {
 
 struct InsightReportRemark: Equatable {
     let marker: RemarkMarker?
+    let factorColor: FactorColor?
     let text: String?
 
     init?(json: JSONValue?) {
@@ -224,7 +456,12 @@ struct InsightReportRemark: Equatable {
         } else {
             self.marker = nil
         }
+        self.factorColor = object["factor_color"]?.stringValue.flatMap(FactorColor.init(rawValue:))
         self.text = object["text"]?.stringValue
+    }
+
+    var color: Color {
+        factorColor?.color ?? marker?.color ?? .secondary
     }
 }
 
@@ -397,6 +634,14 @@ extension String {
             return "Muscle Rate"
         default:
             return displayRemarkMarker
+        }
+    }
+
+    var insightTrendUnit: String {
+        switch self {
+        case "body_fat_pct": "%"
+        case "visceral_fat": ""
+        default: "kg"
         }
     }
 }
