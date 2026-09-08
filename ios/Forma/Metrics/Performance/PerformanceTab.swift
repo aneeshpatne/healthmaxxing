@@ -12,8 +12,12 @@ private extension Color {
 
 private extension InsightReportMetricSection {
     var hasWeightComparisonData: Bool {
-        firstNumber("currentWeightKg", "currentWeight") != nil
-            && firstNumber("targetWeightKg", "targetWeight") != nil
+        let currentWeight = firstNumber("currentWeightKg", "currentWeight")
+            ?? compositionWeight("current")
+        let targetWeight = firstNumber("targetWeightKg", "targetWeight")
+            ?? compositionNumber("target", "weightKg")
+            ?? compositionWeight("target")
+        return currentWeight != nil && targetWeight != nil
     }
 
     var hasLeanFatVectorData: Bool {
@@ -47,6 +51,12 @@ private extension InsightReportMetricSection {
 
     func compositionNumber(_ phase: String, _ key: String) -> Double? {
         nestedNumber(phase, key)
+    }
+
+    func compositionWeight(_ phase: String) -> Double? {
+        guard let lean = compositionNumber(phase, "leanMassKg"),
+              let fat = compositionNumber(phase, "fatMassKg") else { return nil }
+        return lean + fat
     }
 
     func derivedLean(weight: Double?, fat: Double?) -> Double? {
@@ -205,7 +215,7 @@ struct CompositionMapCard: View {
 
     private var positionText: some View {
         Text("Your Position (\(String(format: "%.2f", ffmi)), \(String(format: "%.2f", fmi)))")
-            .font(.caption.weight(.semibold))
+            .font(FormaTypography.textStyle(.caption, weight: .semibold))
             .foregroundStyle(.primary)
     }
 
@@ -333,22 +343,22 @@ struct CompositionQuadrantChart: View {
 
                 // Labels
                 Text("Skinny Fat")
-                    .font(.caption2.weight(.semibold))
+                    .font(FormaTypography.textStyle(.caption2, weight: .semibold))
                     .foregroundStyle(Color.performanceCaution.opacity(0.8))
                     .position(x: thresholdX / 2, y: thresholdY / 2)
 
                 Text("Big & Muscular")
-                    .font(.caption2.weight(.semibold))
+                    .font(FormaTypography.textStyle(.caption2, weight: .semibold))
                     .foregroundStyle(Color.performanceSecondary.opacity(0.8))
                     .position(x: thresholdX + (width - thresholdX) / 2, y: thresholdY / 2)
 
                 Text("Lean")
-                    .font(.caption2.weight(.semibold))
+                    .font(FormaTypography.textStyle(.caption2, weight: .semibold))
                     .foregroundStyle(Color.performancePositive.opacity(0.8))
                     .position(x: thresholdX / 2, y: thresholdY + (height - thresholdY) / 2)
 
                 Text("Athletic")
-                    .font(.caption2.weight(.semibold))
+                    .font(FormaTypography.textStyle(.caption2, weight: .semibold))
                     .foregroundStyle(Color.performancePrimary.opacity(0.8))
                     .position(x: thresholdX + (width - thresholdX) / 2, y: thresholdY + (height - thresholdY) / 2)
 
@@ -432,7 +442,7 @@ struct BodyCompositionFlowCard: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.caption2.weight(.semibold))
+                .font(FormaTypography.textStyle(.caption2, weight: .semibold))
                 .foregroundStyle(tint)
 
             if let percentage {
@@ -461,13 +471,13 @@ struct BodyCompositionFlowCard: View {
 
     private func flowValue(_ value: Double) -> some View {
         Text(String(format: "%.2f kg", value))
-            .font(.subheadline.weight(.bold))
+            .font(FormaTypography.textStyle(.subheadline, weight: .bold))
             .foregroundStyle(.primary)
     }
 
     private func flowPercentage(_ percentage: Double) -> some View {
         Text(String(format: "%.1f%%", percentage))
-            .font(.caption2.weight(.medium))
+            .font(FormaTypography.textStyle(.caption2, weight: .medium))
             .foregroundStyle(.secondary)
     }
 
@@ -489,7 +499,7 @@ struct BodyCompositionFlowCard: View {
                     )
 
                     Image(systemName: "arrow.down")
-                        .font(.headline.weight(.bold))
+                        .font(FormaTypography.textStyle(.headline, weight: .bold))
                         .foregroundStyle(Color.performancePrimary)
                         .accessibilityHidden(true)
 
@@ -744,7 +754,18 @@ struct RecompVectorPlotCard: View {
 
     private var targetWeight: Double? {
         section?.firstNumber("targetWeightKg", "targetWeight")
+            ?? section?.compositionNumber("target", "weightKg")
             ?? composedWeight("target")
+    }
+
+    private var muscularityGoal: String? {
+        section?.value?.objectValue?["target"]?.objectValue?["muscularityGoal"]?.stringValue
+    }
+
+    private var muscularityGoalTitle: String? {
+        muscularityGoal.map {
+            $0.split(separator: "_").map { $0.capitalized }.joined(separator: " ")
+        }
     }
 
     private var initialFat: Double? {
@@ -800,16 +821,16 @@ struct RecompVectorPlotCard: View {
     private func xDomain(for values: (initialFat: Double, initialLean: Double, currentFat: Double, currentLean: Double, targetFat: Double, targetLean: Double)) -> ClosedRange<Double> {
         let startFat = values.initialFat
         let targetFat = values.targetFat
-        let minFat = min(startFat, targetFat)
-        let maxFat = max(startFat, targetFat)
+        let minFat = min(min(startFat, values.currentFat), targetFat)
+        let maxFat = max(max(startFat, values.currentFat), targetFat)
         return (minFat - 2.0)...(maxFat + 2.0)
     }
 
     private func yDomain(for values: (initialFat: Double, initialLean: Double, currentFat: Double, currentLean: Double, targetFat: Double, targetLean: Double)) -> ClosedRange<Double> {
         let startLean = values.initialLean
         let currentLean = values.currentLean
-        let minLean = min(startLean, currentLean)
-        let maxLean = max(startLean, currentLean)
+        let minLean = min(min(startLean, currentLean), values.targetLean)
+        let maxLean = max(max(startLean, currentLean), values.targetLean)
         return (minLean - 2.0)...(maxLean + 2.0)
     }
 
@@ -831,7 +852,11 @@ struct RecompVectorPlotCard: View {
             FormaCardHeader(
                 section?.displayTitle ?? "Recomp Vector Plot",
                 subtitle: section?.title ?? "Track your body composition journey across distinct zones."
-            )
+            ) {
+                if let muscularityGoalTitle {
+                    FormaValueBadge(text: muscularityGoalTitle, tint: .performancePositive)
+                }
+            }
 
             if let values = vectorValues {
                 // Chart Area
@@ -932,7 +957,7 @@ private struct RecompWeightSummary: View {
                     .fixedSize(horizontal: true, vertical: false)
 
                 Image(systemName: "arrow.right")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(FormaTypography.system(size: 14, weight: .bold))
                     .foregroundStyle(Color.performancePositive)
                     .accessibilityHidden(true)
 
@@ -944,7 +969,7 @@ private struct RecompWeightSummary: View {
                 weight(label: "Current Weight", value: String(format: "%.1f kg", currentWeight))
 
                 Image(systemName: "arrow.down")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(FormaTypography.system(size: 14, weight: .bold))
                     .foregroundStyle(Color.performancePositive)
                     .accessibilityHidden(true)
 
@@ -958,10 +983,10 @@ private struct RecompWeightSummary: View {
     private func weight(label: String, value: String) -> some View {
         VStack(spacing: 4) {
             Text(label)
-                .font(.caption2.weight(.medium))
+                .font(FormaTypography.textStyle(.caption2, weight: .medium))
                 .foregroundStyle(.secondary)
             Text(value)
-                .font(.headline)
+                .font(FormaTypography.textStyle(.headline))
                 .foregroundStyle(.primary)
         }
     }
@@ -992,7 +1017,7 @@ private struct RecompArrowMark: ChartContent {
             .foregroundStyle(.clear)
             .annotation(position: .overlay) {
                 Image(systemName: "arrow.left")
-                    .font(.system(size: 16, weight: .heavy))
+                    .font(FormaTypography.system(size: 16, weight: .heavy))
                     .foregroundStyle(Color.performancePositive)
                     .background(Circle().fill(Color.appChartBackground).frame(width: 20, height: 20))
             }
@@ -1032,7 +1057,7 @@ private struct RecompCurrentMark: ChartContent {
             }
             .annotation(position: .topTrailing) {
                 Text("Current")
-                    .font(.caption2.weight(.bold))
+                    .font(FormaTypography.textStyle(.caption2, weight: .bold))
                     .foregroundStyle(Color.performancePrimary)
             }
     }
@@ -1055,7 +1080,7 @@ private struct RecompTargetMark: ChartContent {
             }
             .annotation(position: .topLeading) {
                 Text("Goal")
-                    .font(.caption2.weight(.bold))
+                    .font(FormaTypography.textStyle(.caption2, weight: .bold))
                     .foregroundStyle(Color.performancePositive)
             }
     }
@@ -1134,10 +1159,10 @@ struct ExcessFatGaugeCard: View {
     private func legendItem(_ text: String, color: Color, isEmphasized: Bool) -> some View {
         HStack(spacing: FormaSpacing.xs) {
             Image(systemName: isEmphasized ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                .font(.caption)
+                .font(FormaTypography.textStyle(.caption))
                 .foregroundStyle(color)
             Text(text)
-                .font(.caption.weight(isEmphasized ? .bold : .medium))
+                .font(FormaTypography.textStyle(.caption, weight: isEmphasized ? .bold : .medium))
                 .foregroundStyle(isEmphasized ? .primary : .secondary)
         }
     }
@@ -1200,7 +1225,7 @@ struct ExcessFatSemicircularGauge: View {
                         .foregroundStyle(.primary)
 
                     Text("TO LOSE")
-                        .font(.caption.weight(.bold))
+                        .font(FormaTypography.textStyle(.caption, weight: .bold))
                         .foregroundStyle(.secondary)
                         .tracking(0.6)
                 }
