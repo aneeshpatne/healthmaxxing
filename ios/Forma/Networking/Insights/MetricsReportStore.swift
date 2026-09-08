@@ -163,22 +163,22 @@ final class MetricsReportStore: ObservableObject {
                 }
 
                 statusMessage = "Report status unavailable."
-                isWaitingForReport = false
                 errorMessage = "Failed to update report status."
+                isWaitingForReport = false
                 return
             }
 
             if response.ok == false {
                 InsightReportJobStore.remove(jobId, for: profileId)
                 activeJob = nil
-                isWaitingForReport = false
                 errorMessage = response.error ?? "Report job does not exist."
+                isWaitingForReport = false
                 return
             }
 
             guard let generationStatus = response.generationStatus else {
-                isWaitingForReport = false
                 errorMessage = "Report status is unavailable."
+                isWaitingForReport = false
                 return
             }
 
@@ -186,17 +186,17 @@ final class MetricsReportStore: ObservableObject {
             case "completed":
                 InsightReportJobStore.remove(jobId, for: profileId)
                 activeJob = nil
-                isWaitingForReport = false
                 completedReport = response.report
                 statusMessage = "Report completed."
                 errorMessage = nil
                 cacheSnapshot(for: profileId)
+                isWaitingForReport = false
                 return
             case "failed":
                 InsightReportJobStore.remove(jobId, for: profileId)
                 activeJob = nil
-                isWaitingForReport = false
                 errorMessage = response.generationError ?? "Report generation failed."
+                isWaitingForReport = false
                 return
             case "pending", "queued", "running":
                 isWaitingForReport = true
