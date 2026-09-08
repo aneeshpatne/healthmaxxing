@@ -9,7 +9,7 @@ import SwiftUI
 
 enum AppTab: String {
     case metrics
-    case record
+    case food
     case settings
 }
 
@@ -17,8 +17,8 @@ struct SwiftUIView: View {
     @State private var activeTab: AppTab = .metrics
     @State private var selectedMetricsTab: MetricsTab = .insights
     @State private var isMetricsAtTop = true
+    @State private var isRecordPresented = false
     @StateObject private var reportStore: MetricsReportStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init() {
         let reportStore = MetricsReportStore()
@@ -29,6 +29,15 @@ struct SwiftUIView: View {
            arguments.indices.contains(markerIndex + 1),
            let requestedTab = AppTab(rawValue: arguments[markerIndex + 1]) {
             _activeTab = State(initialValue: requestedTab)
+        }
+
+        // UI tests can open the record sheet directly (legacy tab name "record" still works).
+        if arguments.contains("-FormaUITestRecordSheet") {
+            _isRecordPresented = State(initialValue: true)
+        } else if let markerIndex = arguments.firstIndex(of: "-FormaUITestTab"),
+                  arguments.indices.contains(markerIndex + 1),
+                  arguments[markerIndex + 1] == "record" {
+            _isRecordPresented = State(initialValue: true)
         }
 
         if let markerIndex = arguments.firstIndex(of: "-FormaUITestScenario"),
@@ -49,6 +58,10 @@ struct SwiftUIView: View {
         #endif
     }
 
+    private var showsBrandLockup: Bool {
+        activeTab != .metrics || isMetricsAtTop
+    }
+
     var body: some View {
         NavigationStack {
             TabView(selection: $activeTab) {
@@ -58,46 +71,73 @@ struct SwiftUIView: View {
                         isAtTop: $isMetricsAtTop,
                         reportStore: reportStore,
                         onRecordRequested: {
-                            // System tab changes are immediate — no spring morph.
-                            activeTab = .record
+                            isRecordPresented = true
                         }
                     )
                 }
 
-                Tab("Record", systemImage: "record.circle", value: .record) {
-                    RecordView(reportStore: reportStore)
+                Tab("Food", systemImage: "fork.knife", value: .food) {
+                    FoodView()
                 }
 
                 Tab("Settings", systemImage: "gearshape", value: .settings) {
-                    Settings()
+                    Settings(reportStore: reportStore)
                 }
             }
             .tabBarMinimizeBehavior(.onScrollDown)
             .tint(.sleekAccent)
             .background(FormaBackground())
             .overlay(alignment: .top) {
-                HStack {
-                    if activeTab != .metrics || isMetricsAtTop {
-                        FormaBrandLockup(variant: .header, wordmarkColor: .primary)
-                            .transition(FormaTransition.fade)
-                    }
-
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: 760)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, FormaSpacing.screenGutter)
-                .safeAreaPadding(.top, FormaSpacing.xs)
-                .animation(
-                    FormaMotion.preferred(FormaMotion.fast, reduceMotion: reduceMotion),
-                    value: activeTab != .metrics || isMetricsAtTop
-                )
+                topChrome
             }
-            .task(id: activeTab) {
-                guard activeTab == .metrics, !isUITestShell else { return }
+            .sheet(isPresented: $isRecordPresented) {
+                RecordView(reportStore: reportStore) {
+                    isRecordPresented = false
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(FormaRadius.card)
+            }
+            .task {
+                guard !isUITestShell else { return }
                 await reportStore.loadAndPollReport()
             }
             .formaFeedback(.selection, trigger: activeTab)
+        }
+    }
+
+    private var topChrome: some View {
+        HStack(alignment: .center, spacing: FormaSpacing.sm) {
+            if showsBrandLockup {
+                FormaBrandLockup(variant: .header, wordmarkColor: .primary)
+
+                Spacer(minLength: 0)
+
+                recordHeaderButton
+            }
+        }
+        .frame(maxWidth: 760)
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 44, alignment: .center)
+        .padding(.horizontal, FormaSpacing.screenGutter)
+        .safeAreaPadding(.top, FormaSpacing.xs)
+    }
+
+    private var recordHeaderButton: some View {
+        Button {
+            isRecordPresented = true
+        } label: {
+            Image(systemName: "plus")
+                .font(FormaTypography.system(size: 15, weight: .semibold))
+                .frame(width: 36, height: 36)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.regular)
+        .accessibilityIdentifier("header-record-button")
+        .accessibilityLabel("Record measurement")
+        .formaFeedback(.selection, trigger: isRecordPresented) { wasPresented, isPresented in
+            !wasPresented && isPresented
         }
     }
 }

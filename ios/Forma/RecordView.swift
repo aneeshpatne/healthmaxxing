@@ -102,8 +102,16 @@ final class IdleTimerLease {
 struct RecordView: View {
     /// Brief hold so each stage is readable without feeling staged behind the scale.
     private static let minimumMetricDisplayDuration = Duration.milliseconds(400)
+    /// Hold long enough for the success ritual to land before the sheet auto-dismisses.
+    private static let successDismissDelay = Duration.milliseconds(1_450)
 
     let reportStore: MetricsReportStore
+    var debugMeasurement: ScaleMeasurement? = nil
+    /// Called after a successful save so the host can dismiss the sheet.
+    var onSuccess: (() -> Void)? = nil
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @StateObject private var scaleManager = ScaleBLEManager()
 
@@ -115,15 +123,23 @@ struct RecordView: View {
     @State private var canRevealSubmissionOutcome = false
     @State private var metricAdvanceTask: Task<Void, Never>?
     @State private var outcomeRevealTask: Task<Void, Never>?
+    @State private var successDismissTask: Task<Void, Never>?
     @State private var idleTimerLease: IdleTimerLease?
     @State private var feedbackSignal = RecordFeedbackSignal(sequence: 0, event: .start)
 
     private let apiClient = APIClient()
     private let clock = ContinuousClock()
 
+    private var isBusy: Bool {
+        scaleManager.isReading || isSubmittingMeasurement
+    }
+
     var body: some View {
         GeometryReader { proxy in
-            let availableDimension = min(proxy.size.width - (FormaSpacing.screenGutter * 2), proxy.size.height - 40)
+            let availableDimension = min(
+                proxy.size.width - (FormaSpacing.screenGutter * 2),
+                proxy.size.height - FormaSpacing.xxxl
+            )
             let diameter = min(240, max(180, availableDimension))
 
             ZStack {
@@ -146,18 +162,15 @@ struct RecordView: View {
                         )
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(
-                        minHeight: max(
-                            0,
-                            proxy.size.height - FormaLayout.topOverlayClearance
-                        )
-                    )
+                    .frame(minHeight: max(0, proxy.size.height - FormaSpacing.xxl))
                     .padding(.horizontal, FormaSpacing.screenGutter)
+                    .padding(.top, FormaSpacing.lg)
+                    .padding(.bottom, FormaSpacing.xl)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.top, FormaLayout.topOverlayClearance)
         }
+        .interactiveDismissDisabled(isBusy)
         .onChange(of: scaleManager.isReading, initial: true) { wasReading, isReading in
             updateIdleTimer(isReading: isReading)
             if !wasReading && isReading {
@@ -178,16 +191,28 @@ struct RecordView: View {
         .onChange(of: circleState) { previousState, state in
             if previousState != .saved && state == .saved {
                 emitFeedback(.success)
+                scheduleSuccessDismiss()
             } else if !previousState.isFailure && state.isFailure {
                 emitFeedback(.error)
             }
         }
         .onDisappear {
-            if !scaleManager.isReading {
-                releaseIdleTimerLease()
-            }
+            tearDownSession()
         }
         .recordFeedback(signal: feedbackSignal)
+        .accessibilityIdentifier("record-sheet")
+        .task {
+            guard let debugMeasurement,
+                  let weight = debugMeasurement.weightKg,
+                  let impedance = debugMeasurement.impedanceOhms,
+                  let heartRate = debugMeasurement.heartRate else { return }
+
+            scaleManager.startDebugReading(
+                weightKg: weight,
+                impedanceOhms: impedance,
+                heartRate: heartRate
+            )
+        }
     }
 
     private var circleState: RecordCircleState {
@@ -302,10 +327,51 @@ struct RecordView: View {
         metricAdvanceTask = nil
         outcomeRevealTask?.cancel()
         outcomeRevealTask = nil
+        successDismissTask?.cancel()
+        successDismissTask = nil
         outcome = nil
         displayedMetricStage = nil
         canRevealSubmissionOutcome = false
         isSubmittingMeasurement = false
+    }
+
+    private func scheduleSuccessDismiss() {
+        successDismissTask?.cancel()
+
+        let delay = reduceMotion ? Duration.milliseconds(250) : Self.successDismissDelay
+        successDismissTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+            successDismissTask = nil
+            dismissAfterSuccess()
+        }
+    }
+
+    private func dismissAfterSuccess() {
+        if let onSuccess {
+            onSuccess()
+        } else {
+            dismiss()
+        }
+    }
+
+    private func tearDownSession() {
+        successDismissTask?.cancel()
+        successDismissTask = nil
+        metricAdvanceTask?.cancel()
+        metricAdvanceTask = nil
+        outcomeRevealTask?.cancel()
+        outcomeRevealTask = nil
+
+        if scaleManager.isReading {
+            scaleManager.stopReading()
+        }
+        releaseIdleTimerLease()
     }
 
     private func handleMeasurementUpdate(_ measurement: ScaleMeasurement) {
@@ -513,23 +579,63 @@ private struct RecordCircle: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .largeTitle) private var metricValueSize: CGFloat = 54
+    @State private var successPopScale: CGFloat = 1
+    @State private var successGlow = false
+
+    private var isSaved: Bool {
+        if case .saved = state { return true }
+        return false
+    }
+
+    private var isReady: Bool {
+        if case .ready = state { return true }
+        return false
+    }
 
     var body: some View {
         Button(action: action) {
             ZStack {
+                if isReady {
+                    ReadyRecordIdleAura(diameter: diameter)
+                        .allowsHitTesting(false)
+                }
+
+                if isSaved {
+                    RecordSuccessAura(diameter: diameter, isActive: successGlow)
+                        .allowsHitTesting(false)
+                }
+
                 circleBackground
-                    .shadow(color: shadowColor, radius: 24, x: 0, y: 14)
+                    .shadow(
+                        color: shadowColor,
+                        radius: isSaved ? 32 : (isReady ? 28 : 24),
+                        x: 0,
+                        y: isSaved ? 18 : (isReady ? 16 : 14)
+                    )
 
                 content
                     .padding(FormaSpacing.xl)
             }
             .frame(width: diameter, height: diameter)
+            .scaleEffect(isSaved ? successPopScale : 1)
             .contentShape(Circle())
             .overlay {
                 if showsActivityRing {
                     OrbitingRecordRing(diameter: diameter + 18)
                         .allowsHitTesting(false)
                         .transition(.opacity)
+                }
+            }
+            .overlay {
+                if isReady {
+                    ReadyRecordIdleBurst(diameter: diameter)
+                        .allowsHitTesting(false)
+                }
+            }
+            .overlay {
+                if isSaved {
+                    RecordSuccessBurst(diameter: diameter)
+                        .allowsHitTesting(false)
                 }
             }
         }
@@ -543,31 +649,97 @@ private struct RecordCircle: View {
             FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
             value: state
         )
+        .onChange(of: state) { previous, newState in
+            guard previous != .saved, newState == .saved else { return }
+            runSuccessPop()
+        }
+        .onAppear {
+            if isSaved {
+                runSuccessPop()
+            }
+        }
+    }
+
+    private func runSuccessPop() {
+        guard !reduceMotion else {
+            successPopScale = 1
+            successGlow = true
+            return
+        }
+
+        // Snap small first so the spring only reads as a pop-out, not a shrink.
+        var snap = Transaction()
+        snap.disablesAnimations = true
+        withTransaction(snap) {
+            successPopScale = 0.86
+            successGlow = false
+        }
+
+        withAnimation(FormaMotion.success) {
+            successPopScale = 1.0
+            successGlow = true
+        }
     }
 
     @ViewBuilder
     private var circleBackground: some View {
         switch state {
         case .ready:
-            // Static brand disc while idle — no continuous Canvas/blur animation.
             ReadyRecordPalette(diameter: diameter)
+
+        case .saved:
+            // Premium glass success disc — material + lime tint, no solid plastic fill.
+            Circle()
+                .fill(.ultraThinMaterial)
+                .frame(width: diameter, height: diameter)
                 .overlay {
                     Circle()
                         .fill(
                             RadialGradient(
-                                colors: [.black.opacity(0.34), .clear],
-                                center: .center,
+                                colors: [
+                                    Color.white.opacity(0.62),
+                                    Color.sleekAccent.opacity(0.42),
+                                    Color.formaPositive.opacity(0.22)
+                                ],
+                                center: UnitPoint(x: 0.32, y: 0.24),
                                 startRadius: 0,
-                                endRadius: diameter * 0.42
+                                endRadius: diameter * 0.78
+                            )
+                        )
+                }
+                .overlay {
+                    // Specular lift only — not a nested glass pill.
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color.white.opacity(0.55),
+                                    Color.white.opacity(0.08),
+                                    .clear
+                                ],
+                                center: UnitPoint(x: 0.30, y: 0.20),
+                                startRadius: 0,
+                                endRadius: diameter * 0.48
                             )
                         )
                 }
                 .overlay {
                     Circle()
-                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.75)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.92),
+                                    Color.white.opacity(0.35),
+                                    Color.sleekAccent.opacity(0.45)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.15
+                        )
                 }
 
-        case .saved, .recordingFailed, .submissionFailed, .connecting, .weight, .impedance, .heartRate:
+        case .recordingFailed, .submissionFailed, .connecting, .weight, .impedance, .heartRate:
             Circle()
                 .fill(backgroundFill)
                 .overlay {
@@ -581,18 +753,15 @@ private struct RecordCircle: View {
     private var content: some View {
         switch state {
         case .ready:
-            Text("Record")
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.38), radius: 8, y: 2)
+            ReadyRecordLabel()
 
         case .connecting(let label):
             VStack(spacing: FormaSpacing.md) {
                 Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 28, weight: .semibold))
+                    .font(FormaTypography.system(size: 28, weight: .semibold))
                     .foregroundStyle(Color.sleekAccent)
                 Text(label)
-                    .font(.headline.weight(.semibold))
+                    .font(FormaTypography.textStyle(.headline, weight: .semibold))
             }
 
         case .weight(let value):
@@ -612,7 +781,7 @@ private struct RecordCircle: View {
             }
 
         case .saved:
-            resultContent(title: "Saved", systemImage: "checkmark")
+            RecordSuccessMark()
 
         case .recordingFailed:
             resultContent(title: "Try Again", systemImage: "exclamationmark")
@@ -625,18 +794,18 @@ private struct RecordCircle: View {
     private func metricContent(title: String, value: String, unit: String) -> some View {
         VStack(spacing: FormaSpacing.xs) {
             Text(title.uppercased())
-                .font(.caption.weight(.bold))
+                .font(FormaTypography.textStyle(.caption, weight: .bold))
                 .tracking(0.8)
                 .opacity(0.72)
 
             Text(value)
-                .font(.system(size: metricValueSize, weight: .semibold, design: .rounded))
+                .font(FormaTypography.system(size: metricValueSize, weight: .semibold))
                 .contentTransition(reduceMotion ? .identity : .numericText())
                 .lineLimit(1)
                 .minimumScaleFactor(0.65)
 
             Text(unit)
-                .font(.subheadline.weight(.semibold))
+                .font(FormaTypography.textStyle(.subheadline, weight: .semibold))
                 .opacity(0.72)
         }
     }
@@ -645,7 +814,7 @@ private struct RecordCircle: View {
         VStack(spacing: FormaSpacing.sm) {
             resultSymbol(systemImage)
             Text(title)
-                .font(.title3.weight(.semibold))
+                .font(FormaTypography.textStyle(.title3, weight: .semibold))
                 .multilineTextAlignment(.center)
         }
         .foregroundStyle(Color.actionForeground)
@@ -654,7 +823,7 @@ private struct RecordCircle: View {
     @ViewBuilder
     private func resultSymbol(_ systemImage: String) -> some View {
         let symbol = Image(systemName: systemImage)
-            .font(.system(size: 32, weight: .bold))
+            .font(FormaTypography.system(size: 32, weight: .bold))
 
         if reduceMotion {
             symbol
@@ -698,11 +867,11 @@ private struct RecordCircle: View {
     private var shadowColor: Color {
         switch state {
         case .saved:
-            return .formaPositive.opacity(0.22)
+            return .sleekAccent.opacity(successGlow ? 0.36 : 0.18)
         case .recordingFailed, .submissionFailed:
             return .formaNegative.opacity(0.22)
         case .ready:
-            return .actionInk.opacity(0.22)
+            return .sleekAccent.opacity(0.34)
         case .connecting, .weight, .impedance, .heartRate:
             return .cardShadow
         }
@@ -742,7 +911,7 @@ private struct RecordCircle: View {
         case .heartRate(let value, let isSubmitting):
             return "\(value) beats per minute\(isSubmitting ? ", submitting" : "")"
         case .saved:
-            return "Tap to record another measurement"
+            return "Saved"
         case .recordingFailed(let message), .submissionFailed(let message):
             return message
         }
@@ -753,7 +922,7 @@ private struct RecordCircle: View {
         case .ready:
             return "Starts a new scale reading"
         case .saved:
-            return "Resets the recorder"
+            return "Sheet will close automatically"
         case .recordingFailed:
             return "Starts a new scale reading"
         case .submissionFailed:
@@ -762,6 +931,135 @@ private struct RecordCircle: View {
             return "Tap to cancel this scale reading"
         case .heartRate(_, let isSubmitting):
             return isSubmitting ? "Measurement is being saved" : "Tap to cancel this scale reading"
+        }
+    }
+}
+
+// MARK: - Success microinteractions
+
+/// Single soft lime bloom behind the success disc.
+private struct RecordSuccessAura: View {
+    let diameter: CGFloat
+    let isActive: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Circle()
+            .fill(Color.sleekAccent.opacity(isActive ? 0.30 : 0.10))
+            .frame(width: diameter * 1.24, height: diameter * 1.24)
+            .blur(radius: reduceMotion ? 16 : 26)
+            .scaleEffect(isActive ? 1 : 0.78)
+            .opacity(isActive ? 1 : 0)
+            .animation(
+                FormaMotion.preferred(FormaMotion.successBurst, reduceMotion: reduceMotion),
+                value: isActive
+            )
+            .accessibilityHidden(true)
+    }
+}
+
+/// Thin expanding glass rings — one-shot, no spark clutter.
+private struct RecordSuccessBurst: View {
+    let diameter: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var expanded = false
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<2, id: \.self) { index in
+                Circle()
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(ringStrokeOpacity(for: index)),
+                                Color.sleekAccent.opacity(ringStrokeOpacity(for: index) * 0.7)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: index == 0 ? 1.6 : 1.1
+                    )
+                    .frame(width: diameter, height: diameter)
+                    .scaleEffect(ringScale(for: index))
+                    .opacity(expanded ? 0 : 1)
+            }
+        }
+        .frame(width: diameter * 1.5, height: diameter * 1.5)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear {
+            guard !reduceMotion else {
+                expanded = true
+                return
+            }
+
+            expanded = false
+            withAnimation(FormaMotion.successBurst) {
+                expanded = true
+            }
+        }
+    }
+
+    private func ringScale(for index: Int) -> CGFloat {
+        guard expanded else { return 0.96 }
+        return index == 0 ? 1.16 : 1.30
+    }
+
+    private func ringStrokeOpacity(for index: Int) -> Double {
+        guard !reduceMotion else { return 0 }
+        // High at rest of animation start; fades as scale expands via parent opacity.
+        return index == 0 ? 0.55 : 0.32
+    }
+}
+
+/// Clean check + title on the glass disc — no nested frosted circle.
+private struct RecordSuccessMark: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var showGlyph = false
+    @State private var showTitle = false
+    @State private var bounceToken = 0
+
+    var body: some View {
+        VStack(spacing: FormaSpacing.xs) {
+            Image(systemName: "checkmark")
+                .font(FormaTypography.system(size: 36, weight: .bold))
+                .foregroundStyle(Color.actionForeground)
+                .shadow(color: .white.opacity(0.45), radius: 0, y: 1)
+                .scaleEffect(showGlyph ? 1 : 0.35)
+                .opacity(showGlyph ? 1 : 0)
+                .symbolEffect(.bounce, value: bounceToken)
+
+            Text("Saved")
+                .font(FormaTypography.system(size: 18, weight: .bold))
+                .foregroundStyle(Color.actionForeground.opacity(0.92))
+                .opacity(showTitle ? 1 : 0)
+                .offset(y: showTitle ? 0 : 6)
+                .scaleEffect(showTitle ? 1 : 0.94)
+        }
+        .onAppear {
+            playEntrance()
+        }
+    }
+
+    private func playEntrance() {
+        if reduceMotion {
+            showGlyph = true
+            showTitle = true
+            return
+        }
+
+        showGlyph = false
+        showTitle = false
+
+        withAnimation(FormaMotion.success) {
+            showGlyph = true
+        }
+        bounceToken += 1
+
+        withAnimation(FormaMotion.successSoft.delay(0.08)) {
+            showTitle = true
         }
     }
 }
@@ -787,12 +1085,12 @@ private struct RecordFlowFooter: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     Text(recoveryGuidance(for: message))
-                        .font(.caption)
+                        .font(FormaTypography.textStyle(.caption))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
 
                     Text(state.actionGuidance)
-                        .font(.caption.weight(.semibold))
+                        .font(FormaTypography.textStyle(.caption, weight: .semibold))
                         .foregroundStyle(.primary)
                 }
                 .padding(.horizontal, FormaSpacing.xxl)
@@ -807,12 +1105,12 @@ private struct RecordFlowFooter: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     Text("Check your connection. The captured values are still ready to save.")
-                        .font(.caption)
+                        .font(FormaTypography.textStyle(.caption))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
 
                     Text(state.actionGuidance)
-                        .font(.caption.weight(.semibold))
+                        .font(FormaTypography.textStyle(.caption, weight: .semibold))
                         .foregroundStyle(.primary)
                 }
                 .padding(.horizontal, FormaSpacing.xxl)
@@ -822,7 +1120,7 @@ private struct RecordFlowFooter: View {
                 VStack(spacing: FormaSpacing.sm) {
                     RecordStageTracker(measurement: measurement)
                     Text(connectingGuidance(for: label))
-                        .font(.caption)
+                        .font(FormaTypography.textStyle(.caption))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -833,39 +1131,54 @@ private struct RecordFlowFooter: View {
                     VStack(spacing: FormaSpacing.sm) {
                         RecordStageTracker(measurement: measurement)
                         Text("Stay still on the scale. Tap the circle to cancel.")
-                            .font(.caption)
+                            .font(FormaTypography.textStyle(.caption))
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     }
                     .transition(FormaTransition.fade)
                 } else {
                     Text(state.actionGuidance)
-                        .font(.caption.weight(.semibold))
+                        .font(FormaTypography.textStyle(.caption, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
 
             case .saved:
                 RecordMeasurementSummary(measurement: measurement)
-                    .transition(FormaTransition.content(reduceMotion: reduceMotion))
+                    .transition(
+                        reduceMotion
+                            ? FormaTransition.fade
+                            : .asymmetric(
+                                insertion: .scale(scale: 0.94).combined(with: .opacity).combined(with: .offset(y: 10)),
+                                removal: .opacity
+                            )
+                    )
 
             case .ready:
                 Text(state.actionGuidance)
-                    .font(.subheadline.weight(.semibold))
+                    .font(FormaTypography.textStyle(.subheadline, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .transition(FormaTransition.fade)
 
             case .connecting:
                 Text(state.actionGuidance)
-                    .font(.caption.weight(.semibold))
+                    .font(FormaTypography.textStyle(.caption, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
         }
         .frame(minHeight: 60, alignment: .top)
         .animation(
-            FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
+            FormaMotion.preferred(
+                isSavedState ? FormaMotion.successSoft : FormaMotion.standard,
+                reduceMotion: reduceMotion
+            ),
             value: state
         )
         .accessibilityIdentifier(state.accessibilityIdentifier)
+    }
+
+    private var isSavedState: Bool {
+        if case .saved = state { return true }
+        return false
     }
 
     private func connectingGuidance(for label: String) -> String {
@@ -936,7 +1249,7 @@ private extension RecordCircleState {
         case .heartRate(_, let isSubmitting):
             return isSubmitting ? "Saving your measurement…" : "Tap to cancel"
         case .saved:
-            return "Tap to record another"
+            return "All set"
         case .recordingFailed:
             return "Tap the circle to try again"
         case .submissionFailed:
@@ -948,50 +1261,103 @@ private extension RecordCircleState {
 private struct RecordMeasurementSummary: View {
     let measurement: ScaleMeasurement
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var revealed = false
 
     var body: some View {
-        VStack(spacing: FormaSpacing.sm) {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: FormaSpacing.xs) {
-                    summaryItems
-                }
-            } else {
-                HStack(spacing: FormaSpacing.xl) {
-                    summaryItems
+        VStack(spacing: FormaSpacing.md) {
+            Text("All set")
+                .font(FormaTypography.supporting.weight(.semibold))
+                .foregroundStyle(Color.formaPositive)
+                .opacity(revealed ? 1 : 0)
+                .offset(y: revealed ? 0 : 6)
+
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: FormaSpacing.xs) {
+                        summaryItems
+                    }
+                } else {
+                    HStack(spacing: FormaSpacing.sm) {
+                        summaryItems
+                    }
                 }
             }
+            .scaleEffect(revealed ? 1 : 0.94)
+            .opacity(revealed ? 1 : 0)
 
-            Text("Tap the circle to record another")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+            Text("Closing…")
+                .font(FormaTypography.micro)
+                .foregroundStyle(.tertiary)
+                .opacity(revealed ? 1 : 0)
         }
         .accessibilityElement(children: .combine)
-        .formaEntrance()
+        .accessibilityLabel(accessibilitySummary)
+        .onAppear {
+            guard !revealed else { return }
+            if reduceMotion {
+                revealed = true
+            } else {
+                withAnimation(FormaMotion.successSoft.delay(0.1)) {
+                    revealed = true
+                }
+            }
+        }
+    }
+
+    private var accessibilitySummary: String {
+        var parts = ["All set"]
+        if let weight = measurement.weightKg {
+            parts.append(String(format: "%.1f kilograms", weight))
+        }
+        if let impedance = measurement.impedanceOhms {
+            parts.append(String(format: "%.0f ohms", impedance))
+        }
+        if let heartRate = measurement.heartRate {
+            parts.append("\(heartRate) beats per minute")
+        }
+        return parts.joined(separator: ", ")
     }
 
     @ViewBuilder
     private var summaryItems: some View {
         if let weight = measurement.weightKg {
-            summaryItem(String(format: "%.1f kg", weight), label: "Weight")
+            summaryChip(String(format: "%.1f kg", weight), label: "Weight", order: 0)
         }
         if let impedance = measurement.impedanceOhms {
-            summaryItem(String(format: "%.0f Ω", impedance), label: "Impedance")
+            summaryChip(String(format: "%.0f Ω", impedance), label: "Impedance", order: 1)
         }
         if let heartRate = measurement.heartRate {
-            summaryItem("\(heartRate) bpm", label: "Heart rate")
+            summaryChip("\(heartRate) bpm", label: "Heart rate", order: 2)
         }
     }
 
-    private func summaryItem(_ value: String, label: String) -> some View {
-        VStack(spacing: 2) {
+    private func summaryChip(_ value: String, label: String, order: Int) -> some View {
+        VStack(spacing: 3) {
             Text(value)
-                .font(.caption.weight(.bold))
+                .font(FormaTypography.textStyle(.caption, weight: .bold))
                 .monospacedDigit()
                 .foregroundStyle(.primary)
             Text(label)
                 .font(FormaTypography.micro)
                 .foregroundStyle(.tertiary)
         }
+        .padding(.horizontal, FormaSpacing.sm)
+        .padding(.vertical, FormaSpacing.xs)
+        .background(
+            Color.appTertiaryBackground.opacity(0.9),
+            in: RoundedRectangle(cornerRadius: FormaRadius.badge, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: FormaRadius.badge, style: .continuous)
+                .strokeBorder(Color.formaPositive.opacity(revealed ? 0.28 : 0), lineWidth: 1)
+        }
+        .scaleEffect(revealed ? 1 : 0.88)
+        .opacity(revealed ? 1 : 0)
+        .animation(
+            FormaMotion.preferred(FormaMotion.successSoft.delay(0.06 + Double(order) * 0.05), reduceMotion: reduceMotion),
+            value: revealed
+        )
     }
 }
 
@@ -1016,7 +1382,7 @@ private struct RecordStageTracker: View {
                 VStack(spacing: FormaSpacing.xs) {
                     compactProgress
                     Text(accessibleProgressLabel)
-                        .font(.caption.weight(.semibold))
+                        .font(FormaTypography.textStyle(.caption, weight: .semibold))
                         .foregroundStyle(.primary)
                 }
             } else {
@@ -1047,7 +1413,7 @@ private struct RecordStageTracker: View {
 
                         if stage.isComplete {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 9, weight: .bold))
+                                .font(FormaTypography.system(size: 9, weight: .bold))
                                 .foregroundStyle(Color.actionForeground)
                                 .transition(reduceMotion ? .identity : .scale.combined(with: .opacity))
                         } else if isActive {
@@ -1058,7 +1424,7 @@ private struct RecordStageTracker: View {
                     }
 
                     Text(stage.title)
-                        .font(.caption2.weight(stage.isComplete || isActive ? .semibold : .medium))
+                        .font(FormaTypography.textStyle(.caption2, weight: stage.isComplete || isActive ? .semibold : .medium))
                         .foregroundStyle(stage.isComplete || isActive ? .primary : .secondary)
                 }
 
@@ -1106,8 +1472,7 @@ private struct RecordStageTracker: View {
     }
 }
 
-/// Static brand fill for the ready state. Continuous Canvas motion was removed
-/// so the primary control stays calm and cheap until the user starts a reading.
+/// Bright brand lime disc for the ready state — light, cash-app energy.
 private struct ReadyRecordPalette: View {
     let diameter: CGFloat
 
@@ -1116,31 +1481,152 @@ private struct ReadyRecordPalette: View {
             .fill(
                 RadialGradient(
                     colors: [
-                        Color(red: 0.169, green: 0.749, blue: 0.478), // #2BBF7A
-                        Color(red: 0.043, green: 0.420, blue: 0.290), // #0B6B4A
-                        Color(red: 0.027, green: 0.290, blue: 0.200)  // #074A33
+                        Color(red: 0.82, green: 1.00, blue: 0.28), // bright lift
+                        Color.sleekAccent,                          // #B8F015
+                        Color(red: 0.58, green: 0.78, blue: 0.05)  // deeper lime edge
                     ],
-                    center: UnitPoint(x: 0.32, y: 0.28),
+                    center: UnitPoint(x: 0.34, y: 0.28),
                     startRadius: 0,
-                    endRadius: diameter * 0.72
+                    endRadius: diameter * 0.74
                 )
             )
             .frame(width: diameter, height: diameter)
             .overlay {
+                // Soft white glass highlight — keeps the disc airy, not muddy.
                 Circle()
                     .fill(
                         RadialGradient(
                             colors: [
-                                Color(red: 0.239, green: 0.839, blue: 0.561).opacity(0.35),
+                                Color.white.opacity(0.55),
+                                Color.white.opacity(0.12),
                                 .clear
                             ],
-                            center: UnitPoint(x: 0.72, y: 0.68),
+                            center: UnitPoint(x: 0.30, y: 0.22),
                             startRadius: 0,
-                            endRadius: diameter * 0.55
+                            endRadius: diameter * 0.52
                         )
                     )
             }
+            .overlay {
+                Circle()
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.70),
+                                Color.white.opacity(0.18),
+                                Color.black.opacity(0.06)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.1
+                    )
+            }
             .accessibilityHidden(true)
+    }
+}
+
+/// Soft lime bloom behind the ready disc.
+private struct ReadyRecordIdleAura: View {
+    let diameter: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(
+            .animation(
+                minimumInterval: reduceMotion ? nil : 1.0 / 30.0,
+                paused: reduceMotion
+            )
+        ) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let breath = reduceMotion
+                ? 0.4
+                : 0.5 + 0.5 * sin(t * (2 * .pi / 2.6))
+
+            ZStack {
+                Circle()
+                    .fill(Color.sleekAccent.opacity(0.18 + 0.16 * breath))
+                    .frame(width: diameter * 1.22, height: diameter * 1.22)
+                    .blur(radius: reduceMotion ? 16 : 26)
+                    .scaleEffect(0.94 + 0.10 * breath)
+
+                Circle()
+                    .fill(Color.white.opacity(0.10 + 0.08 * breath))
+                    .frame(width: diameter * 1.06, height: diameter * 1.06)
+                    .blur(radius: 14)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Expanding rings + gentle bounce on the ready control before tap.
+private struct ReadyRecordIdleBurst: View {
+    let diameter: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(
+            .animation(
+                minimumInterval: reduceMotion ? nil : 1.0 / 30.0,
+                paused: reduceMotion
+            )
+        ) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let ring = reduceMotion
+                ? 0.0
+                : t.truncatingRemainder(dividingBy: 2.4) / 2.4
+            let breath = reduceMotion
+                ? 0.0
+                : 0.5 + 0.5 * sin(t * (2 * .pi / 2.6))
+
+            ZStack {
+                ForEach(0..<2, id: \.self) { index in
+                    let phase = (ring + Double(index) * 0.38).truncatingRemainder(dividingBy: 1)
+                    Circle()
+                        .strokeBorder(
+                            Color.sleekAccent.opacity((1 - phase) * (index == 0 ? 0.42 : 0.26)),
+                            lineWidth: index == 0 ? 2.5 : 1.5
+                        )
+                        .frame(width: diameter, height: diameter)
+                        .scaleEffect(1.0 + 0.16 * phase)
+                }
+            }
+            .frame(width: diameter * 1.45, height: diameter * 1.45)
+            .scaleEffect(1.0 + 0.018 * breath)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Idle “Record” label with a soft bounce so the CTA feels alive.
+private struct ReadyRecordLabel: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(
+            .animation(
+                minimumInterval: reduceMotion ? nil : 1.0 / 30.0,
+                paused: reduceMotion
+            )
+        ) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let breath = reduceMotion
+                ? 0.0
+                : 0.5 + 0.5 * sin(t * (2 * .pi / 2.6))
+
+            Text("Record")
+                .font(FormaTypography.system(size: 22, weight: .bold))
+                .foregroundStyle(Color.actionForeground)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .shadow(color: .white.opacity(0.35), radius: 0, y: 1)
+                .shadow(color: .black.opacity(0.10), radius: 6, y: 2)
+                .scaleEffect(1.0 + 0.025 * breath)
+                .offset(y: reduceMotion ? 0 : -1.2 * breath)
+        }
     }
 }
 
@@ -1193,13 +1679,24 @@ private struct OrbitingRecordRing: View {
 #Preview("Record — Ready palette") {
     ReadyRecordPalette(diameter: 240)
         .overlay {
-            Text("Record")
-                .font(.title2.weight(.semibold))
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.38), radius: 8, y: 2)
+            ReadyRecordLabel()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(FormaBackground())
+}
+
+#Preview("Record header button") {
+    // Header + is intentionally quiet glass — idle energy lives on the big Record disc.
+    Button(action: {}) {
+        Image(systemName: "plus")
+            .font(FormaTypography.system(size: 15, weight: .semibold))
+            .frame(width: 36, height: 36)
+    }
+    .buttonStyle(.glass)
+    .buttonBorderShape(.circle)
+    .controlSize(.regular)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(FormaBackground())
 }
 
 #Preview("Live measurements") {

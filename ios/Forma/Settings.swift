@@ -9,9 +9,12 @@ import ClerkKit
 import ClerkKitUI
 
 struct Settings: View {
+    let reportStore: MetricsReportStore
+
     @AppStorage(FormaFeedbackPreferences.soundEffectsKey) private var soundEffectsEnabled = true
     @AppStorage(FormaFeedbackPreferences.hapticsKey) private var hapticsEnabled = true
     @EnvironmentObject private var soundPlayer: FormaSoundPlayer
+    @State private var isDebugRecordPresented = false
 
     var body: some View {
         ScrollView {
@@ -60,6 +63,21 @@ struct Settings: View {
                     }
                 }
 
+                settingsSection("Debug") {
+                    Button {
+                        isDebugRecordPresented = true
+                    } label: {
+                        rowContent(
+                            title: "Record Test Measurement",
+                            subtitle: "76.6 kg · 574 Ω · 72 bpm",
+                            systemImage: "waveform.path.ecg",
+                            tint: .sleekAccent
+                        )
+                    }
+                    .buttonStyle(FormaPressableButtonStyle())
+                    .accessibilityIdentifier("debug-record-measurement")
+                }
+
                 settingsSection("About") {
                     HStack(spacing: FormaSpacing.sm) {
                         FormaIconTile(
@@ -71,9 +89,9 @@ struct Settings: View {
 
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Forma")
-                                .font(.body.weight(.semibold))
+                                .font(FormaTypography.textStyle(.body, weight: .semibold))
                             Text("Version \(appVersion)")
-                                .font(.caption)
+                                .font(FormaTypography.textStyle(.caption))
                                 .foregroundStyle(.secondary)
                         }
 
@@ -97,6 +115,21 @@ struct Settings: View {
         // Haptic only when enabling the preference itself — not on every row push.
         .formaFeedback(.softImpact, trigger: hapticsEnabled) { wasEnabled, isEnabled in
             !wasEnabled && isEnabled
+        }
+        .sheet(isPresented: $isDebugRecordPresented) {
+            RecordView(
+                reportStore: reportStore,
+                debugMeasurement: ScaleMeasurement(
+                    weightKg: 76.6,
+                    heartRate: 72,
+                    impedanceOhms: 574,
+                    isFinal: true
+                ),
+                onSuccess: { isDebugRecordPresented = false }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(FormaRadius.card)
         }
     }
 
@@ -136,12 +169,12 @@ struct Settings: View {
                 tint: tint,
                 size: 34,
                 radius: 10,
-                symbolFont: .system(size: 14, weight: .semibold)
+                symbolFont: FormaTypography.system(size: 14, weight: .semibold)
             )
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.body.weight(.semibold))
+                    .font(FormaTypography.textStyle(.body, weight: .semibold))
                     .foregroundStyle(.primary)
                 Text(subtitle)
                     .font(FormaTypography.supporting)
@@ -152,7 +185,7 @@ struct Settings: View {
             Spacer()
 
             Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
+                .font(FormaTypography.textStyle(.caption, weight: .bold))
                 .foregroundStyle(.tertiary)
         }
         .frame(minHeight: 44)
@@ -173,12 +206,12 @@ struct Settings: View {
                     tint: tint,
                     size: 34,
                     radius: 10,
-                    symbolFont: .system(size: 14, weight: .semibold)
+                    symbolFont: FormaTypography.system(size: 14, weight: .semibold)
                 )
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.body.weight(.semibold))
+                        .font(FormaTypography.textStyle(.body, weight: .semibold))
                     Text(subtitle)
                         .font(FormaTypography.supporting)
                         .foregroundStyle(.secondary)
@@ -207,6 +240,6 @@ struct Settings: View {
 }
 
 #Preview {
-    Settings()
+    Settings(reportStore: MetricsReportStore())
         .environmentObject(FormaSoundPlayer())
 }

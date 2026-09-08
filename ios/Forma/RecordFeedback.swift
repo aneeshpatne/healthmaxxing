@@ -44,6 +44,7 @@ enum RecordFeedbackEvent: Hashable {
         case .metric:
             return .selection
         case .success:
+            // System success + a light impact layer reads as a premium "lock in".
             return .success
         case .error:
             return .error
@@ -159,10 +160,12 @@ final class FormaSoundPlayer: ObservableObject {
         case .metric(.heartRate):
             return [Tone(frequency: 659.25, duration: 0.050, amplitude: 0.055)]
         case .success:
+            // Bright C-major lift with a soft top sparkle — celebratory, still short.
             return [
-                Tone(frequency: 523.25, duration: 0.060, amplitude: 0.075),
-                Tone(frequency: 659.25, duration: 0.065, amplitude: 0.085),
-                Tone(frequency: 783.99, duration: 0.090, amplitude: 0.100),
+                Tone(frequency: 523.25, duration: 0.050, amplitude: 0.070),
+                Tone(frequency: 659.25, duration: 0.055, amplitude: 0.085),
+                Tone(frequency: 783.99, duration: 0.070, amplitude: 0.100),
+                Tone(frequency: 1046.50, duration: 0.085, amplitude: 0.070),
             ]
         case .error:
             return [

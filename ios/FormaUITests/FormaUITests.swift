@@ -32,7 +32,8 @@ final class FormaUITests: XCTestCase {
         XCTAssertTrue(recordMeasurement.exists)
         recordMeasurement.tap()
 
-        XCTAssertTrue(app.buttons["Record"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.descendants(matching: .any)["record-sheet"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["record-primary-control"].waitForExistence(timeout: 3))
     }
 
     @MainActor
@@ -44,8 +45,12 @@ final class FormaUITests: XCTestCase {
     }
 
     @MainActor
-    func testRecordTabShowsExplicitAction() throws {
-        let app = launchShell(tab: "record")
+    func testRecordSheetShowsExplicitAction() throws {
+        let app = launchShell(tab: "metrics")
+
+        let headerRecord = app.buttons["header-record-button"]
+        XCTAssertTrue(headerRecord.waitForExistence(timeout: 8))
+        headerRecord.tap()
 
         let recordControl = app.buttons["record-primary-control"]
         XCTAssertTrue(recordControl.waitForExistence(timeout: 8))

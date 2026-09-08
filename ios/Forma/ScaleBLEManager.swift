@@ -51,6 +51,7 @@ final class ScaleBLEManager: NSObject, ObservableObject {
     private var centralManager: CBCentralManager?
     private var scalePeripheral: CBPeripheral?
     private var shouldStartWhenPoweredOn = false
+    private var debugReadingTask: Task<Void, Never>?
 
     var isReading: Bool {
         switch state {
@@ -75,6 +76,8 @@ final class ScaleBLEManager: NSObject, ObservableObject {
     }
 
     func stopReading() {
+        debugReadingTask?.cancel()
+        debugReadingTask = nil
         shouldStartWhenPoweredOn = false
         centralManager?.stopScan()
 
@@ -84,6 +87,38 @@ final class ScaleBLEManager: NSObject, ObservableObject {
 
         scalePeripheral = nil
         state = .idle
+    }
+
+    /// Replays a complete reading through the same published state used by the
+    /// BLE callbacks. RecordView still owns validation, submission, report
+    /// queuing, success feedback, and dismissal.
+    @MainActor
+    func startDebugReading(weightKg: Float, impedanceOhms: Float, heartRate: Int) {
+        debugReadingTask?.cancel()
+        latestMeasurement = ScaleMeasurement()
+        state = .listening
+
+        debugReadingTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
+            self.latestMeasurement.weightKg = weightKg
+
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            self.latestMeasurement.impedanceOhms = impedanceOhms
+
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            self.latestMeasurement.heartRate = heartRate
+            self.latestMeasurement.isFinal = true
+
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
+            self.state = .finished
+            self.debugReadingTask = nil
+        }
     }
 
     private func beginScanIfReady() {
