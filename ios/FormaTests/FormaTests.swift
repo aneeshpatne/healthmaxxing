@@ -69,6 +69,38 @@ struct FormaFeedbackPolicyTests {
 }
 
 @MainActor
+struct FoodPayloadTests {
+    @Test func analysisProposalDecodesCompleteNutrition() throws {
+        let data = Data(#"{"ok":true,"action":"propose","message":"Ready","food":{"name":"Eggs","servingDescription":"2 large eggs","servings":1,"meal":"breakfast","calories":144,"proteinG":12.6,"carbsG":0.7,"fatG":9.5,"fiberG":0,"saturatedFatG":3.1,"transFatG":0,"monounsaturatedFatG":3.7,"polyunsaturatedFatG":1.9,"sugarG":0.4,"addedSugarG":0,"sodiumMg":142,"cholesterolMg":372}}"#.utf8)
+        let response = try JSONDecoder().decode(FoodAnalysisResponse.self, from: data)
+
+        #expect(response.food?.meal == .breakfast)
+        #expect(response.food?.proteinG == 12.6)
+        #expect(response.food?.cholesterolMg == 372)
+    }
+
+    @Test func dashboardDecodesEntriesTrendsAndGoals() throws {
+        let data = Data(#"{"ok":true,"entries":[],"trends":[{"date":"2026-09-08","calories":1900,"proteinG":155,"carbsG":210,"fatG":65}],"goals":{"calories":2200,"proteinG":160,"carbsG":240,"fatG":70}}"#.utf8)
+        let dashboard = try JSONDecoder().decode(FoodDashboardResponse.self, from: data)
+
+        #expect(dashboard.trends.first?.proteinG == 155)
+        #expect(dashboard.goals.calories == 2200)
+    }
+}
+
+struct FoodSearchTests {
+    private let foods = [
+        FoodNutrition(name: "Greek yogurt", servingDescription: "170 g tub", servings: 1, meal: .snack, calories: 100, proteinG: 17, carbsG: 6, fatG: 0, fiberG: 0, saturatedFatG: 0, transFatG: 0, monounsaturatedFatG: 0, polyunsaturatedFatG: 0, sugarG: 5, addedSugarG: 0, sodiumMg: 60, cholesterolMg: 5),
+        FoodNutrition(name: "Chicken breast", servingDescription: "100 g cooked", servings: 1, meal: .lunch, calories: 165, proteinG: 31, carbsG: 0, fatG: 3.6, fiberG: 0, saturatedFatG: 1, transFatG: 0, monounsaturatedFatG: 1.2, polyunsaturatedFatG: 0.8, sugarG: 0, addedSugarG: 0, sodiumMg: 74, cholesterolMg: 85)
+    ]
+
+    @Test func fuzzySearchHandlesTyposAndNonPrefixTerms() {
+        #expect(FoodSearch.matches("grek yog", in: foods).first?.name == "Greek yogurt")
+        #expect(FoodSearch.matches("cooked chicken", in: foods).first?.name == "Chicken breast")
+    }
+}
+
+@MainActor
 struct ProfileRequestTests {
     @Test func onboardingPayloadIncludesMuscularityGoal() throws {
         let body = CreateClientProfileBody(
