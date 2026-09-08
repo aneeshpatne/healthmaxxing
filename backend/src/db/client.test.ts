@@ -5,6 +5,17 @@ process.env.DATABASE_URL ??= "postgres://healthmaxxing:healthmaxxing@127.0.0.1:5
 const { closeDatabase, postgresQuery } = await import("./client");
 
 describe("postgresQuery", () => {
+  test("cached conversions retain parameter numbering after eviction", () => {
+    const source = "SELECT created_at AS createdAt WHERE id = ? AND name = ?";
+    const expected = 'SELECT created_at AS "createdAt" WHERE id = $1 AND name = $2';
+    expect(postgresQuery(source)).toBe(expected);
+    expect(postgresQuery(source)).toBe(expected);
+    for (let index = 0; index < 300; index++) {
+      expect(postgresQuery(`SELECT ${index} WHERE id = ?`)).toBe(`SELECT ${index} WHERE id = $1`);
+    }
+    expect(postgresQuery(source)).toBe(expected);
+  });
+
   test("converts positional parameters and preserves camel-case aliases", () => {
     expect(postgresQuery("SELECT created_at AS createdAt WHERE id = ? AND name = ?")).toBe(
       'SELECT created_at AS "createdAt" WHERE id = $1 AND name = $2',

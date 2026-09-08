@@ -41,9 +41,14 @@ function rewriteTwoArgumentRound(source: string): string {
   return output;
 }
 
+const convertedQueries = new Map<string, string>();
+const MAX_CONVERTED_QUERIES = 256;
+
 export function postgresQuery(source: string): string {
+  const cached = convertedQueries.get(source);
+  if (cached !== undefined) return cached;
   let parameter = 0;
-  return rewriteTwoArgumentRound(source)
+  const converted = rewriteTwoArgumentRound(source)
     .replace(/\?/g, () => `$${++parameter}`)
     .replace(/\bAS\s+([a-z_]*[A-Z][A-Za-z0-9_]*)\b/g, 'AS "$1"')
     .replace(/datetime\('now',\s*'-1 year'\)/gi, "CURRENT_TIMESTAMP - INTERVAL '1 year'")
@@ -53,6 +58,11 @@ export function postgresQuery(source: string): string {
     .replace(/datetime\('now',\s*(\$\d+)\)/gi, "CURRENT_TIMESTAMP + $1::interval")
     .replace(/\bMAX\(([^,()]+),\s*0\)/gi, "GREATEST($1, 0)")
     .replace(/\bis_trendable\s*=\s*1\b/gi, "is_trendable = true");
+  if (convertedQueries.size >= MAX_CONVERTED_QUERIES) {
+    convertedQueries.delete(convertedQueries.keys().next().value!);
+  }
+  convertedQueries.set(source, converted);
+  return converted;
 }
 
 type QueryRows = Record<string, unknown>[];
