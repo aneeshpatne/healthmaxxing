@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import { clerkPlugin } from "@clerk/fastify";
-import websocket from "@fastify/websocket";
 import clientRoutes from "./routes/client.ts";
+import foodRoutes from "./routes/food.ts";
 import ingestRoutes from "./routes/ingest.ts";
 import { checkDatabase } from "./db/client.ts";
 
@@ -21,14 +21,15 @@ export function buildApp() {
     }
   });
 
-  app.register(websocket);
-
   app.register(ingestRoutes, {
     prefix: "/ingest",
   });
 
   app.register(clientRoutes, {
     prefix: "/client",
+  });
+  app.register(foodRoutes, {
+    prefix: "/client/food",
   });
 
   return app;

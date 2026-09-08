@@ -3,7 +3,6 @@ import { authMiddleware } from "../middleware/auth";
 import {
   addMeasurementCompositionSnapshot,
   addMeasurement,
-  addWorkout,
   createSnapshotReports,
   getProfileById,
   getMeasurementProcessingResult,
@@ -11,7 +10,6 @@ import {
   updateProfileInsightReportGenerationStatus,
   updateMeasurementCalculationStatus,
   type ProfileId,
-  type WorkoutInput,
   type profile,
 } from "../db/commands";
 import { calculateTargetComposition } from "../calculations/compositionSummary";
@@ -20,7 +18,6 @@ import {
   calculateFmi,
   calculateProprietaryMetrics,
 } from "../calculations/proprietaryMetrics";
-import { backfillBodyCompositionFromGrpc } from "../lib/backfillBodyComposition";
 import { calculateAgeYears } from "../utils/calculateAgeYears";
 import { addQueueItem } from "../bull/queue";
 
@@ -148,170 +145,6 @@ async function sendProfileNotFoundIfUnauthorized(
 const ingestRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", authMiddleware);
 
-  app.post("/workouts", async (request, reply) => {
-    const body = request.body as {
-      data?: {
-        workouts?: WorkoutInput[];
-      };
-    };
-    const headerProfileId =
-      request.headers.profileid ?? request.headers["x-profile-id"];
-    const profileId = Array.isArray(headerProfileId)
-      ? headerProfileId[0]
-      : headerProfileId;
-    const workouts = body.data?.workouts;
-
-    if (!profileId) {
-      return reply.code(400).send({
-        ok: false,
-        error: "profileId header is required",
-      });
-    }
-
-    if (
-      await sendProfileNotFoundIfUnauthorized(
-        profileId,
-        request.auth.account.id,
-        reply,
-      )
-    ) {
-      return;
-    }
-
-    if (!Array.isArray(workouts)) {
-      return reply.code(400).send({
-        ok: false,
-        error: "data.workouts must be an array",
-      });
-    }
-
-    const invalidWorkout = workouts.find(
-      (workout) => typeof workout.id !== "string" || workout.id.length === 0,
-    );
-    if (invalidWorkout) {
-      return reply.code(400).send({
-        ok: false,
-        error: "Each workout must include an id",
-      });
-    }
-
-    const latestWorkoutsBySourceId = new Map<string, WorkoutInput>();
-    for (const workout of workouts) {
-      latestWorkoutsBySourceId.set(workout.id, workout);
-    }
-
-    const ids = Array.from(latestWorkoutsBySourceId.values()).map(
-      async (workout) => await addWorkout(workout, profileId),
-    );
-
-    return {
-      ok: true,
-      received: workouts.length,
-      count: ids.length,
-      ids,
-    };
-  });
-
-  app.post("/backfill_body_composition", async (request, reply) => {
-    const body = (request.body ?? {}) as { profileId?: string };
-    const profileId = body.profileId?.trim();
-
-    if (
-      profileId &&
-      await sendProfileNotFoundIfUnauthorized(
-        profileId,
-        request.auth.account.id,
-        reply,
-      )
-    ) {
-      return;
-    }
-
-    const result = await backfillBodyCompositionFromGrpc({
-      accountId: request.auth.account.id,
-      profileId: profileId || undefined,
-    });
-
-    return {
-      ok: true,
-      ...result,
-    };
-  });
-
-  app.post(
-    "/add_measurement",
-    {
-      schema: {
-        body: measurementBodySchema,
-      },
-    },
-    async (request, reply) => {
-      const { profileId: rawProfileId, weight, heartbeat, impedance } = request.body as MeasurementInput;
-      const profileId = rawProfileId.toLowerCase();
-
-      if (
-        await sendProfileNotFoundIfUnauthorized(
-          profileId,
-          request.auth.account.id,
-          reply,
-        )
-      ) {
-        return;
-      }
-
-      const idempotencyHeader = request.headers["idempotency-key"];
-      const idempotencyKey = Array.isArray(idempotencyHeader)
-        ? idempotencyHeader[0]
-        : idempotencyHeader;
-      const measurement = await addMeasurement(
-        profileId,
-        weight,
-        heartbeat,
-        impedance,
-        idempotencyKey?.trim() || null,
-      );
-      const measurementId = measurement.id;
-      if (!measurement.created) {
-        const existing = await getMeasurementProcessingResult(measurementId);
-        return reply.send({
-          ok: existing?.calculationStatus !== "failed",
-          id: measurementId,
-          replayed: true,
-          calculationStatus: existing?.calculationStatus ?? "pending",
-          calculationError: existing?.calculationError ?? null,
-          jobId: existing?.reportId ?? null,
-          reportId: existing?.reportId ?? null,
-          reportStatus: existing?.reportStatus ?? null,
-        });
-      }
-
-      const { metrics, reports } = await deriveMeasurementAndQueueReport({
-        profileId,
-        measurementId,
-        weight,
-        impedance,
-      });
-
-      // app.log.info({
-      //   measurementId,
-      //   profileId,
-      //   weight,
-      //   heartbeat,
-      //   impedance,
-      //   metricsId,
-      //   metrics,
-      // });
-      return {
-        ok: true,
-        id: measurementId,
-        jobId: reports.insightReportId,
-        reportId: reports.insightReportId,
-        reportStatus: "queued",
-        reports,
-      };
-    },
-  );
-
   app.post(
     "/add_measurement/v2",
     {
@@ -323,17 +156,6 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
       const { profileId: rawProfileId, weight, heartbeat, impedance } = request.body as MeasurementInput;
       const profileId = rawProfileId.toLowerCase();
 
-      request.log.info(
-        {
-          route: "/ingest/add_measurement/v2",
-          profileId,
-          weight,
-          heartbeat,
-          impedance,
-        },
-        "received add_measurement/v2 request",
-      );
-
       if (
         await sendProfileNotFoundIfUnauthorized(
           profileId,
@@ -370,22 +192,13 @@ const ingestRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const { metrics, reports } = await deriveMeasurementAndQueueReport({
+      const { reports } = await deriveMeasurementAndQueueReport({
         profileId,
         measurementId,
         weight,
         impedance,
       });
 
-      // app.log.info({
-      //   measurementId,
-      //   profileId,
-      //   weight,
-      //   heartbeat,
-      //   impedance,
-      //   metricsId,
-      //   metrics,
-      // });
       return {
         ok: true,
         id: measurementId,
