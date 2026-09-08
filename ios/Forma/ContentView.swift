@@ -10,7 +10,6 @@ import ClerkKit
 
 struct ContentView: View {
     @Environment(Clerk.self) private var clerk
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -19,22 +18,17 @@ struct ContentView: View {
                 SwiftUIView()
             } else if clerk.user != nil {
                 PrimaryProfileGate()
-                    .transition(.opacity)
             } else {
                 ClerkSignInView()
-                    .transition(.opacity)
             }
             #else
             if clerk.user != nil {
                 PrimaryProfileGate()
-                    .transition(.opacity)
             } else {
                 ClerkSignInView()
-                    .transition(.opacity)
             }
             #endif
         }
-        .animation(FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion), value: clerk.user != nil)
         .formaLaunchReveal()
     }
 }

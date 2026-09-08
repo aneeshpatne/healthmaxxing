@@ -355,7 +355,7 @@ struct VisceralSubcutaneousDonutChart: View {
                 .rotationEffect(.degrees(-90))
 
             Text("VS")
-                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .font(FormaTypography.system(size: 13, weight: .bold))
                 .foregroundStyle(.primary)
         }
         .frame(width: 72, height: 72)
@@ -404,7 +404,7 @@ struct VisceralSubcutaneousCard: View {
     ) -> some View {
         VStack(alignment: .center, spacing: 2) {
             Text(title)
-                .font(.caption2.weight(.semibold))
+                .font(FormaTypography.textStyle(.caption2, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.center)
@@ -423,7 +423,7 @@ struct VisceralSubcutaneousCard: View {
             }
 
             Text(percentage)
-                .font(.caption2.weight(.semibold))
+                .font(FormaTypography.textStyle(.caption2, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -437,7 +437,7 @@ struct VisceralSubcutaneousCard: View {
 
     private func metricUnit(_ unit: String) -> some View {
         Text(unit)
-            .font(.caption2.weight(.medium))
+            .font(FormaTypography.textStyle(.caption2, weight: .medium))
             .foregroundStyle(.secondary)
     }
 

@@ -17,16 +17,17 @@ struct ClerkSignInView: View {
             FormaBackground()
 
             VStack(alignment: .leading, spacing: FormaSpacing.xxl) {
-                VStack(alignment: .leading, spacing: FormaSpacing.xs) {
+                VStack(alignment: .leading, spacing: FormaSpacing.sm) {
                     FormaBrandLockup(variant: .hero)
 
-                    Text("Your body, understood over time.")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.primary)
+                    Text("Your body,\nunderstood over time.")
+                        .font(FormaTypography.sectionTitle)
+                        .foregroundStyle(Color.formaTextPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Text("Sign in to record measurements and follow the changes that matter.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(FormaTypography.body)
+                        .foregroundStyle(Color.formaTextSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -34,13 +35,13 @@ struct ClerkSignInView: View {
                     continueFeedbackNonce += 1
                     authIsPresented = true
                 } label: {
-                    Label("Continue with Clerk", systemImage: "person.crop.circle.badge.checkmark")
-                        .font(.headline)
+                    Text("Continue")
+                        .font(FormaTypography.action)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 54)
                 }
                 .buttonStyle(.glassProminent)
-                .buttonBorderShape(.roundedRectangle(radius: FormaRadius.action))
+                .buttonBorderShape(.capsule)
                 .tint(.sleekAccent)
             }
             .formaSurface(.hero, padding: FormaSpacing.xxl)

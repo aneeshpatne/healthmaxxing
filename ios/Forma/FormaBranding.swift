@@ -6,36 +6,29 @@ enum FormaBrandLockupVariant {
 
     fileprivate var textSize: CGFloat {
         switch self {
-        case .header: 28
-        case .hero: 50
+        case .header: 30
+        case .hero: 56
         }
     }
 
     fileprivate var markSize: CGSize {
         switch self {
-        case .header: CGSize(width: 24, height: 32)
-        case .hero: CGSize(width: 34, height: 46)
-        }
-    }
-
-    fileprivate var markCanvasSize: CGFloat {
-        switch self {
-        case .header: 64
-        case .hero: 92
+        case .header: CGSize(width: 30, height: 30)
+        case .hero: CGSize(width: 48, height: 48)
         }
     }
 
     fileprivate var spacing: CGFloat {
         switch self {
         case .header: 8
-        case .hero: 12
+        case .hero: 14
         }
     }
 
     fileprivate var tracking: CGFloat {
         switch self {
-        case .header: -0.45
-        case .hero: -1
+        case .header: -0.55
+        case .hero: -1.2
         }
     }
 }
@@ -46,12 +39,10 @@ struct FormaBrandLockup: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: variant.spacing) {
-            Image("Frame 55(3)")
+            Image("vectorized_019fd7b0-2531-7c0a-98f7-fb339b707a32")
                 .resizable()
                 .scaledToFit()
-                .frame(width: variant.markCanvasSize, height: variant.markCanvasSize)
                 .frame(width: variant.markSize.width, height: variant.markSize.height)
-                .clipped()
                 .accessibilityHidden(true)
 
             Text("Forma")

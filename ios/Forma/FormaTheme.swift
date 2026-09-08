@@ -4,18 +4,21 @@ import Charts
 // MARK: - Foundations
 
 enum FormaSpacing {
-    static let xxs: CGFloat = 4
-    static let xs: CGFloat = 8
-    static let sm: CGFloat = 12
-    static let md: CGFloat = 16
-    static let lg: CGFloat = 20
-    static let xl: CGFloat = 24
-    static let xxl: CGFloat = 32
+    /// 4px base grid.
+    static let xxs: CGFloat = 4   // space-1
+    static let xs: CGFloat = 8    // space-2
+    static let sm: CGFloat = 12   // space-3
+    static let md: CGFloat = 16   // space-4
+    static let lg: CGFloat = 20   // space-5
+    static let xl: CGFloat = 24   // space-6
+    static let xxl: CGFloat = 32  // space-8
+    static let xxxl: CGFloat = 40 // space-10
+    static let huge: CGFloat = 48 // space-12
 
     static let screenGutter = lg
     static let cardGap = lg
     static let sectionGap = xl
-    static let cardInset = lg
+    static let cardInset = xl
 
     /// Unified vertical rhythm inside cards (header → content → divider → callout).
     static let cardContent = lg
@@ -23,44 +26,67 @@ enum FormaSpacing {
 
 enum FormaSemicircularGaugeLayout {
     static let aspectRatio: CGFloat = 2
-    static let strokeWidth: CGFloat = 18
+    static let strokeWidth: CGFloat = 16
     static let labelInset: CGFloat = 30
-    static let markerDiameter: CGFloat = 18
-    static let markerStrokeWidth: CGFloat = 3.5
+    static let markerDiameter: CGFloat = 16
+    static let markerStrokeWidth: CGFloat = 3
     static let scoreOffset: CGFloat = 20
 }
 
 enum FormaRadius {
-    static let badge: CGFloat = 9
-    static let inset: CGFloat = 14
-    static let action: CGFloat = 16
-    static let card: CGFloat = 22
-    static let hero: CGFloat = 28
+    /// Soft, confident geometry — not inflated.
+    static let badge: CGFloat = 12      // radius-sm
+    static let inset: CGFloat = 18      // radius-md
+    static let card: CGFloat = 24       // radius-lg
+    static let hero: CGFloat = 32       // radius-xl
+    /// Fully rounded CTAs and segmented controls.
+    static let action: CGFloat = 999    // radius-pill
+    static let pill: CGFloat = 999
 }
 
 enum FormaTypography {
+    /// App-wide UI face — SF Rounded: geometric, modern, fintech-clean.
+    /// Wordmark stays Cormorant for brand contrast.
+    static let design: Font.Design = .rounded
+
     static func wordmark(size: CGFloat) -> Font {
         .custom("CormorantGaramond-Light", size: size, relativeTo: .title)
     }
 
-    static let eyebrow = Font.caption.weight(.bold)
-    static let cardTitle = Font.system(.headline, design: .rounded).weight(.semibold)
-    static let sectionTitle = Font.system(.title3, design: .rounded).weight(.semibold)
-    static let action = Font.subheadline.weight(.semibold)
-    static let body = Font.subheadline
-    static let supporting = Font.caption
-    static let metricSmall = Font.system(.title3, design: .rounded).weight(.bold)
-    static let metric = Font.system(.largeTitle, design: .rounded).weight(.semibold)
-    static let heroMetric = Font.system(.largeTitle, design: .rounded).weight(.semibold)
-    static let unit = Font.subheadline.weight(.semibold)
-    static let chartLabel = Font.caption2.weight(.medium)
+    /// Prefer this for any ad-hoc size so the face stays consistent.
+    static func system(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: design)
+    }
 
-    /// Dynamic Type-aware rounded readout centered in semicircular gauges.
-    static let gaugeValue = Font.system(.largeTitle, design: .rounded).weight(.bold)
-    /// Smallest semantic label in the app (legend ranges, dense annotations).
-    static let micro = Font.caption2.weight(.medium)
-    /// Medium-strength headline used inside cards beneath the card title.
-    static let sectionHeadline = Font.body.weight(.medium)
+    /// Dynamic Type text styles with the app face (use instead of `.font(FormaTypography.textStyle(.body))` etc.).
+    static func textStyle(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
+        .system(style, design: design, weight: weight)
+    }
+
+    /// Quiet metadata / chip labels (sentence case; avoid all-caps except short tags).
+    static let eyebrow = system(size: 12, weight: .semibold)
+    /// Value bean / pill numbers (FormaValueBadge).
+    static let valueBadge = system(size: 16, weight: .bold)
+    /// Card titles — Heading 3 energy.
+    static let cardTitle = system(size: 20, weight: .semibold)
+    /// Screen / section titles — Heading 2.
+    static let sectionTitle = system(size: 26, weight: .bold)
+    static let action = system(size: 16, weight: .semibold)
+    static let body = system(size: 16, weight: .regular)
+    static let supporting = system(size: 14, weight: .medium)
+    static let metricSmall = system(size: 28, weight: .bold)
+    /// Display L — primary numeric readouts.
+    static let metric = system(size: 52, weight: .bold)
+    /// Display XL — hero metrics (one dominant idea).
+    static let heroMetric = system(size: 72, weight: .bold)
+    /// Units stay 35–50% of the metric.
+    static let unit = system(size: 16, weight: .semibold)
+    static let chartLabel = system(size: 11, weight: .medium)
+
+    /// Gauge center readout.
+    static let gaugeValue = system(size: 48, weight: .bold)
+    static let micro = system(size: 11, weight: .semibold)
+    static let sectionHeadline = system(size: 17, weight: .semibold)
 }
 
 // MARK: - Motion
@@ -69,51 +95,60 @@ enum FormaTypography {
 /// Everyday interactions stay quick; emphasis is rare and intentional.
 /// Prefer system navigation/sheet motion; these tokens cover app-owned state.
 enum FormaMotion {
-    // MARK: Core
+    // MARK: Core — fast, direct, cubic-bezier(0.2, 0.8, 0.2, 1)
 
     /// Finger-down / press feedback (~100ms).
     static let tap = Animation.easeOut(duration: 0.10)
 
-    /// Small chrome changes — lockups, chips, secondary UI (~160ms).
-    static let fast = Animation.easeInOut(duration: 0.16)
+    /// State change / chrome (~180ms).
+    static let fast = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.18)
 
-    /// Default content replacement — status, banners, footers (~280ms).
-    static let standard = Animation.easeInOut(duration: 0.28)
+    /// Default content replacement (~220ms).
+    static let standard = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.22)
 
-    /// Rare high-emphasis settle — save success, short brand exit.
-    static let emphasized = Animation.spring(duration: 0.40, bounce: 0.08)
+    /// Rare high-emphasis settle — keep bounce minimal.
+    static let emphasized = Animation.spring(duration: 0.32, bounce: 0.04)
+
+    /// One-shot success pop — confident bounce, not cartoony.
+    static let success = Animation.spring(duration: 0.52, bounce: 0.34)
+
+    /// Softer follow-through for secondary success elements (title, chips).
+    static let successSoft = Animation.spring(duration: 0.58, bounce: 0.22)
+
+    /// Expanding rings / glow on celebration (slightly underdamped).
+    static let successBurst = Animation.spring(duration: 0.72, bounce: 0.12)
 
     // MARK: Interaction classes
 
     /// Segmented controls, stage trackers, list selection highlights.
-    static let selection = Animation.spring(duration: 0.20, bounce: 0.05)
+    static let selection = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.18)
 
     /// Drag release, scrub settle, gesture-owned animation.
     static let interactive = Animation.interactiveSpring(
-        response: 0.32,
-        dampingFraction: 0.86,
-        blendDuration: 0.15
+        response: 0.28,
+        dampingFraction: 0.90,
+        blendDuration: 0.12
     )
 
     /// Single-element insertion into a collection.
-    static let insertion = Animation.easeOut(duration: 0.22)
+    static let insertion = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.20)
 
     /// Removal before neighbors close the gap.
-    static let removal = Animation.easeIn(duration: 0.18)
+    static let removal = Animation.easeIn(duration: 0.16)
 
     /// Explicit dismiss for app-owned overlays (toasts).
-    static let dismissal = Animation.easeIn(duration: 0.20)
+    static let dismissal = Animation.easeIn(duration: 0.18)
 
     // MARK: Data & brand
 
     /// Gauge marker and first data paint only.
-    static let dataReveal = Animation.easeOut(duration: 0.45)
+    static let dataReveal = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.36)
 
     /// Short brand decelerate for the cold-launch moment only.
-    static let brandDecelerate = Animation.timingCurve(0.2, 0.9, 0.2, 1, duration: 0.36)
+    static let brandDecelerate = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.32)
 
     /// Soft continuous pulse for loading marks / skeletons (never for navigation).
-    static let pulse = Animation.easeInOut(duration: 1.2).repeatForever(autoreverses: true)
+    static let pulse = Animation.easeInOut(duration: 1.1).repeatForever(autoreverses: true)
 
     // MARK: System-aligned (prefer nil — do not wrap NavigationLink / sheets)
 
@@ -206,203 +241,206 @@ extension View {
     }
 }
 
-private struct FormaEntranceModifier: ViewModifier {
-    let order: Int
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isVisible = false
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(isVisible ? 1 : 0)
-            // Small rise only — avoid large travel that feels web-like.
-            .offset(y: isVisible || reduceMotion ? 0 : 6)
-            .onAppear {
-                guard !isVisible else { return }
-                if reduceMotion {
-                    isVisible = true
-                } else {
-                    // Cap stagger so stacked cards do not stage a parade.
-                    let delay = min(Double(order) * 0.04, 0.08)
-                    withAnimation(FormaMotion.insertion.delay(delay)) {
-                        isVisible = true
-                    }
-                }
-            }
-    }
-}
-
 extension View {
-    /// One-shot entrance for the small number of elements initially visible on
-    /// a screen. Do not attach this to recycling rows or long lazy lists.
+    /// Kept as a compatibility hook. Screen content appears immediately; system
+    /// navigation and meaningful data feedback own the remaining motion.
     func formaEntrance(order: Int = 0) -> some View {
-        modifier(FormaEntranceModifier(order: order))
+        self
     }
 }
 
 // MARK: - Palette
 //
-// Neutral canvas + single brand accent (mint/teal). Status and chart series are
-// separate roles so fat data never inherits error red by accident.
-// Light values are tuned for WCAG 2.2 AA (≥ 4.5:1 body text on backgrounds).
+// Cash-inspired: warm monochrome surfaces (80–90%) + one high-sat lime accent.
+// Secondary teal for limited secondary emphasis. Status colors are intentional only.
+// Accent is one notch under pure neon for comfort on long sessions.
 
 extension Color {
-    // MARK: Backgrounds & surfaces
+    // MARK: Backgrounds & surfaces — warm monochrome utility
 
-    /// App canvas — `color.background.default`
+    /// Main app canvas — `bg-primary`.
     static let appBackground = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.027, green: 0.039, blue: 0.035, alpha: 1) // #070A09
-            : UIColor(red: 0.953, green: 0.961, blue: 0.957, alpha: 1) // #F3F5F4
+            ? UIColor(white: 0.000, alpha: 1) // #000000
+            : UIColor(red: 0.969, green: 0.969, blue: 0.961, alpha: 1) // #F7F7F5
     })
 
-    /// Card / default surface — `color.surface.default`
+    /// Cards / sheets — `surface-primary`.
     static let appSecondaryBackground = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.063, green: 0.086, blue: 0.078, alpha: 1) // #101614
-            : UIColor(red: 0.980, green: 0.984, blue: 0.980, alpha: 1) // #FAFBFA
+            ? UIColor(white: 0.051, alpha: 1) // #0D0D0D
+            : UIColor(white: 1.000, alpha: 1) // #FFFFFF
     })
 
-    /// Inset wells, chips — `color.background.subtle` / elevated-adjacent
+    /// Secondary cards / controls — `surface-secondary`.
     static let appTertiaryBackground = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.094, green: 0.125, blue: 0.110, alpha: 1) // #18201C
-            : UIColor(red: 0.910, green: 0.925, blue: 0.918, alpha: 1) // #E8ECEA
+            ? UIColor(white: 0.082, alpha: 1) // #151515
+            : UIColor(red: 0.937, green: 0.937, blue: 0.925, alpha: 1) // #EFEFEC
     })
 
-    /// Chart plot background — `color.surface` chart well
+    /// Chart plot well.
     static let appChartBackground = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.055, green: 0.078, blue: 0.071, alpha: 1) // #0E1412
-            : UIColor(red: 0.933, green: 0.945, blue: 0.937, alpha: 1) // #EEF1EF
+            ? UIColor(white: 0.078, alpha: 1) // #141414
+            : UIColor(red: 0.945, green: 0.945, blue: 0.933, alpha: 1) // #F1F1EE
     })
 
-    /// Elevated surface for modals / floating heroes — `color.surface.elevated`
+    /// Elevated controls / modals — `surface-elevated` / inverse-adjacent.
     static let appElevatedBackground = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.094, green: 0.125, blue: 0.110, alpha: 1) // #18201C
-            : UIColor(red: 1.000, green: 1.000, blue: 1.000, alpha: 1) // #FFFFFF
+            ? UIColor(white: 0.110, alpha: 1) // #1C1C1C
+            : UIColor(white: 1.000, alpha: 1) // #FFFFFF
+    })
+
+    /// Inverse surface for active segmented controls / dark chips.
+    static let appInverseSurface = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1.000, alpha: 1) // #FFFFFF
+            : UIColor(white: 0.039, alpha: 1) // #0A0A0A
     })
 
     static let appSeparator = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 0.10)
-            : UIColor(red: 0.08, green: 0.14, blue: 0.11, alpha: 0.08)
+            ? UIColor(white: 0.161, alpha: 1) // #292929
+            : UIColor(red: 0.886, green: 0.886, blue: 0.871, alpha: 1) // #E2E2DE
     })
 
-    /// Default hairline border — `color.border.default`
+    /// Default hairline border — `border-subtle`.
     static let appBorder = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.165, green: 0.208, blue: 0.188, alpha: 1) // #2A3530
-            : UIColor(red: 0.835, green: 0.867, blue: 0.847, alpha: 1) // #D5DDD8
+            ? UIColor(white: 0.161, alpha: 1) // #292929
+            : UIColor(red: 0.886, green: 0.886, blue: 0.871, alpha: 1) // #E2E2DE
     })
 
-    /// Strong border for inputs / focus-adjacent chrome — `color.border.strong`
+    /// Strong border for inputs / focus-adjacent chrome.
     static let appBorderStrong = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.353, green: 0.431, blue: 0.396, alpha: 1) // #5A6E65
-            : UIColor(red: 0.435, green: 0.506, blue: 0.471, alpha: 1) // #6F8178
+            ? UIColor(white: 0.467, alpha: 1) // #777777
+            : UIColor(white: 0.400, alpha: 1) // #666666
     })
 
     static let appSurfaceHighlight = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 0.06)
-            : UIColor(white: 1, alpha: 0.70)
+            ? UIColor(white: 1, alpha: 0.04)
+            : UIColor(white: 1, alpha: 0.50)
     })
 
     static let appSubtleFill = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 0.04)
-            : UIColor(red: 0.08, green: 0.16, blue: 0.12, alpha: 0.045)
+            ? UIColor(white: 1, alpha: 0.05)
+            : UIColor(white: 0, alpha: 0.035)
     })
 
-    // MARK: Brand action — single accent (60–30–10: the ~10%)
+    // MARK: Text (prefer .primary / .secondary when system adapts well)
 
-    /// Brand / primary action accent — `color.action.primary.default` (icons, tint, selection).
-    /// Light is deepened for AA text contrast; dark stays bright for lines/icons.
+    static let formaTextPrimary = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1.000, alpha: 1)
+            : UIColor(white: 0.039, alpha: 1) // #0A0A0A
+    })
+
+    static let formaTextSecondary = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0.722, alpha: 1) // #B8B8B8
+            : UIColor(white: 0.400, alpha: 1) // #666666
+    })
+
+    static let formaTextTertiary = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0.467, alpha: 1) // #777777
+            : UIColor(white: 0.588, alpha: 1) // #969696
+    })
+
+    // MARK: Brand action — lime accent, slightly dimmed from #C6FF1A
+
+    /// Primary accent — actions, active nav, progress, emphasis.
+    /// Muted acid-sage: restrained enough for long sessions, vivid enough for state.
     static let sleekAccent = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.239, green: 0.839, blue: 0.561, alpha: 1) // #3DD68F
-            : UIColor(red: 0.043, green: 0.420, blue: 0.290, alpha: 1) // #0B6B4A
+            ? UIColor(red: 0.655, green: 0.804, blue: 0.231, alpha: 1) // #A7CD3B
+            : UIColor(red: 0.557, green: 0.710, blue: 0.145, alpha: 1) // #8EB525
     })
 
-    /// Solid primary fill (buttons, record ready) — deeper on dark for inverse text.
+    /// Secondary accent — limited secondary emphasis only.
+    static let formaAccentSecondary = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.086, green: 0.851, blue: 0.780, alpha: 1) // #16D9C7
+            : UIColor(red: 0.071, green: 0.843, blue: 0.773, alpha: 1) // #12D7C5
+    })
+
+    /// Solid primary fill (buttons, record ready).
     static let actionInk = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.169, green: 0.749, blue: 0.478, alpha: 1) // #2BBF7A
-            : UIColor(red: 0.043, green: 0.420, blue: 0.290, alpha: 1) // #0B6B4A
+            ? UIColor(red: 0.655, green: 0.804, blue: 0.231, alpha: 1) // #A7CD3B
+            : UIColor(red: 0.557, green: 0.710, blue: 0.145, alpha: 1) // #8EB525
     })
 
-    /// Primary hover — `color.action.primary.hover`
+    /// Primary hover — slightly brighter.
     static let actionPrimaryHover = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.239, green: 0.839, blue: 0.561, alpha: 1) // #3DD68F
-            : UIColor(red: 0.035, green: 0.353, blue: 0.243, alpha: 1) // #095A3E
+            ? UIColor(red: 0.776, green: 1.000, blue: 0.102, alpha: 1) // #C6FF1A
+            : UIColor(red: 0.776, green: 1.000, blue: 0.102, alpha: 1) // #C6FF1A
     })
 
-    /// Primary pressed — `color.action.primary.pressed`
+    /// Primary pressed — slightly deeper.
     static let actionPrimaryPressed = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.122, green: 0.651, blue: 0.416, alpha: 1) // #1FA66A
-            : UIColor(red: 0.027, green: 0.290, blue: 0.200, alpha: 1) // #074A33
+            ? UIColor(red: 0.620, green: 0.820, blue: 0.060, alpha: 1) // #9ED10F
+            : UIColor(red: 0.620, green: 0.820, blue: 0.060, alpha: 1) // #9ED10F
     })
 
-    /// Label/icon on solid primary — `color.text.inverse`
-    static let actionForeground = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.020, green: 0.125, blue: 0.078, alpha: 1) // #052014
-            : UIColor.white
+    /// Label/icon on solid primary — dark ink on lime.
+    static let actionForeground = Color(uiColor: UIColor { _ in
+        UIColor(white: 0.039, alpha: 1) // #0A0A0A
     })
 
-    /// Disabled control fill — `color.action.primary.disabled` (fill)
+    /// Disabled control fill.
     static let actionDisabledFill = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.102, green: 0.133, blue: 0.125, alpha: 1) // #1A2220
-            : UIColor(red: 0.898, green: 0.918, blue: 0.906, alpha: 1) // #E5EAE7
+            ? UIColor(white: 0.133, alpha: 1) // #222222
+            : UIColor(red: 0.937, green: 0.937, blue: 0.925, alpha: 1) // #EFEFEC
     })
 
-    /// Disabled control text — `color.action.primary.disabled` (label)
+    /// Disabled control text.
     static let actionDisabledText = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.416, green: 0.478, blue: 0.451, alpha: 1) // #6A7A73
-            : UIColor(red: 0.541, green: 0.596, blue: 0.573, alpha: 1) // #8A9892
+            ? UIColor(white: 0.467, alpha: 1) // #777777
+            : UIColor(white: 0.588, alpha: 1) // #969696
     })
 
-    /// Focus ring — `color.focus.ring` (≥ 3:1 against canvas)
+    /// Focus ring — accent glow only for focus/active feedback.
     static let formaFocusRing = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.361, green: 0.871, blue: 0.659, alpha: 1) // #5CDEA8
-            : UIColor(red: 0.043, green: 0.420, blue: 0.290, alpha: 1) // #0B6B4A
+            ? UIColor(red: 0.776, green: 1.000, blue: 0.102, alpha: 1) // #C6FF1A
+            : UIColor(red: 0.620, green: 0.820, blue: 0.060, alpha: 1) // #9ED10F
     })
 
-    // MARK: Status — semantic only (pair with icon/text)
+    // MARK: Status — purposeful saturation only
 
-    /// Success — `color.status.success`
+    /// Success.
     static let formaPositive = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.239, green: 0.859, blue: 0.690, alpha: 1) // #3DDBB0
-            : UIColor(red: 0.039, green: 0.431, blue: 0.337, alpha: 1) // #0A6E56
+            ? UIColor(red: 0.333, green: 0.878, blue: 0.424, alpha: 1) // #55E06C
+            : UIColor(red: 0.255, green: 0.851, blue: 0.365, alpha: 1) // #41D95D
     })
 
-    /// Warning — `color.status.warning`
+    /// Warning.
     static let formaCaution = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.910, green: 0.722, blue: 0.290, alpha: 1) // #E8B84A
-            : UIColor(red: 0.604, green: 0.392, blue: 0.000, alpha: 1) // #9A6400
+            ? UIColor(red: 1.000, green: 0.757, blue: 0.271, alpha: 1) // #FFC145
+            : UIColor(red: 1.000, green: 0.690, blue: 0.125, alpha: 1) // #FFB020
     })
 
-    /// Error — `color.status.error`
+    /// Error / danger.
     static let formaNegative = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.941, green: 0.443, blue: 0.431, alpha: 1) // #F0716E
-            : UIColor(red: 0.706, green: 0.137, blue: 0.094, alpha: 1) // #B42318
+            ? UIColor(red: 1.000, green: 0.361, blue: 0.361, alpha: 1) // #FF5C5C
+            : UIColor(red: 1.000, green: 0.302, blue: 0.310, alpha: 1) // #FF4D4F
     })
 
-    /// Information — `color.status.info`
-    static let formaInfo = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.357, green: 0.722, blue: 0.910, alpha: 1) // #5BB8E8
-            : UIColor(red: 0.043, green: 0.431, blue: 0.600, alpha: 1) // #0B6E99
-    })
+    /// Information / secondary emphasis (teal).
+    static let formaInfo = Color.formaAccentSecondary
 
     // Legacy names → semantic roles (prefer formaPositive / Caution / Negative / Info).
     static let formaTeal = Color.formaPositive
@@ -412,41 +450,38 @@ extension Color {
     /// Mid gauge band; same AA-safe warning family (not body-copy yellow).
     static let formaYellow = Color.formaCaution
 
-    // MARK: Chart categorical — distinct from status
+    // MARK: Chart categorical — one accent for primary series, gray for history
 
     static let formaChartPrimary = Color.sleekAccent
     static let formaChartMuscle = Color.sleekAccent
 
-    /// Warm orange for fat series — not error red.
-    static let formaChartFat = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.941, green: 0.627, blue: 0.376, alpha: 1) // #F0A060
-            : UIColor(red: 0.710, green: 0.278, blue: 0.031, alpha: 1) // #B54708
-    })
+    /// Secondary series — teal, not error red.
+    static let formaChartFat = Color.formaAccentSecondary
 
     static let formaChartVisceral = Color.formaCaution
-    static let formaChartSubcutaneous = Color.formaInfo
+    static let formaChartSubcutaneous = Color.formaAccentSecondary
 
     static let formaChartBone = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.541, green: 0.604, blue: 0.576, alpha: 1) // #8A9A93
-            : UIColor(red: 0.361, green: 0.420, blue: 0.396, alpha: 1) // #5C6B65
+            ? UIColor(white: 0.467, alpha: 1) // #777777
+            : UIColor(white: 0.588, alpha: 1) // #969696
     })
 
     /// Ring drawn around chart markers. Matches the card surface so markers read
     /// as a clean cutout in both light and dark appearances.
     static let appMarkerRing = Color.appSecondaryBackground
 
+    /// Single primary card shadow per theme (prefer tonal separation).
     static let cardShadow = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(white: 0, alpha: 0.28)
-            : UIColor(red: 0.08, green: 0.10, blue: 0.09, alpha: 0.07)
+            : UIColor(white: 0, alpha: 0.06)
     })
 
     static let contactShadow = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(white: 0, alpha: 0.18)
-            : UIColor(red: 0.08, green: 0.10, blue: 0.09, alpha: 0.04)
+            ? UIColor(white: 0, alpha: 0.16)
+            : UIColor(white: 0, alpha: 0.03)
     })
 
     /// A softened, pastel version of the color — used for atmospheric washes so
@@ -481,15 +516,8 @@ struct FormaBackground: View {
 
     var body: some View {
         ZStack {
+            // Monochrome canvas first — no large decorative accent gradients.
             Color.appBackground
-
-            // Single restrained brand wash — 60–30–10 keeps accent under ~10%.
-            RadialGradient(
-                colors: [Color.sleekAccent.opacity(0.028), .clear],
-                center: .topLeading,
-                startRadius: 0,
-                endRadius: 400
-            )
 
             if let accent {
                 VStack(spacing: 0) {
@@ -512,16 +540,17 @@ struct FormaAccentWash: View {
     var topExtension: CGFloat = 0
 
     var body: some View {
+        // Quiet tonal lift only — accent reserved for actions/state, not decoration.
         let pastel = accent.pastelized()
-        let totalHeight = 420 + topExtension
+        let totalHeight = 280 + topExtension
         let extensionStop = topExtension / totalHeight
-        let midpointStop = (topExtension + 210) / totalHeight
+        let midpointStop = (topExtension + 140) / totalHeight
 
         LinearGradient(
             stops: [
-                .init(color: pastel.opacity(0.30), location: 0),
-                .init(color: pastel.opacity(0.30), location: extensionStop),
-                .init(color: pastel.opacity(0.11), location: midpointStop),
+                .init(color: pastel.opacity(0.14), location: 0),
+                .init(color: pastel.opacity(0.14), location: extensionStop),
+                .init(color: pastel.opacity(0.05), location: midpointStop),
                 .init(color: .clear, location: 1)
             ],
             startPoint: .top,
@@ -580,81 +609,39 @@ private struct FormaSurfaceModifier: ViewModifier {
                 shape
                     .fill(style.fill)
                     .overlay {
-                        if let tint {
-                            shape.fill(
-                                LinearGradient(
-                                    colors: [tint.opacity(0.08), tint.opacity(0.02), .clear],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                        if tint != nil {
+                            // Keep data color in marks and labels. The container stays dark/neutral.
+                            shape.fill(Color.appInverseSurface.opacity(0.025))
                         }
                     }
             } else {
+                // Tonal monochrome cards — one soft shadow, no permanent neon glow.
                 let base = shape
                     .fill(style.fill)
                     .overlay {
-                        // Soft top-down sheen for a premium, lit-from-above surface.
-                        shape.fill(
-                            LinearGradient(
-                                colors: [
-                                    Color.appSurfaceHighlight.opacity(0.5),
-                                    Color.appSurfaceHighlight.opacity(0.06),
-                                    .clear
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                    }
-                    .overlay {
-                        if let tint {
-                            // Atmospheric wash anchoring the card to its status color.
-                            shape.fill(
-                                LinearGradient(
-                                    colors: [tint.opacity(0.14), tint.opacity(0.04), .clear],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
+                        if tint != nil {
+                            shape.fill(Color.appInverseSurface.opacity(0.025))
                         }
                     }
 
-                if let tint {
-                    // Status-tinted hero only: light wash shadow, not multi-hue glow stacks.
-                    base
-                        .shadow(color: tint.opacity(0.12), radius: 18, x: 0, y: 8)
-                        .shadow(color: Color.cardShadow, radius: 12, x: 0, y: 6)
-                        .shadow(color: Color.contactShadow, radius: 2, x: 0, y: 1)
-                } else {
-                    base
-                        .shadow(
-                            color: Color.cardShadow,
-                            radius: style == .floating ? 20 : (style == .hero ? 16 : 12),
-                            x: 0,
-                            y: style == .floating ? 10 : (style == .hero ? 8 : 6)
-                        )
-                        .shadow(
-                            color: Color.contactShadow,
-                            radius: style == .floating ? 3 : 2,
-                            x: 0,
-                            y: 1
-                        )
-                }
+                base.shadow(
+                    color: Color.cardShadow,
+                    radius: style == .floating || style == .hero ? 12 : 8,
+                    x: 0,
+                    y: style == .floating || style == .hero ? 8 : 4
+                )
             }
         }
         .overlay {
-            shape.strokeBorder(
-                LinearGradient(
-                    colors: [
-                        tint?.opacity(0.28) ?? Color.appSurfaceHighlight,
-                        colorSchemeContrast == .increased ? Color.appBorderStrong.opacity(0.55) : Color.appSeparator
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
-            )
+            // Prefer tonal separation; hairline only when contrast is increased or tinted.
+            if colorSchemeContrast == .increased || tint != nil {
+                shape.strokeBorder(
+                    colorSchemeContrast == .increased
+                        ? Color.appBorderStrong.opacity(0.55)
+                        : Color.appBorder,
+                    lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
+                )
+            }
         }
     }
 }
@@ -709,10 +696,10 @@ struct FormaCardHeader<Trailing: View>: View {
     }
 
     private var titleContent: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(FormaTypography.cardTitle)
-                .tracking(-0.2)
+                .tracking(-0.4)
                 .foregroundStyle(.primary)
 
             if let subtitle, !subtitle.isEmpty, subtitle != title {
@@ -743,34 +730,32 @@ struct FormaDivider: View {
 
 /// Soft tinted capsule used for headline values and statuses.
 /// Default tint is neutral secondary — pass brand/status only when meaning requires it.
+/// Sentence case; short metadata only.
 struct FormaValueBadge: View {
     let text: String
     var tint: Color = .secondary
 
     var body: some View {
         Text(text)
-            .font(.subheadline.weight(.bold))
+            .font(FormaTypography.valueBadge)
             .monospacedDigit()
             .lineLimit(2)
-            .minimumScaleFactor(0.8)
+            .minimumScaleFactor(0.75)
             .foregroundStyle(tint)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
             .background(tint.opacity(0.12), in: Capsule())
-            .overlay {
-                Capsule().strokeBorder(tint.opacity(0.16), lineWidth: 0.5)
-            }
     }
 }
 
 /// Small tinted tile used to present an SF Symbol alongside text.
-/// Default is secondary so screens do not over-accent decorative icons.
+/// Minimal iconography — quiet fill, no decorative stroke.
 struct FormaIconTile: View {
     let systemImage: String
     var tint: Color = .secondary
-    var size: CGFloat = 30
+    var size: CGFloat = 32
     var radius: CGFloat = FormaRadius.badge
-    var symbolFont: Font = .system(size: 13, weight: .semibold)
+    var symbolFont: Font = FormaTypography.system(size: 14, weight: .semibold)
 
     var body: some View {
         Image(systemName: systemImage)
@@ -779,11 +764,7 @@ struct FormaIconTile: View {
             .frame(width: size, height: size)
             .background {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(tint.opacity(0.10))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .strokeBorder(tint.opacity(0.12), lineWidth: 0.5)
-                    }
+                    .fill(tint.opacity(0.12))
             }
     }
 }
@@ -850,24 +831,20 @@ struct FormaStatusView: View {
     @State private var actionFeedbackNonce = 0
 
     var body: some View {
-        VStack(spacing: FormaSpacing.lg) {
+        VStack(spacing: FormaSpacing.xl) {
             ZStack {
                 Circle()
-                    .fill(tint.opacity(0.11))
-                    .frame(width: 64, height: 64)
-
-                Circle()
-                    .strokeBorder(tint.opacity(0.14), lineWidth: 0.5)
-                    .frame(width: 64, height: 64)
+                    .fill(tint.opacity(0.12))
+                    .frame(width: 72, height: 72)
 
                 Image(systemName: systemImage)
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(FormaTypography.system(size: 26, weight: .semibold))
                     .foregroundStyle(tint)
             }
 
-            VStack(spacing: FormaSpacing.xs) {
+            VStack(spacing: FormaSpacing.sm) {
                 Text(title)
-                    .font(.title3.weight(.semibold))
+                    .font(FormaTypography.sectionTitle)
                     .foregroundStyle(.primary)
 
                 Text(message)
@@ -883,17 +860,18 @@ struct FormaStatusView: View {
                     action()
                 } label: {
                     Text(actionTitle)
-                        .font(.subheadline.weight(.semibold))
+                        .font(FormaTypography.action)
+                        .frame(minHeight: 52)
+                        .padding(.horizontal, FormaSpacing.xl)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.glassProminent)
                 .buttonBorderShape(.capsule)
                 .tint(actionTint ?? tint)
-                .frame(minHeight: 44)
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, FormaSpacing.xl)
-        .padding(.vertical, 80)
+        .padding(.vertical, 88)
         .accessibilityElement(children: .contain)
         .formaFeedback(.softImpact, trigger: actionFeedbackNonce)
     }
@@ -998,16 +976,12 @@ enum FormaTransition {
     }
 }
 
-/// One-time, short cold-launch moment. The real destination renders behind
-/// the overlay so authentication/profile/report loading proceeds immediately.
-/// Full choreography stays under ~400ms so the app feels ready, not staged.
+/// One-time SVG brand motion. The destination renders behind the overlay so
+/// authentication, profile, and report loading can proceed simultaneously.
 struct FormaLaunchReveal: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var hasStarted = false
     @State private var isShowingOverlay = true
-    @State private var revealsMark = false
-    @State private var revealsWordmark = false
     @State private var revealsContent = false
     @State private var exitsOverlay = false
 
@@ -1017,13 +991,12 @@ struct FormaLaunchReveal: ViewModifier {
                 .opacity(revealsContent || reduceMotion ? 1 : 0)
 
             if isShowingOverlay {
-                FormaLaunchSequence(
-                    revealsMark: revealsMark,
-                    revealsWordmark: revealsWordmark,
-                    isExiting: exitsOverlay,
-                    reduceMotion: reduceMotion,
-                    reduceTransparency: reduceTransparency
+                FormaReportLoadingView(
+                    status: "Motion study — 01",
+                    context: "INITIALIZING",
+                    isMinimal: false
                 )
+                .opacity(exitsOverlay ? 0 : 1)
                 .transition(.opacity)
                 .zIndex(10)
                 .allowsHitTesting(!exitsOverlay)
@@ -1036,113 +1009,29 @@ struct FormaLaunchReveal: ViewModifier {
             hasStarted = true
 
             if reduceMotion {
-                revealsMark = true
-                revealsWordmark = true
                 revealsContent = true
                 exitsOverlay = true
                 isShowingOverlay = false
                 return
             }
 
-            withAnimation(FormaMotion.brandDecelerate) {
-                revealsMark = true
-            }
-            try? await Task.sleep(for: .milliseconds(180))
+            // Let the SVG mark draw, settle, and reveal its wordmark before the
+            // destination takes over. App work continues behind this overlay.
+            try? await Task.sleep(for: .milliseconds(4_200))
+            guard !Task.isCancelled else { return }
 
-            withAnimation(FormaMotion.fast) {
-                revealsWordmark = true
-            }
-            try? await Task.sleep(for: .milliseconds(120))
-
-            withAnimation(FormaMotion.emphasized) {
+            withAnimation(.easeOut(duration: 0.42)) {
                 revealsContent = true
                 exitsOverlay = true
             }
-            try? await Task.sleep(for: .milliseconds(280))
+            try? await Task.sleep(for: .milliseconds(420))
             isShowingOverlay = false
         }
     }
 }
 
-private struct FormaLaunchSequence: View {
-    let revealsMark: Bool
-    let revealsWordmark: Bool
-    let isExiting: Bool
-    let reduceMotion: Bool
-    let reduceTransparency: Bool
-
-    var body: some View {
-        ZStack {
-            Color.appBackground
-
-            if !reduceTransparency {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color.sleekAccent.opacity(revealsMark ? 0.12 : 0),
-                                .clear
-                            ],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: 220
-                        )
-                    )
-                    .frame(width: 480, height: 480)
-                    .opacity(isExiting ? 0 : 1)
-            }
-
-            HStack(spacing: FormaSpacing.sm) {
-                FormaAnimatedMark(progress: revealsMark ? 1 : 0, reduceMotion: reduceMotion)
-                    .frame(width: 52, height: 68)
-
-                Text("Forma")
-                    .font(FormaTypography.wordmark(size: 48))
-                    .tracking(revealsWordmark ? -1 : 2)
-                    .foregroundStyle(Color.primary)
-                    .opacity(revealsWordmark ? 1 : 0)
-            }
-            .fixedSize()
-            .opacity(isExiting ? 0 : 1)
-        }
-        .ignoresSafeArea()
-    }
-}
-
-private struct FormaAnimatedMark: View {
-    let progress: CGFloat
-    let reduceMotion: Bool
-
-    var body: some View {
-        ZStack {
-            ForEach(0..<3, id: \.self) { index in
-                FormaMarkContour(index: index)
-                    .trim(from: 0, to: progress)
-                    .stroke(
-                        Color.sleekAccent,
-                        style: StrokeStyle(
-                            lineWidth: index == 0 ? 5.5 : 3.5,
-                            lineCap: .round,
-                            lineJoin: .round
-                        )
-                    )
-                    .shadow(color: .sleekAccent.opacity(0.16), radius: 4)
-                    .animation(
-                        FormaMotion.preferred(
-                            FormaMotion.brandDecelerate.delay(Double(index) * 0.03),
-                            reduceMotion: reduceMotion
-                        ),
-                        value: progress
-                    )
-            }
-        }
-        .opacity(progress > 0 ? 1 : 0)
-    }
-}
-
-/// Normalized contours derived from the Forma body mark. Keeping these as
-/// Shapes lets the launch animation draw the identity instead of fading in a
-/// raster asset.
+/// Normalized contours derived from the Forma body mark for compact inline
+/// loading indicators elsewhere in the interface.
 private struct FormaMarkContour: Shape {
     let index: Int
 
@@ -1249,7 +1138,7 @@ struct FormaSemicircularGauge: View {
                     let labelRadius = radius - FormaSemicircularGaugeLayout.labelInset
 
                     Text("\(String(format: "%.0f", labelValue))\(labelSuffix)")
-                        .font(.caption2.weight(.semibold))
+                        .font(FormaTypography.textStyle(.caption2, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .position(
                             x: width / 2 + labelRadius * CGFloat(cos(angle.radians)),
@@ -1272,7 +1161,7 @@ struct FormaSemicircularGauge: View {
                         .foregroundStyle(.primary)
 
                     Text(caption)
-                        .font(.caption.weight(.bold))
+                        .font(FormaTypography.textStyle(.caption, weight: .bold))
                         .foregroundStyle(captionColor)
                         .tracking(0.6)
                 }
@@ -1372,9 +1261,9 @@ struct FormaCategoryLegend: View {
 
                     VStack(alignment: .leading, spacing: FormaSpacing.xxs) {
                         Text(selectedCategory.name)
-                            .font(.body.weight(.semibold))
+                            .font(FormaTypography.textStyle(.body, weight: .semibold))
                         Text("Selected range \(selectedCategory.range)")
-                            .font(.caption)
+                            .font(FormaTypography.textStyle(.caption))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -1416,7 +1305,7 @@ struct FormaCategoryLegend: View {
                 .frame(height: 4)
 
             Text(category.name)
-                .font(.caption2.weight(isSelected ? .bold : .medium))
+                .font(FormaTypography.textStyle(.caption2, weight: isSelected ? .bold : .medium))
                 .foregroundStyle(isSelected ? .primary : .secondary)
                 .minimumScaleFactor(0.8)
                 .lineLimit(1)
@@ -1597,19 +1486,20 @@ enum FormaChartMetric: String, CaseIterable {
 }
 
 enum FormaChartStyle {
-    static let lineStyle = StrokeStyle(lineWidth: 2.25, lineCap: .round, lineJoin: .round)
-    static let gridLineStyle = StrokeStyle(lineWidth: 0.5, lineCap: .round, dash: [2, 4])
-    static let gridOpacity = 0.12
-    static let axisLabelOpacity = 0.52
-    static let endpointSize: CGFloat = 8
-    static let compactHeight: CGFloat = 176
-    static let expandedHeight: CGFloat = 220
+    /// Minimal utility charts — one accent series, quiet axes.
+    static let lineStyle = StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
+    static let gridLineStyle = StrokeStyle(lineWidth: 0.5, lineCap: .round, dash: [2, 5])
+    static let gridOpacity = 0.08
+    static let axisLabelOpacity = 0.45
+    static let endpointSize: CGFloat = 7
+    static let compactHeight: CGFloat = 168
+    static let expandedHeight: CGFloat = 210
 
     static func areaGradient(_ color: Color) -> LinearGradient {
         LinearGradient(
             stops: [
-                .init(color: color.opacity(0.24), location: 0),
-                .init(color: color.opacity(0.08), location: 0.58),
+                .init(color: color.opacity(0.16), location: 0),
+                .init(color: color.opacity(0.05), location: 0.55),
                 .init(color: color.opacity(0), location: 1)
             ],
             startPoint: .top,
@@ -1690,14 +1580,14 @@ struct FormaChartFooter: View {
     private var dateLabel: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(prefix)
-                .font(.caption2.weight(.semibold))
+                .font(FormaTypography.textStyle(.caption2, weight: .semibold))
                 .foregroundStyle(.tertiary)
                 .textCase(.uppercase)
                 .tracking(0.4)
 
             if let date {
                 Text(date.formatted(.dateTime.month(.abbreviated).day()))
-                    .font(.caption.weight(.semibold))
+                    .font(FormaTypography.textStyle(.caption, weight: .semibold))
                     .foregroundStyle(.primary)
             }
         }
@@ -1715,7 +1605,7 @@ struct FormaChartFooter: View {
                             .foregroundStyle(.primary)
                             .fontWeight(.semibold)
                     }
-                    .font(.caption)
+                    .font(FormaTypography.textStyle(.caption))
                     .padding(.horizontal, 9)
                     .frame(minHeight: 30)
                     .background(Color.appSubtleFill, in: Capsule())
@@ -1731,15 +1621,15 @@ struct FormaChartEmptyState: View {
     var body: some View {
         VStack(spacing: FormaSpacing.xs) {
             Image(systemName: hasSinglePoint ? "chart.line.uptrend.xyaxis" : "chart.xyaxis.line")
-                .font(.title3.weight(.medium))
+                .font(FormaTypography.textStyle(.title3, weight: .medium))
                 .foregroundStyle(Color.secondary)
 
             Text(hasSinglePoint ? "More readings needed for a trend" : "No history yet")
-                .font(.subheadline.weight(.semibold))
+                .font(FormaTypography.textStyle(.subheadline, weight: .semibold))
                 .foregroundStyle(.primary)
 
             Text(hasSinglePoint ? "Your next reading will start showing change over time." : "Record a measurement to begin this chart.")
-                .font(.caption)
+                .font(FormaTypography.textStyle(.caption))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
@@ -1765,6 +1655,8 @@ struct FormaChartPoint: Identifiable, Equatable {
 struct FormaTimeSeriesChart: View {
     let points: [FormaChartPoint]
     var unit = ""
+    var unitsByMetric: [String: String] = [:]
+    var showsSignedValues = false
     var includeZero = false
     var height = FormaChartStyle.compactHeight
 
@@ -1820,7 +1712,7 @@ struct FormaTimeSeriesChart: View {
                 direction = "unchanged"
             }
 
-            return "\(metric), latest \(formatted(last.value)), \(direction)"
+            return "\(metric), latest \(formatted(last.value, metric: metric)), \(direction)"
         }
         .joined(separator: ". ")
     }
@@ -1828,7 +1720,7 @@ struct FormaTimeSeriesChart: View {
     private var accessibilityActiveSummary: String {
         guard let activeDate else { return accessibilitySummary }
         let values = items(on: activeDate)
-            .map { "\($0.metric) \(formatted($0.value))" }
+            .map { "\($0.metric) \(formatted($0.value, metric: $0.metric))" }
             .joined(separator: ", ")
         return "\(activeDate.formatted(.dateTime.month(.wide).day().year())), \(values)"
     }
@@ -1960,7 +1852,7 @@ struct FormaTimeSeriesChart: View {
                 FormaChartSummaryItem(
                     id: $0.id,
                     label: $0.metric,
-                    value: formatted($0.value),
+                    value: formatted($0.value, metric: $0.metric),
                     color: $0.color
                 )
             },
@@ -1984,8 +1876,12 @@ struct FormaTimeSeriesChart: View {
         }
     }
 
-    private func formatted(_ value: Double) -> String {
-        let number = abs(value) >= 100 ? String(format: "%.0f", value) : String(format: "%.1f", value)
-        return unit.isEmpty ? number : "\(number) \(unit)"
+    private func formatted(_ value: Double, metric: String) -> String {
+        let prefix = showsSignedValues && value > 0 ? "+" : ""
+        let number = abs(value) >= 100
+            ? String(format: "%.0f", value)
+            : String(format: "%.2f", value)
+        let resolvedUnit = unitsByMetric[metric] ?? unit
+        return resolvedUnit.isEmpty ? "\(prefix)\(number)" : "\(prefix)\(number) \(resolvedUnit)"
     }
 }
