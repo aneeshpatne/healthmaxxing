@@ -67,3 +67,43 @@ struct FormaFeedbackPolicyTests {
         #expect(RecordFeedbackEvent.success.playsSound)
     }
 }
+
+@MainActor
+struct ProfileRequestTests {
+    @Test func onboardingPayloadIncludesMuscularityGoal() throws {
+        let body = CreateClientProfileBody(
+            name: "Example",
+            isPrimary: true,
+            heightCm: 172,
+            dateOfBirth: "1995-01-01",
+            peopleType: "standard",
+            gender: "male",
+            profileImage: nil,
+            preferredBodyFatPct: 18,
+            muscularityGoal: "athletic"
+        )
+
+        let encoded = try JSONEncoder().encode(body)
+        let json = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(json["muscularityGoal"] as? String == "athletic")
+    }
+
+    @Test func profilePatchCanUpdateOnlyMuscularityGoal() throws {
+        let body = UpdateClientProfileBody(
+            name: nil,
+            isPrimary: nil,
+            heightCm: nil,
+            dateOfBirth: nil,
+            peopleType: nil,
+            gender: nil,
+            profileImage: nil,
+            preferredBodyFatPct: nil,
+            muscularityGoal: "muscular"
+        )
+
+        let encoded = try JSONEncoder().encode(body)
+        let json = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(json.count == 1)
+        #expect(json["muscularityGoal"] as? String == "muscular")
+    }
+}

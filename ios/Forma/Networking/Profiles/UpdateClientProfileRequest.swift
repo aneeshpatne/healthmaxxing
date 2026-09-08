@@ -33,6 +33,7 @@ struct UpdateClientProfileBody: Encodable {
     let gender: String?
     let profileImage: String?
     let preferredBodyFatPct: Double?
+    let muscularityGoal: String?
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -43,6 +44,7 @@ struct UpdateClientProfileBody: Encodable {
         case gender
         case profileImage
         case preferredBodyFatPct
+        case muscularityGoal
     }
 
     func encode(to encoder: Encoder) throws {
@@ -55,6 +57,7 @@ struct UpdateClientProfileBody: Encodable {
         try container.encodeIfPresent(peopleType, forKey: .peopleType)
         try container.encodeIfPresent(gender, forKey: .gender)
         try container.encodeIfPresent(preferredBodyFatPct, forKey: .preferredBodyFatPct)
+        try container.encodeIfPresent(muscularityGoal, forKey: .muscularityGoal)
         try container.encodeIfPresent(profileImage, forKey: .profileImage)
     }
 }
@@ -71,4 +74,5 @@ struct UpdateClientProfileResponse: Decodable {
     let gender: String?
     let profileImage: String?
     let preferredBodyFatPct: Double?
+    let muscularityGoal: String?
 }

@@ -36,6 +36,7 @@ struct ClientProfile: Decodable, Identifiable {
     let gender: String?
     let profileImage: String?
     let preferredBodyFatPct: Double?
+    let muscularityGoal: String?
     let createdAt: String?
 
     /// Display-safe name for UI that still expects a string.

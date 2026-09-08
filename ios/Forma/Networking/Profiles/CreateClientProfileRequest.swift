@@ -31,6 +31,7 @@ struct CreateClientProfileBody: Encodable {
     let gender: String
     let profileImage: String?
     let preferredBodyFatPct: Double
+    let muscularityGoal: String
 }
 
 struct CreateClientProfileResponse: Decodable {
@@ -45,4 +46,5 @@ struct CreateClientProfileResponse: Decodable {
     let gender: String
     let profileImage: String?
     let preferredBodyFatPct: Double
+    let muscularityGoal: String
 }

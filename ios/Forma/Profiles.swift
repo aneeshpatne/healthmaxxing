@@ -66,7 +66,7 @@ struct Profiles: View {
             isShowingAddProfile = true
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 15, weight: .semibold))
+                .font(FormaTypography.system(size: 15, weight: .semibold))
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
@@ -341,6 +341,7 @@ private struct ProfileFormView: View {
     @State private var peopleType = ProfilePeopleType.standard
     @State private var gender = ProfileGender.male
     @State private var preferredBodyFatPct = 18.0
+    @State private var muscularityGoal = ProfileMuscularityGoal.athletic
     @State private var profileImage = ""
     @State private var errorMessage: String?
     @State private var isSaving = false
@@ -375,6 +376,9 @@ private struct ProfileFormView: View {
         _peopleType = State(initialValue: ProfilePeopleType(rawValue: profile?.peopleType ?? "") ?? .standard)
         _gender = State(initialValue: ProfileGender(rawValue: profile?.gender ?? "") ?? .male)
         _preferredBodyFatPct = State(initialValue: profile?.preferredBodyFatPct ?? 18.0)
+        _muscularityGoal = State(
+            initialValue: ProfileMuscularityGoal(rawValue: profile?.muscularityGoal ?? "") ?? .athletic
+        )
         _profileImage = State(initialValue: profile?.profileImage ?? "")
     }
 
@@ -499,6 +503,39 @@ private struct ProfileFormView: View {
                     }
                 }
 
+                VStack(alignment: .leading, spacing: FormaSpacing.sm) {
+                    Text("How muscular would you like to become?")
+                        .font(FormaTypography.body.weight(.semibold))
+
+                    ForEach(ProfileMuscularityGoal.allCases) { goal in
+                        Button {
+                            muscularityGoal = goal
+                        } label: {
+                            HStack(alignment: .top, spacing: FormaSpacing.sm) {
+                                Image(systemName: muscularityGoal == goal ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(muscularityGoal == goal ? Color.sleekAccent : Color.secondary)
+
+                                VStack(alignment: .leading, spacing: FormaSpacing.xxs) {
+                                    Text(goal.title)
+                                        .foregroundStyle(.primary)
+                                    Text(goal.guidance)
+                                        .font(FormaTypography.supporting)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+
+                                Spacer(minLength: 0)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(goal.title)
+                        .accessibilityHint(goal.guidance)
+                        .accessibilityValue(muscularityGoal == goal ? "Selected" : "Not selected")
+                    }
+                }
+                .padding(.vertical, FormaSpacing.xxs)
+
                 TextField("Profile image URL", text: $profileImage)
                     .textContentType(.URL)
                     .keyboardType(.URL)
@@ -569,6 +606,7 @@ private struct ProfileFormView: View {
         .formaFeedback(FormaUIFeedback.error, trigger: saveErrorNonce)
         .formaFeedback(FormaUIFeedback.selection, trigger: peopleType)
         .formaFeedback(FormaUIFeedback.selection, trigger: gender)
+        .formaFeedback(FormaUIFeedback.selection, trigger: muscularityGoal)
         .formaFeedback(FormaUIFeedback.selection, trigger: isPrimary)
     }
 
@@ -607,7 +645,8 @@ private struct ProfileFormView: View {
                     peopleType: peopleType.rawValue,
                     gender: gender.rawValue,
                     profileImage: trimmedImage.isEmpty ? nil : trimmedImage,
-                    preferredBodyFatPct: preferredBodyFatPct
+                    preferredBodyFatPct: preferredBodyFatPct,
+                    muscularityGoal: muscularityGoal.rawValue
                 )
 
                 let response = try await apiClient.send(UpdateClientProfileRequest(profileId: profile.id, body: requestBody))
@@ -623,7 +662,8 @@ private struct ProfileFormView: View {
                     peopleType: peopleType.rawValue,
                     gender: gender.rawValue,
                     profileImage: trimmedImage.isEmpty ? nil : trimmedImage,
-                    preferredBodyFatPct: preferredBodyFatPct
+                    preferredBodyFatPct: preferredBodyFatPct,
+                    muscularityGoal: muscularityGoal.rawValue
                 )
 
                 let response = try await apiClient.send(CreateClientProfileRequest(body: requestBody))
@@ -715,6 +755,33 @@ private enum ProfileGender: String, CaseIterable, Identifiable {
     }
 }
 
+private enum ProfileMuscularityGoal: String, CaseIterable, Identifiable {
+    case maintain
+    case athletic
+    case muscular
+    case veryMuscular = "very_muscular"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .maintain: "Maintain"
+        case .athletic: "Athletic"
+        case .muscular: "Muscular"
+        case .veryMuscular: "Very muscular"
+        }
+    }
+
+    var guidance: String {
+        switch self {
+        case .maintain: "Keep my current lean mass and focus on body fat."
+        case .athletic: "Build a moderate amount of lean mass."
+        case .muscular: "Aim for visibly greater muscle development."
+        case .veryMuscular: "Pursue an advanced long-term muscularity target."
+        }
+    }
+}
+
 private struct ProfileRow: View {
     let profile: ClientProfile
     let onEdit: () -> Void
@@ -745,7 +812,11 @@ private struct ProfileRow: View {
                 }
             }
 
-            let hasStats = profile.heightCm != nil || profile.preferredBodyFatPct != nil || profile.gender != nil || profile.dateOfBirth != nil
+            let hasStats = profile.heightCm != nil
+                || profile.preferredBodyFatPct != nil
+                || profile.muscularityGoal != nil
+                || profile.gender != nil
+                || profile.dateOfBirth != nil
             if hasStats {
                 VStack(alignment: .leading, spacing: FormaSpacing.sm) {
                     if let height = profile.heightCm {
@@ -753,6 +824,14 @@ private struct ProfileRow: View {
                     }
                     if let fat = profile.preferredBodyFatPct {
                         metadataRow(systemImage: "percent", label: "Preferred Body Fat", value: String(format: "%.0f%%", fat))
+                    }
+                    if let goal = profile.muscularityGoal,
+                       let muscularityGoal = ProfileMuscularityGoal(rawValue: goal) {
+                        metadataRow(
+                            systemImage: "figure.strengthtraining.traditional",
+                            label: "Muscularity Goal",
+                            value: muscularityGoal.title
+                        )
                     }
                     if let dob = profile.dateOfBirth, !dob.isEmpty {
                         metadataRow(systemImage: "calendar", label: "Age", value: formatDOBOrAge(dob))
@@ -854,7 +933,7 @@ private struct ProfileRow: View {
             .fill(Color.sleekAccent.opacity(0.12))
             .overlay {
                 Text(initials.isEmpty ? "?" : initials)
-                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .font(FormaTypography.textStyle(.title3, weight: .bold))
                     .foregroundStyle(Color.sleekAccent)
                     .minimumScaleFactor(0.75)
             }
