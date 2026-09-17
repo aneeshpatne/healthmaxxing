@@ -1,4 +1,5 @@
-import { initChatModel } from "langchain";
+import { ChatOpenRouter } from "@langchain/openrouter";
+
 export const openaiApiKey = process.env.OPENAI_API_KEY;
 export const googleApiKey = process.env.GOOGLE_API_KEY;
 export const openRouterApiKey = process.env.OPENROUTER_API_KEY;
@@ -26,13 +27,15 @@ export const ollamaBaseUrl =
 //   },
 // });
 
-export const model = await initChatModel("gpt-5.6-terra", {
-  modelProvider: "openai",
-  apiKey: openaiApiKey,
-  useResponsesApi: true,
-  reasoningEffort: "low",
-  promptCacheKey: "healthmaxxing-report-agent-v2",
-  promptCacheRetention: "24h",
+// Prefer OpenAI Flex, fall back to standard OpenAI (not other providers).
+// Tier slugs like openai/flex are not matched by the base "openai" slug.
+export const model = new ChatOpenRouter({
+  apiKey: openRouterApiKey,
+  model: "openai/gpt-6-astra",
+  provider: {
+    order: ["openai/flex", "openai"],
+    only: ["openai/flex", "openai"],
+  },
 });
 
 // export const model = new ChatGoogle({

@@ -50,6 +50,40 @@ The older `mydb.sqlite` file remains a legacy export; its 29 measurements are no
 - **Keeps profile-scoped reads and writes isolated.** Shared authentication middleware and ownership checks return `404` when a requested profile does not belong to the caller.
 - **Preserves delivery safety as the system evolves.** Per-profile measurement idempotency, persisted calculation status, queued retries with exponential backoff, stale-job cleanup, and 15 applied migrations protect the path from raw input to client-visible insight.
 
+## Engineering outcomes
+
+The insight-report agent went through a deliberate token-efficiency sweep. On July 19, 2026, `refactor(ai): streamline profile report card schema` collapsed Insights into a lean coach brief and merged overlapping Performance, Fat, and Muscle cards so each tab owned distinct fields instead of re-hosting the same depth. Follow-up work on August 9 consolidated the agent `userContext` blob and removed a few remaining low-signal cards.
+
+### Report schema compression
+
+Card counts below are the top-level keys under `insights`, `performance`, `fat`, and `muscle` in `src/ai/toolsNew.ts` at each revision.
+
+| Schema revision | Date | Total cards | Insights | Performance | Fat | Muscle |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Before streamline | 2026-07-19 parent | 42 | 13 | 12 | 9 | 8 |
+| After streamline | 2026-07-19 `c510c42` | 20 | 7 | 6 | 5 | 2 |
+| After later slims / schema v2 | current `HEAD` | 20 | 3 | 6 | 6 | 5 |
+
+The July 19 change cut the structured output surface roughly in half (42 → 20 cards). Later schema-v2 work kept the same overall card budget while reshaping Insights into the three-card `factor` / `key_trend` / `progress` layout that Forma renders today.
+
+### Observed token spend
+
+Token totals are parsed from `[agentOrchestratorNew] total token spend` lines in the local `launchd` server log, timestamped from adjacent Pino records. The comparison splits runs before vs after the July 19 streamline commit (the change day itself is excluded). This is observed worker traffic on the development dataset, not a controlled A/B on identical prompts.
+
+| Cohort | Runs | Mean input | Mean output | Mean total | Median total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Before streamline (Jul 2–18, 2026) | 48 | 18,944 | 6,053 | 24,997 | 26,507 |
+| After streamline (Jul 20–Aug 29, 2026) | 100 | 7,969 | 2,387 | 10,356 | 8,136 |
+
+| Outcome | Result |
+| --- | --- |
+| **Structured cards** | Reduced from 42 to 20 top-level report cards (−52%). |
+| **Mean input tokens / run** | Reduced from 18,944 to 7,969 (−58%). |
+| **Mean total tokens / run** | Reduced from 24,997 to 10,356 (−59%). |
+| **Median total tokens / run** | Reduced from 26,507 to 8,136 (−69%). |
+
+The immediate post-streamline window (Jul 20–Aug 8) was even leaner—mean total about 8,041 across 43 runs—before later schema-v2 and prompt iterations raised August averages slightly while staying well below the pre-streamline baseline.
+
 ## Features
 
 | Area | What the project provides |

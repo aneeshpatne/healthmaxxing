@@ -3,3 +3,19 @@
 *.xcuserstate
 .idea/
 .vscode/
+
+# dependencies
+node_modules/
+
+# local build / runtime leftovers at the repo root
+/dist/
+/logs/
+/reports/
+
+# local databases and dumps
+*.sqlite
+*.dump
+
+# scratch files left at the repo root (real sources live under backend/)
+/testing.ts
+/src/
