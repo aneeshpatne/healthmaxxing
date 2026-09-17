@@ -54,8 +54,10 @@ private final class FoodStore: ObservableObject {
         do {
             _ = try await api.send(ConfirmFoodRequest(profileId: profileId, food: proposal))
             self.proposal = nil
-            dashboard = try await api.send(GetFoodDashboardRequest(profileId: profileId))
-            savedFoods = try await api.send(GetSavedFoodsRequest(profileId: profileId)).foods
+            async let updatedDashboard = api.send(GetFoodDashboardRequest(profileId: profileId))
+            async let updatedFoods = api.send(GetSavedFoodsRequest(profileId: profileId))
+            dashboard = try await updatedDashboard
+            savedFoods = try await updatedFoods.foods
             errorMessage = nil
             return true
         } catch {
@@ -68,10 +70,12 @@ private final class FoodStore: ObservableObject {
 }
 
 struct FoodView: View {
+    @Binding var isAtTop: Bool
     @StateObject private var store = FoodStore()
     @State private var input = ""
     @State private var isAISheetPresented = false
     @FocusState private var inputFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var suggestions: [FoodNutrition] { FoodSearch.matches(input, in: store.savedFoods, limit: 5) }
 
@@ -83,12 +87,24 @@ struct FoodView: View {
                 if let proposal = store.proposal { confirmationCard(proposal) }
                 if !store.savedFoods.isEmpty && input.isEmpty { recentFoodsCard }
                 if let error = store.errorMessage {
-                    Label(error, systemImage: "exclamationmark.circle.fill")
+                    Label(error, image: "forma-alert")
                         .font(FormaTypography.body).foregroundStyle(Color.formaNegative)
                 }
             }
             .frame(maxWidth: 760).frame(maxWidth: .infinity)
             .padding(.horizontal, FormaSpacing.screenGutter).padding(.bottom, FormaSpacing.xxl)
+        }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentOffset.y + geometry.contentInsets.top < 24
+        } action: { _, shouldShowBrand in
+            guard shouldShowBrand != isAtTop else { return }
+            if reduceMotion {
+                isAtTop = shouldShowBrand
+            } else {
+                withAnimation(FormaMotion.fast) {
+                    isAtTop = shouldShowBrand
+                }
+            }
         }
         .contentMargins(.top, FormaLayout.topOverlayClearance, for: .scrollContent)
         .scrollDismissesKeyboard(.interactively)
@@ -146,16 +162,17 @@ struct FoodView: View {
         VStack(alignment: .leading, spacing: FormaSpacing.md) {
             FormaCardHeader("Add food", subtitle: "Search your saved food library")
             HStack(spacing: FormaSpacing.sm) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                Image(forma: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Food, brand, or meal…", text: $input, axis: .vertical)
                     .textFieldStyle(.plain).focused($inputFocused).submitLabel(.done)
-                    .onSubmit { if let first = suggestions.first { select(first) } }
+                    .onSubmit { if let first = self.suggestions.first { select(first) } }
                 if !input.isEmpty {
-                    Button { input = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    Button { input = "" } label: { Image(forma: "xmark.circle.fill") }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
             .padding(12).background(Color.appTertiaryBackground, in: RoundedRectangle(cornerRadius: FormaRadius.inset))
+            let suggestions = suggestions
             if !input.isEmpty && !suggestions.isEmpty {
                 VStack(spacing: 0) {
                     ForEach(suggestions) { food in
@@ -173,7 +190,7 @@ struct FoodView: View {
                 store.startAISession()
                 isAISheetPresented = true
             } label: {
-                Label("Add new food with AI", systemImage: "sparkles")
+                Label("Add new food with AI", image: "forma-spark")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
@@ -187,8 +204,8 @@ struct FoodView: View {
                 Button {
                     store.discardProposal()
                 } label: {
-                    Image(systemName: "xmark")
-                        .font(FormaTypography.system(size: 13, weight: .semibold))
+                    Image(forma: "xmark")
+                        .resizable().scaledToFit().frame(width: 13, height: 13)
                         .frame(width: 32, height: 32)
                         .background(Color.appTertiaryBackground, in: Circle())
                 }
@@ -254,7 +271,7 @@ struct FoodView: View {
             }
             Spacer()
             Text("\(food.calories, specifier: "%.0f") kcal").font(FormaTypography.supporting).monospacedDigit().foregroundStyle(.secondary)
-            Image(systemName: "chevron.right").font(FormaTypography.micro).foregroundStyle(.tertiary)
+            Image(forma: "chevron.right").resizable().scaledToFit().frame(width: 12, height: 12).foregroundStyle(.tertiary)
         }.padding(.vertical, FormaSpacing.sm)
     }
 
@@ -325,7 +342,7 @@ private struct FoodAIChatView: View {
 
                         if let food = store.proposal { proposal(food) }
                         if let error = store.errorMessage {
-                            Label(error, systemImage: "exclamationmark.circle.fill")
+                            Label(error, image: "forma-alert")
                                 .font(FormaTypography.supporting).foregroundStyle(Color.formaNegative)
                         }
                         Color.clear.frame(height: 1).id("bottom")
@@ -341,12 +358,12 @@ private struct FoodAIChatView: View {
                 HStack(spacing: FormaSpacing.sm) {
                     TextField("e.g. two fried eggs in butter", text: $input, axis: .vertical)
                         .textFieldStyle(.plain).focused($inputFocused).submitLabel(.send).onSubmit(send)
-                    Button(action: send) { Image(systemName: "arrow.up").frame(width: 38, height: 38) }
+                    Button(action: send) { Image(forma: "arrow.up").frame(width: 38, height: 38) }
                         .buttonStyle(.borderedProminent).tint(.actionInk)
                         .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.isLoading)
                 }
                 .padding(FormaSpacing.md)
-                .background(.ultraThinMaterial)
+                .background(Color.appSecondaryBackground)
             }
             .navigationTitle("Add new food with AI")
             .navigationBarTitleDisplayMode(.inline)
@@ -427,22 +444,7 @@ private struct FoodThinkingIndicator: View {
     var body: some View {
         HStack(spacing: FormaSpacing.sm) {
             Text(label).font(FormaTypography.supporting).foregroundStyle(.secondary)
-            if reduceMotion {
-                ProgressView().controlSize(.small).tint(.sleekAccent)
-            } else {
-                TimelineView(.animation(minimumInterval: 0.22)) { timeline in
-                    let phase = Int(timeline.date.timeIntervalSinceReferenceDate / 0.22) % 3
-                    HStack(spacing: 5) {
-                        ForEach(0..<3, id: \.self) { index in
-                            Circle()
-                                .fill(Color.sleekAccent)
-                                .frame(width: 6, height: 6)
-                                .scaleEffect(index == phase ? 1 : 0.58)
-                                .opacity(index == phase ? 1 : 0.42)
-                        }
-                    }
-                }
-            }
+            FormaLoadingIndicator()
         }
         .padding(.horizontal, FormaSpacing.md)
         .padding(.vertical, FormaSpacing.sm)

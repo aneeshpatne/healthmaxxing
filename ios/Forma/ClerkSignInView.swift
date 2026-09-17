@@ -40,7 +40,7 @@ struct ClerkSignInView: View {
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 54)
                 }
-                .buttonStyle(.glassProminent)
+                .buttonStyle(FormaPrimaryButtonStyle())
                 .buttonBorderShape(.capsule)
                 .tint(.sleekAccent)
             }

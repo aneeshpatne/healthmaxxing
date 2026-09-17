@@ -17,6 +17,8 @@ struct SwiftUIView: View {
     @State private var activeTab: AppTab = .metrics
     @State private var selectedMetricsTab: MetricsTab = .insights
     @State private var isMetricsAtTop = true
+    @State private var isFoodAtTop = true
+    @State private var isSettingsAtTop = true
     @State private var isRecordPresented = false
     @StateObject private var reportStore: MetricsReportStore
 
@@ -59,13 +61,17 @@ struct SwiftUIView: View {
     }
 
     private var showsBrandLockup: Bool {
-        activeTab != .metrics || isMetricsAtTop
+        switch activeTab {
+        case .metrics: isMetricsAtTop
+        case .food: isFoodAtTop
+        case .settings: isSettingsAtTop
+        }
     }
 
     var body: some View {
         NavigationStack {
             TabView(selection: $activeTab) {
-                Tab("Metrics", systemImage: "chart.xyaxis.line", value: .metrics) {
+                Tab("Metrics", image: "forma-chart", value: .metrics) {
                     MetricsView(
                         selectedTab: $selectedMetricsTab,
                         isAtTop: $isMetricsAtTop,
@@ -76,15 +82,14 @@ struct SwiftUIView: View {
                     )
                 }
 
-                Tab("Food", systemImage: "fork.knife", value: .food) {
-                    FoodView()
+                Tab("Food", image: "forma-food", value: .food) {
+                    FoodView(isAtTop: $isFoodAtTop)
                 }
 
-                Tab("Settings", systemImage: "gearshape", value: .settings) {
-                    Settings(reportStore: reportStore)
+                Tab("Settings", image: "forma-settings", value: .settings) {
+                    Settings(isAtTop: $isSettingsAtTop, reportStore: reportStore)
                 }
             }
-            .tabBarMinimizeBehavior(.onScrollDown)
             .tint(.sleekAccent)
             .background(FormaBackground())
             .overlay(alignment: .top) {
@@ -127,11 +132,11 @@ struct SwiftUIView: View {
         Button {
             isRecordPresented = true
         } label: {
-            Image(systemName: "plus")
-                .font(FormaTypography.system(size: 15, weight: .semibold))
+            Image(forma: "plus")
+                .resizable().scaledToFit().frame(width: 15, height: 15)
                 .frame(width: 36, height: 36)
         }
-        .buttonStyle(.glass)
+        .buttonStyle(FormaIconButtonStyle())
         .buttonBorderShape(.circle)
         .controlSize(.regular)
         .accessibilityIdentifier("header-record-button")

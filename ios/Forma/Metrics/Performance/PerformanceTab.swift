@@ -2,12 +2,12 @@ import SwiftUI
 import Charts
 
 private extension Color {
-    /// Performance gauges use brand primary + semantic status (not ad-hoc hues).
-    static let performancePrimary = Color.sleekAccent
-    static let performanceSecondary = Color.formaInfo
-    static let performancePositive = Color.formaPositive
-    static let performanceCaution = Color.formaCaution
-    static let performanceNegative = Color.formaNegative
+    /// Shared five-step gauge progression: low → average → fit → athletic → elite.
+    static let performancePrimary = Color.formaGaugeTarget
+    static let performanceSecondary = Color.formaGaugeStrong
+    static let performancePositive = Color.formaGaugePeak
+    static let performanceCaution = Color.formaGaugeCaution
+    static let performanceNegative = Color.formaGaugeLow
 }
 
 private extension InsightReportMetricSection {
@@ -498,7 +498,7 @@ struct BodyCompositionFlowCard: View {
                         tint: Color.performancePrimary
                     )
 
-                    Image(systemName: "arrow.down")
+                    Image(forma: "arrow.down")
                         .font(FormaTypography.textStyle(.headline, weight: .bold))
                         .foregroundStyle(Color.performancePrimary)
                         .accessibilityHidden(true)
@@ -956,8 +956,8 @@ private struct RecompWeightSummary: View {
                 weight(label: "Current Weight", value: String(format: "%.1f kg", currentWeight))
                     .fixedSize(horizontal: true, vertical: false)
 
-                Image(systemName: "arrow.right")
-                    .font(FormaTypography.system(size: 14, weight: .bold))
+                Image(forma: "arrow.right")
+                    .resizable().scaledToFit().frame(width: 14, height: 14)
                     .foregroundStyle(Color.performancePositive)
                     .accessibilityHidden(true)
 
@@ -968,8 +968,8 @@ private struct RecompWeightSummary: View {
             VStack(spacing: FormaSpacing.md) {
                 weight(label: "Current Weight", value: String(format: "%.1f kg", currentWeight))
 
-                Image(systemName: "arrow.down")
-                    .font(FormaTypography.system(size: 14, weight: .bold))
+                Image(forma: "arrow.down")
+                    .resizable().scaledToFit().frame(width: 14, height: 14)
                     .foregroundStyle(Color.performancePositive)
                     .accessibilityHidden(true)
 
@@ -1016,8 +1016,8 @@ private struct RecompArrowMark: ChartContent {
         PointMark(x: .value("Fat", fat), y: .value("Lean", lean))
             .foregroundStyle(.clear)
             .annotation(position: .overlay) {
-                Image(systemName: "arrow.left")
-                    .font(FormaTypography.system(size: 16, weight: .heavy))
+                Image(forma: "arrow.left")
+                    .resizable().scaledToFit().frame(width: 16, height: 16)
                     .foregroundStyle(Color.performancePositive)
                     .background(Circle().fill(Color.appChartBackground).frame(width: 20, height: 20))
             }
@@ -1158,7 +1158,7 @@ struct ExcessFatGaugeCard: View {
 
     private func legendItem(_ text: String, color: Color, isEmphasized: Bool) -> some View {
         HStack(spacing: FormaSpacing.xs) {
-            Image(systemName: isEmphasized ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+            Image(forma: isEmphasized ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
                 .font(FormaTypography.textStyle(.caption))
                 .foregroundStyle(color)
             Text(text)
@@ -1167,7 +1167,6 @@ struct ExcessFatGaugeCard: View {
         }
     }
 }
-
 
 struct ExcessFatSemicircularGauge: View {
     let current: Double

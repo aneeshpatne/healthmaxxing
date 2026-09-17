@@ -13,36 +13,11 @@ struct MetricsView: View {
     @ObservedObject var reportStore: MetricsReportStore
     var onRecordRequested: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var wasGeneratingReport = false
-    @State private var showsReportSuccess = false
-    @State private var completionTask: Task<Void, Never>?
-
-    private var pageAccent: Color {
-        // Single brand wash for metrics shell — status colors stay on cards, not the page.
-        guard let payload = reportStore.payload else { return .sleekAccent }
-
-        switch selectedTab {
-        case .insights:
-            return payload.factor?.factorColor?.color ?? .sleekAccent
-        case .performance:
-            return payload.performance["ffmi_gauge"]?.factorColor?.color ?? .sleekAccent
-        case .fat:
-            return payload.fat["fat_ratio"]?.factorColor?.color ?? .sleekAccent
-        case .muscle:
-            return payload.muscle["skeletal_muscle_gauge"]?.factorColor?.color
-                ?? ["muscle_mass", "bone_mass_trend", "muscle_ratio_trend", "skeletal_muscle_mass_trend"]
-                    .compactMap { payload.muscle[$0]?.factorColor?.color }
-                    .first
-                ?? .sleekAccent
-        }
-    }
-
     var body: some View {
         Group {
-            if reportStore.isWaitingForReport || showsReportSuccess {
+            if reportStore.isWaitingForReport {
                 FormaReportLoadingView(
-                    status: showsReportSuccess ? "Ready" : reportStore.statusMessage,
-                    showsSuccess: showsReportSuccess
+                    status: reportStore.statusMessage
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(FormaBackground())
@@ -54,13 +29,10 @@ struct MetricsView: View {
         }
         .animation(
             FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
-            value: reportStore.isWaitingForReport || showsReportSuccess
+            value: reportStore.isWaitingForReport
         )
         .onChange(of: reportStore.isWaitingForReport, initial: true) { _, isWaiting in
-            updateGenerationPresentation(isWaiting: isWaiting)
-        }
-        .onDisappear {
-            completionTask?.cancel()
+            if isWaiting { isAtTop = true }
         }
     }
 
@@ -81,9 +53,7 @@ struct MetricsView: View {
                     .transition(FormaTransition.content(reduceMotion: reduceMotion))
                 }
 
-                // Tab body swaps without a parent animation transaction so Charts
-                // don't interpolate on selection. Gauges still run their own
-                // appear sweep via withAnimation inside FormaSemicircularGauge.
+                // Report data appears immediately, including gauge markers.
                 Group {
                     if reportStore.payload == nil,
                        reportStore.isWaitingForReport || reportStore.isLoading {
@@ -137,24 +107,14 @@ struct MetricsView: View {
             }
             .frame(maxWidth: 760)
             .frame(maxWidth: .infinity)
-            .background(alignment: .top) {
-                // Keep the wash above the viewport during pull-to-refresh while
-                // still letting it leave naturally when the page scrolls up.
-                FormaAccentWash(accent: pageAccent, topExtension: 1_000)
-                    .offset(y: -1_000)
-                    .animation(
-                        FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
-                        value: selectedTab
-                    )
-            }
+
         }
         .refreshable {
             await reportStore.refreshReport()
         }
-        .onScrollGeometryChange(for: CGFloat.self) { geometry in
-            geometry.contentOffset.y + geometry.contentInsets.top
-        } action: { _, offset in
-            let shouldShowBrand = offset < 24
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentOffset.y + geometry.contentInsets.top < 24
+        } action: { _, shouldShowBrand in
             guard shouldShowBrand != isAtTop else { return }
 
             if reduceMotion {
@@ -177,30 +137,6 @@ struct MetricsView: View {
         )
     }
 
-    private func updateGenerationPresentation(isWaiting: Bool) {
-        completionTask?.cancel()
-
-        if isWaiting {
-            wasGeneratingReport = true
-            showsReportSuccess = false
-            isAtTop = true
-            return
-        }
-
-        guard wasGeneratingReport else { return }
-        wasGeneratingReport = false
-        guard reportStore.errorMessage == nil,
-              reportStore.payload != nil else { return }
-
-        showsReportSuccess = true
-
-        completionTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(reduceMotion ? 500 : 1_150))
-            guard !Task.isCancelled else { return }
-
-            showsReportSuccess = false
-        }
-    }
 }
 
 private struct MetricsSchemaErrorView: View {
@@ -210,10 +146,11 @@ private struct MetricsSchemaErrorView: View {
     var body: some View {
         VStack(spacing: FormaSpacing.xl) {
             Image("vectorized_019fd7b0-2531-7c0a-98f7-fb339b707a32")
+                .renderingMode(.original)
                 .resizable()
                 .scaledToFit()
                 .frame(width: 88, height: 88)
-                .shadow(color: Color.sleekAccent.opacity(0.2), radius: 18, y: 8)
+                .shadow(color: Color.black.opacity(0.14), radius: 18, y: 8)
                 .accessibilityHidden(true)
 
             VStack(spacing: FormaSpacing.sm) {
@@ -237,7 +174,7 @@ private struct MetricsSchemaErrorView: View {
                     .frame(minHeight: 52)
                     .padding(.horizontal, FormaSpacing.xl)
             }
-            .buttonStyle(.glassProminent)
+            .buttonStyle(FormaPrimaryButtonStyle())
             .buttonBorderShape(.capsule)
             .tint(.sleekAccent)
         }
@@ -254,8 +191,8 @@ struct MetricsUnavailableContent: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "chart.bar.doc.horizontal")
-                .font(FormaTypography.system(size: 14, weight: .semibold))
+            Image(forma: "chart.bar.doc.horizontal")
+                .resizable().scaledToFit().frame(width: 14, height: 14)
                 .foregroundStyle(.secondary)
 
             Text(message)

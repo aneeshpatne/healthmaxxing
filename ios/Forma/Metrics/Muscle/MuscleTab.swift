@@ -1,12 +1,12 @@
 import SwiftUI
 
 private extension Color {
-    /// Muscle visuals share the app's pastel theme palette.
-    static let musclePrimary = Color.formaChartMuscle
-    static let muscleSecondary = Color.formaChartSubcutaneous
-    static let musclePositive = Color.formaPositive
-    static let muscleCaution = Color.formaCaution
-    static let muscleNegative = Color.formaNegative
+    /// Shared five-step gauge progression: low → fair → good → strong → elite.
+    static let musclePrimary = Color.formaGaugeTarget
+    static let muscleSecondary = Color.formaGaugeStrong
+    static let musclePositive = Color.formaGaugePeak
+    static let muscleCaution = Color.formaGaugeCaution
+    static let muscleNegative = Color.formaGaugeLow
 }
 
 struct MuscleTab: View {

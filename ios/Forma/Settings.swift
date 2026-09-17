@@ -9,12 +9,14 @@ import ClerkKit
 import ClerkKitUI
 
 struct Settings: View {
+    @Binding var isAtTop: Bool
     let reportStore: MetricsReportStore
 
     @AppStorage(FormaFeedbackPreferences.soundEffectsKey) private var soundEffectsEnabled = true
     @AppStorage(FormaFeedbackPreferences.hapticsKey) private var hapticsEnabled = true
     @EnvironmentObject private var soundPlayer: FormaSoundPlayer
     @State private var isDebugRecordPresented = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView {
@@ -69,7 +71,7 @@ struct Settings: View {
                     } label: {
                         rowContent(
                             title: "Record Test Measurement",
-                            subtitle: "76.6 kg · 574 Ω · 72 bpm",
+                            subtitle: "76.3 kg · 578 Ω · 84 bpm",
                             systemImage: "waveform.path.ecg",
                             tint: .sleekAccent
                         )
@@ -105,9 +107,20 @@ struct Settings: View {
             .padding(.horizontal, FormaSpacing.screenGutter)
             .padding(.vertical, FormaSpacing.lg)
         }
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentOffset.y + geometry.contentInsets.top < 24
+        } action: { _, shouldShowBrand in
+            guard shouldShowBrand != isAtTop else { return }
+            if reduceMotion {
+                isAtTop = shouldShowBrand
+            } else {
+                withAnimation(FormaMotion.fast) {
+                    isAtTop = shouldShowBrand
+                }
+            }
+        }
+        .contentMargins(.top, FormaLayout.topOverlayClearance, for: .scrollContent)
         .background(FormaBackground())
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
         .onChange(of: soundEffectsEnabled) { wasEnabled, isEnabled in
             guard !wasEnabled, isEnabled else { return }
             soundPlayer.play(.confirm)
@@ -120,9 +133,9 @@ struct Settings: View {
             RecordView(
                 reportStore: reportStore,
                 debugMeasurement: ScaleMeasurement(
-                    weightKg: 76.6,
-                    heartRate: 72,
-                    impedanceOhms: 574,
+                    weightKg: 76.3,
+                    heartRate: 84,
+                    impedanceOhms: 578,
                     isFinal: true
                 ),
                 onSuccess: { isDebugRecordPresented = false }
@@ -184,7 +197,7 @@ struct Settings: View {
 
             Spacer()
 
-            Image(systemName: "chevron.right")
+            Image(forma: "chevron.right")
                 .font(FormaTypography.textStyle(.caption, weight: .bold))
                 .foregroundStyle(.tertiary)
         }
@@ -240,6 +253,6 @@ struct Settings: View {
 }
 
 #Preview {
-    Settings(reportStore: MetricsReportStore())
+    Settings(isAtTop: .constant(true), reportStore: MetricsReportStore())
         .environmentObject(FormaSoundPlayer())
 }

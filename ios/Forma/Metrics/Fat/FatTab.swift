@@ -232,17 +232,17 @@ struct FatRatioCard: View {
     }
 
     private static let gaugeSegments: [FormaGaugeSegment] = [
-        FormaGaugeSegment(color: .formaNegative, min: 2, max: 6),
-        FormaGaugeSegment(color: .formaPositive, min: 6, max: 18),
-        FormaGaugeSegment(color: .formaCaution, min: 18, max: 25),
-        FormaGaugeSegment(color: .formaNegative, min: 25, max: 30)
+        FormaGaugeSegment(color: .formaGaugeLow, min: 2, max: 6),
+        FormaGaugeSegment(color: .formaGaugeTarget, min: 6, max: 18),
+        FormaGaugeSegment(color: .formaGaugeCaution, min: 18, max: 25),
+        FormaGaugeSegment(color: .formaGaugeLow, min: 25, max: 30)
     ]
 
     private static let categories: [FormaLegendCategory] = [
-        FormaLegendCategory(name: "Low", range: "< 6%", color: .formaNegative, min: 0, max: 6),
-        FormaLegendCategory(name: "Optimal", range: "6-18%", color: .formaPositive, min: 6, max: 18),
-        FormaLegendCategory(name: "Average", range: "18-25%", color: .formaCaution, min: 18, max: 25),
-        FormaLegendCategory(name: "High", range: "> 25%", color: .formaNegative, min: 25, max: 100)
+        FormaLegendCategory(name: "Low", range: "< 6%", color: .formaGaugeLow, min: 0, max: 6),
+        FormaLegendCategory(name: "Optimal", range: "6-18%", color: .formaGaugeTarget, min: 6, max: 18),
+        FormaLegendCategory(name: "Average", range: "18-25%", color: .formaGaugeCaution, min: 18, max: 25),
+        FormaLegendCategory(name: "High", range: "> 25%", color: .formaGaugeLow, min: 25, max: 100)
     ]
 
     var body: some View {

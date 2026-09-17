@@ -463,7 +463,7 @@ private struct InsightEvidenceLabel: View {
     var body: some View {
         if let evidence {
             HStack(spacing: FormaSpacing.xs) {
-                Image(systemName: confidenceIcon(evidence.confidence))
+                Image(forma: confidenceIcon(evidence.confidence))
                 Text("\(evidence.readingCount) \(evidence.readingCount == 1 ? "reading" : "readings")")
                 Text("·")
                     .accessibilityHidden(true)

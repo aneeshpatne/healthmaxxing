@@ -103,7 +103,7 @@ struct RecordView: View {
     /// Brief hold so each stage is readable without feeling staged behind the scale.
     private static let minimumMetricDisplayDuration = Duration.milliseconds(400)
     /// Hold long enough for the success ritual to land before the sheet auto-dismisses.
-    private static let successDismissDelay = Duration.milliseconds(1_450)
+    private static let successDismissDelay = Duration.milliseconds(350)
 
     let reportStore: MetricsReportStore
     var debugMeasurement: ScaleMeasurement? = nil
@@ -579,8 +579,6 @@ private struct RecordCircle: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .largeTitle) private var metricValueSize: CGFloat = 54
-    @State private var successPopScale: CGFloat = 1
-    @State private var successGlow = false
 
     private var isSaved: Bool {
         if case .saved = state { return true }
@@ -595,49 +593,32 @@ private struct RecordCircle: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                if isReady {
-                    ReadyRecordIdleAura(diameter: diameter)
-                        .allowsHitTesting(false)
-                }
-
-                if isSaved {
-                    RecordSuccessAura(diameter: diameter, isActive: successGlow)
-                        .allowsHitTesting(false)
-                }
 
                 circleBackground
                     .shadow(
                         color: shadowColor,
-                        radius: isSaved ? 32 : (isReady ? 28 : 24),
+                        radius: 8,
                         x: 0,
-                        y: isSaved ? 18 : (isReady ? 16 : 14)
+                        y: 4
                     )
 
                 content
                     .padding(FormaSpacing.xl)
             }
             .frame(width: diameter, height: diameter)
-            .scaleEffect(isSaved ? successPopScale : 1)
             .contentShape(Circle())
-            .overlay {
+            .overlay(alignment: .topTrailing) {
                 if showsActivityRing {
-                    OrbitingRecordRing(diameter: diameter + 18)
+                    FormaLoadingIndicator()
+                        .padding(6)
+                        .background(.regularMaterial, in: Circle())
+                        .overlay(Circle().strokeBorder(Color.appBorder, lineWidth: 1))
+                        .offset(x: 8, y: -8)
                         .allowsHitTesting(false)
                         .transition(.opacity)
                 }
             }
-            .overlay {
-                if isReady {
-                    ReadyRecordIdleBurst(diameter: diameter)
-                        .allowsHitTesting(false)
-                }
-            }
-            .overlay {
-                if isSaved {
-                    RecordSuccessBurst(diameter: diameter)
-                        .allowsHitTesting(false)
-                }
-            }
+
         }
         .buttonStyle(FormaPressableButtonStyle(depth: .prominent))
         .disabled(!isEnabled)
@@ -649,36 +630,6 @@ private struct RecordCircle: View {
             FormaMotion.preferred(FormaMotion.standard, reduceMotion: reduceMotion),
             value: state
         )
-        .onChange(of: state) { previous, newState in
-            guard previous != .saved, newState == .saved else { return }
-            runSuccessPop()
-        }
-        .onAppear {
-            if isSaved {
-                runSuccessPop()
-            }
-        }
-    }
-
-    private func runSuccessPop() {
-        guard !reduceMotion else {
-            successPopScale = 1
-            successGlow = true
-            return
-        }
-
-        // Snap small first so the spring only reads as a pop-out, not a shrink.
-        var snap = Transaction()
-        snap.disablesAnimations = true
-        withTransaction(snap) {
-            successPopScale = 0.86
-            successGlow = false
-        }
-
-        withAnimation(FormaMotion.success) {
-            successPopScale = 1.0
-            successGlow = true
-        }
     }
 
     @ViewBuilder
@@ -688,56 +639,7 @@ private struct RecordCircle: View {
             ReadyRecordPalette(diameter: diameter)
 
         case .saved:
-            // Premium glass success disc — material + lime tint, no solid plastic fill.
-            Circle()
-                .fill(.ultraThinMaterial)
-                .frame(width: diameter, height: diameter)
-                .overlay {
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    Color.white.opacity(0.62),
-                                    Color.sleekAccent.opacity(0.42),
-                                    Color.formaPositive.opacity(0.22)
-                                ],
-                                center: UnitPoint(x: 0.32, y: 0.24),
-                                startRadius: 0,
-                                endRadius: diameter * 0.78
-                            )
-                        )
-                }
-                .overlay {
-                    // Specular lift only — not a nested glass pill.
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    Color.white.opacity(0.55),
-                                    Color.white.opacity(0.08),
-                                    .clear
-                                ],
-                                center: UnitPoint(x: 0.30, y: 0.20),
-                                startRadius: 0,
-                                endRadius: diameter * 0.48
-                            )
-                        )
-                }
-                .overlay {
-                    Circle()
-                        .strokeBorder(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.92),
-                                    Color.white.opacity(0.35),
-                                    Color.sleekAccent.opacity(0.45)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1.15
-                        )
-                }
+            Circle().fill(Color.actionInk).frame(width: diameter, height: diameter)
 
         case .recordingFailed, .submissionFailed, .connecting, .weight, .impedance, .heartRate:
             Circle()
@@ -757,8 +659,8 @@ private struct RecordCircle: View {
 
         case .connecting(let label):
             VStack(spacing: FormaSpacing.md) {
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(FormaTypography.system(size: 28, weight: .semibold))
+                Image(forma: "antenna.radiowaves.left.and.right")
+                    .resizable().scaledToFit().frame(width: 28, height: 28)
                     .foregroundStyle(Color.sleekAccent)
                 Text(label)
                     .font(FormaTypography.textStyle(.headline, weight: .semibold))
@@ -822,14 +724,8 @@ private struct RecordCircle: View {
 
     @ViewBuilder
     private func resultSymbol(_ systemImage: String) -> some View {
-        let symbol = Image(systemName: systemImage)
-            .font(FormaTypography.system(size: 32, weight: .bold))
-
-        if reduceMotion {
-            symbol
-        } else {
-            symbol.symbolEffect(.appear, options: .nonRepeating)
-        }
+        Image(forma: systemImage)
+            .resizable().scaledToFit().frame(width: 32, height: 32)
     }
 
     private var backgroundFill: Color {
@@ -839,7 +735,7 @@ private struct RecordCircle: View {
         case .saved:
             return .formaPositive
         case .recordingFailed, .submissionFailed:
-            return .formaNegative
+            return .formaNegativeFill
         case .connecting, .weight, .impedance, .heartRate:
             return .appSecondaryBackground
         }
@@ -864,18 +760,7 @@ private struct RecordCircle: View {
         )
     }
 
-    private var shadowColor: Color {
-        switch state {
-        case .saved:
-            return .sleekAccent.opacity(successGlow ? 0.36 : 0.18)
-        case .recordingFailed, .submissionFailed:
-            return .formaNegative.opacity(0.22)
-        case .ready:
-            return .sleekAccent.opacity(0.34)
-        case .connecting, .weight, .impedance, .heartRate:
-            return .cardShadow
-        }
-    }
+    private var shadowColor: Color { .cardShadow }
 
     private var accessibilityLabel: String {
         switch state {
@@ -937,130 +822,15 @@ private struct RecordCircle: View {
 
 // MARK: - Success microinteractions
 
-/// Single soft lime bloom behind the success disc.
-private struct RecordSuccessAura: View {
-    let diameter: CGFloat
-    let isActive: Bool
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        Circle()
-            .fill(Color.sleekAccent.opacity(isActive ? 0.30 : 0.10))
-            .frame(width: diameter * 1.24, height: diameter * 1.24)
-            .blur(radius: reduceMotion ? 16 : 26)
-            .scaleEffect(isActive ? 1 : 0.78)
-            .opacity(isActive ? 1 : 0)
-            .animation(
-                FormaMotion.preferred(FormaMotion.successBurst, reduceMotion: reduceMotion),
-                value: isActive
-            )
-            .accessibilityHidden(true)
-    }
-}
-
-/// Thin expanding glass rings — one-shot, no spark clutter.
-private struct RecordSuccessBurst: View {
-    let diameter: CGFloat
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var expanded = false
-
-    var body: some View {
-        ZStack {
-            ForEach(0..<2, id: \.self) { index in
-                Circle()
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(ringStrokeOpacity(for: index)),
-                                Color.sleekAccent.opacity(ringStrokeOpacity(for: index) * 0.7)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: index == 0 ? 1.6 : 1.1
-                    )
-                    .frame(width: diameter, height: diameter)
-                    .scaleEffect(ringScale(for: index))
-                    .opacity(expanded ? 0 : 1)
-            }
-        }
-        .frame(width: diameter * 1.5, height: diameter * 1.5)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-        .onAppear {
-            guard !reduceMotion else {
-                expanded = true
-                return
-            }
-
-            expanded = false
-            withAnimation(FormaMotion.successBurst) {
-                expanded = true
-            }
-        }
-    }
-
-    private func ringScale(for index: Int) -> CGFloat {
-        guard expanded else { return 0.96 }
-        return index == 0 ? 1.16 : 1.30
-    }
-
-    private func ringStrokeOpacity(for index: Int) -> Double {
-        guard !reduceMotion else { return 0 }
-        // High at rest of animation start; fades as scale expands via parent opacity.
-        return index == 0 ? 0.55 : 0.32
-    }
-}
-
-/// Clean check + title on the glass disc — no nested frosted circle.
+/// Immediate, readable confirmation.
 private struct RecordSuccessMark: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var showGlyph = false
-    @State private var showTitle = false
-    @State private var bounceToken = 0
-
     var body: some View {
         VStack(spacing: FormaSpacing.xs) {
-            Image(systemName: "checkmark")
-                .font(FormaTypography.system(size: 36, weight: .bold))
-                .foregroundStyle(Color.actionForeground)
-                .shadow(color: .white.opacity(0.45), radius: 0, y: 1)
-                .scaleEffect(showGlyph ? 1 : 0.35)
-                .opacity(showGlyph ? 1 : 0)
-                .symbolEffect(.bounce, value: bounceToken)
-
-            Text("Saved")
-                .font(FormaTypography.system(size: 18, weight: .bold))
-                .foregroundStyle(Color.actionForeground.opacity(0.92))
-                .opacity(showTitle ? 1 : 0)
-                .offset(y: showTitle ? 0 : 6)
-                .scaleEffect(showTitle ? 1 : 0.94)
+            Image(forma: "checkmark").resizable().scaledToFit()
+                .frame(width: 36, height: 36)
+            Text("Saved").font(FormaTypography.sectionHeadline)
         }
-        .onAppear {
-            playEntrance()
-        }
-    }
-
-    private func playEntrance() {
-        if reduceMotion {
-            showGlyph = true
-            showTitle = true
-            return
-        }
-
-        showGlyph = false
-        showTitle = false
-
-        withAnimation(FormaMotion.success) {
-            showGlyph = true
-        }
-        bounceToken += 1
-
-        withAnimation(FormaMotion.successSoft.delay(0.08)) {
-            showTitle = true
-        }
+        .foregroundStyle(Color.actionForeground)
     }
 }
 
@@ -1298,7 +1068,7 @@ private struct RecordMeasurementSummary: View {
             if reduceMotion {
                 revealed = true
             } else {
-                withAnimation(FormaMotion.successSoft.delay(0.1)) {
+                withAnimation(FormaMotion.fast) {
                     revealed = true
                 }
             }
@@ -1408,13 +1178,13 @@ private struct RecordStageTracker: View {
                 HStack(spacing: FormaSpacing.xs) {
                     ZStack {
                         Circle()
-                            .fill(stage.isComplete ? Color.formaPositive : Color.appTertiaryBackground)
+                            .fill(Color.appTertiaryBackground)
                             .frame(width: 20, height: 20)
 
                         if stage.isComplete {
-                            Image(systemName: "checkmark")
-                                .font(FormaTypography.system(size: 9, weight: .bold))
-                                .foregroundStyle(Color.actionForeground)
+                            Image(forma: "checkmark")
+                                .resizable().scaledToFit().frame(width: 9, height: 9)
+                                .foregroundStyle(Color.formaPositive)
                                 .transition(reduceMotion ? .identity : .scale.combined(with: .opacity))
                         } else if isActive {
                             Circle()
@@ -1445,7 +1215,7 @@ private struct RecordStageTracker: View {
                 let isActive = !stage.isComplete
                     && stages.prefix(index).allSatisfy { $0.isComplete }
 
-                Image(systemName: stage.isComplete ? "checkmark.circle.fill" : "\(index + 1).circle.fill")
+                Image(forma: stage.isComplete ? "checkmark.circle.fill" : "\(index + 1).circle.fill")
                     .foregroundStyle(
                         stage.isComplete
                             ? Color.formaPositive
@@ -1472,201 +1242,21 @@ private struct RecordStageTracker: View {
     }
 }
 
-/// Bright brand lime disc for the ready state — light, cash-app energy.
+/// Solid high-contrast recording control.
 private struct ReadyRecordPalette: View {
     let diameter: CGFloat
-
     var body: some View {
-        Circle()
-            .fill(
-                RadialGradient(
-                    colors: [
-                        Color(red: 0.82, green: 1.00, blue: 0.28), // bright lift
-                        Color.sleekAccent,                          // #B8F015
-                        Color(red: 0.58, green: 0.78, blue: 0.05)  // deeper lime edge
-                    ],
-                    center: UnitPoint(x: 0.34, y: 0.28),
-                    startRadius: 0,
-                    endRadius: diameter * 0.74
-                )
-            )
+        Circle().fill(Color.actionInk)
             .frame(width: diameter, height: diameter)
-            .overlay {
-                // Soft white glass highlight — keeps the disc airy, not muddy.
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color.white.opacity(0.55),
-                                Color.white.opacity(0.12),
-                                .clear
-                            ],
-                            center: UnitPoint(x: 0.30, y: 0.22),
-                            startRadius: 0,
-                            endRadius: diameter * 0.52
-                        )
-                    )
-            }
-            .overlay {
-                Circle()
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.70),
-                                Color.white.opacity(0.18),
-                                Color.black.opacity(0.06)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1.1
-                    )
-            }
             .accessibilityHidden(true)
     }
 }
 
-/// Soft lime bloom behind the ready disc.
-private struct ReadyRecordIdleAura: View {
-    let diameter: CGFloat
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(
-            .animation(
-                minimumInterval: reduceMotion ? nil : 1.0 / 30.0,
-                paused: reduceMotion
-            )
-        ) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let breath = reduceMotion
-                ? 0.4
-                : 0.5 + 0.5 * sin(t * (2 * .pi / 2.6))
-
-            ZStack {
-                Circle()
-                    .fill(Color.sleekAccent.opacity(0.18 + 0.16 * breath))
-                    .frame(width: diameter * 1.22, height: diameter * 1.22)
-                    .blur(radius: reduceMotion ? 16 : 26)
-                    .scaleEffect(0.94 + 0.10 * breath)
-
-                Circle()
-                    .fill(Color.white.opacity(0.10 + 0.08 * breath))
-                    .frame(width: diameter * 1.06, height: diameter * 1.06)
-                    .blur(radius: 14)
-            }
-        }
-        .accessibilityHidden(true)
-    }
-}
-
-/// Expanding rings + gentle bounce on the ready control before tap.
-private struct ReadyRecordIdleBurst: View {
-    let diameter: CGFloat
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(
-            .animation(
-                minimumInterval: reduceMotion ? nil : 1.0 / 30.0,
-                paused: reduceMotion
-            )
-        ) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let ring = reduceMotion
-                ? 0.0
-                : t.truncatingRemainder(dividingBy: 2.4) / 2.4
-            let breath = reduceMotion
-                ? 0.0
-                : 0.5 + 0.5 * sin(t * (2 * .pi / 2.6))
-
-            ZStack {
-                ForEach(0..<2, id: \.self) { index in
-                    let phase = (ring + Double(index) * 0.38).truncatingRemainder(dividingBy: 1)
-                    Circle()
-                        .strokeBorder(
-                            Color.sleekAccent.opacity((1 - phase) * (index == 0 ? 0.42 : 0.26)),
-                            lineWidth: index == 0 ? 2.5 : 1.5
-                        )
-                        .frame(width: diameter, height: diameter)
-                        .scaleEffect(1.0 + 0.16 * phase)
-                }
-            }
-            .frame(width: diameter * 1.45, height: diameter * 1.45)
-            .scaleEffect(1.0 + 0.018 * breath)
-        }
-        .accessibilityHidden(true)
-    }
-}
-
-/// Idle “Record” label with a soft bounce so the CTA feels alive.
 private struct ReadyRecordLabel: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
-        TimelineView(
-            .animation(
-                minimumInterval: reduceMotion ? nil : 1.0 / 30.0,
-                paused: reduceMotion
-            )
-        ) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let breath = reduceMotion
-                ? 0.0
-                : 0.5 + 0.5 * sin(t * (2 * .pi / 2.6))
-
-            Text("Record")
-                .font(FormaTypography.system(size: 22, weight: .bold))
-                .foregroundStyle(Color.actionForeground)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .shadow(color: .white.opacity(0.35), radius: 0, y: 1)
-                .shadow(color: .black.opacity(0.10), radius: 6, y: 2)
-                .scaleEffect(1.0 + 0.025 * breath)
-                .offset(y: reduceMotion ? 0 : -1.2 * breath)
-        }
-    }
-}
-
-private struct OrbitingRecordRing: View {
-    let diameter: CGFloat
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isSpinning = false
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Color.sleekAccent.opacity(0.12), lineWidth: 3)
-
-            Circle()
-                .trim(from: 0, to: 0.24)
-                .stroke(
-                    AngularGradient(
-                        colors: [.sleekAccent.opacity(0.22), .sleekAccent],
-                        center: .center
-                    ),
-                    style: StrokeStyle(lineWidth: 3, lineCap: .round)
-                )
-                .rotationEffect(.degrees(reduceMotion ? -90 : (isSpinning ? 270 : -90)))
-                .animation(
-                    reduceMotion
-                        ? nil
-                        : .linear(duration: 1.6).repeatForever(autoreverses: false),
-                    value: isSpinning
-                )
-        }
-        .frame(width: diameter, height: diameter)
-        .accessibilityHidden(true)
-        .onAppear {
-            guard !reduceMotion else { return }
-            isSpinning = true
-        }
-        .onChange(of: reduceMotion) { _, shouldReduceMotion in
-            isSpinning = !shouldReduceMotion
-        }
+        Text("Record")
+            .font(FormaTypography.system(size: 22, weight: .bold))
+            .foregroundStyle(Color.actionForeground)
     }
 }
 
@@ -1688,11 +1278,11 @@ private struct OrbitingRecordRing: View {
 #Preview("Record header button") {
     // Header + is intentionally quiet glass — idle energy lives on the big Record disc.
     Button(action: {}) {
-        Image(systemName: "plus")
-            .font(FormaTypography.system(size: 15, weight: .semibold))
+        Image(forma: "plus")
+            .resizable().scaledToFit().frame(width: 15, height: 15)
             .frame(width: 36, height: 36)
     }
-    .buttonStyle(.glass)
+    .buttonStyle(FormaIconButtonStyle())
     .buttonBorderShape(.circle)
     .controlSize(.regular)
     .frame(maxWidth: .infinity, maxHeight: .infinity)

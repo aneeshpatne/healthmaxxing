@@ -65,10 +65,10 @@ struct Profiles: View {
         Button {
             isShowingAddProfile = true
         } label: {
-            Image(systemName: "plus")
-                .font(FormaTypography.system(size: 15, weight: .semibold))
+            Image(forma: "plus")
+                .resizable().scaledToFit().frame(width: 15, height: 15)
         }
-        .buttonStyle(.glass)
+        .buttonStyle(FormaIconButtonStyle())
         .buttonBorderShape(.circle)
         .accessibilityLabel("Add Profile")
         .accessibilityIdentifier("profiles-add-button")
@@ -146,7 +146,7 @@ struct Profiles: View {
             Button {
                 errorMessage = nil
             } label: {
-                Image(systemName: "xmark.circle.fill")
+                Image(forma: "xmark.circle.fill")
                     .foregroundStyle(.tertiary)
             }
             .accessibilityLabel("Dismiss")
@@ -512,7 +512,7 @@ private struct ProfileFormView: View {
                             muscularityGoal = goal
                         } label: {
                             HStack(alignment: .top, spacing: FormaSpacing.sm) {
-                                Image(systemName: muscularityGoal == goal ? "checkmark.circle.fill" : "circle")
+                                Image(forma: muscularityGoal == goal ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(muscularityGoal == goal ? Color.sleekAccent : Color.secondary)
 
                                 VStack(alignment: .leading, spacing: FormaSpacing.xxs) {
@@ -877,7 +877,7 @@ private struct ProfileRow: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if profile.isPrimary {
-                Label("Primary profile", systemImage: "checkmark.seal.fill")
+                Label("Primary profile", image: "forma-check-circle")
                     .font(FormaTypography.supporting.weight(.semibold))
                     .foregroundStyle(Color.sleekAccent)
             }
@@ -942,7 +942,7 @@ private struct ProfileRow: View {
     private func editButton(expanded: Bool) -> some View {
         Button(action: onEdit) {
             HStack(spacing: FormaSpacing.xs) {
-                Image(systemName: "pencil")
+                Image(forma: "pencil")
                     .font(FormaTypography.action)
                 if expanded {
                     Text("Edit Profile")
@@ -996,8 +996,8 @@ private struct ProfileRow: View {
     }
 
     private func metadataIcon(_ systemImage: String) -> some View {
-        Image(systemName: systemImage)
-            .font(FormaTypography.body)
+        Image(forma: systemImage)
+            .resizable().scaledToFit().frame(width: 18, height: 18)
             .foregroundStyle(Color.secondary)
             .frame(width: 20, alignment: .leading)
             .accessibilityHidden(true)
