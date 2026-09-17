@@ -240,7 +240,9 @@ extension ScaleBLEManager: CBPeripheralDelegate {
             return
         }
 
-        latestMeasurement = decoded
+        if decoded != latestMeasurement {
+            latestMeasurement = decoded
+        }
 
         if decoded.isFinal {
             closeConnection(markFinished: true)

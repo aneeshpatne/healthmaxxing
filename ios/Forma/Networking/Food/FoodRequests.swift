@@ -166,13 +166,15 @@ enum FoodSearch {
     static func matches(_ query: String, in foods: [FoodNutrition], limit: Int = 5) -> [FoodNutrition] {
         let needle = normalize(query)
         guard !needle.isEmpty else { return [] }
+        let queryTokens = needle.split(separator: " ")
+        let needlePairs = pairCounts(needle)
+        let needlePairCount = needlePairs.values.reduce(0, +)
         return foods.compactMap { food -> (FoodNutrition, Double)? in
             let name = normalize(food.name)
             let haystack = "\(name) \(normalize(food.servingDescription))"
-            var score = diceCoefficient(needle, haystack)
+            var score = diceCoefficient(needle, haystack, lhsPairs: needlePairs, lhsPairCount: needlePairCount)
             if name == needle { score += 2 }
             if name.contains(needle) { score += 1 }
-            let queryTokens = needle.split(separator: " ")
             let foodTokens = haystack.split(separator: " ")
             let hits = queryTokens.filter { queryToken in
                 foodTokens.contains { $0.hasPrefix(queryToken) || queryToken.hasPrefix($0) }
@@ -195,14 +197,15 @@ enum FoodSearch {
             .joined(separator: " ")
     }
 
-    private static func diceCoefficient(_ lhs: String, _ rhs: String) -> Double {
+    private static func diceCoefficient(
+        _ lhs: String, _ rhs: String, lhsPairs: [String: Int], lhsPairCount: Int
+    ) -> Double {
         guard lhs.count > 1, rhs.count > 1 else { return rhs.contains(lhs) ? 1 : 0 }
-        let lhsPairs = pairCounts(lhs)
         let rhsPairs = pairCounts(rhs)
         let overlap = lhsPairs.reduce(into: 0) { result, item in
             result += min(item.value, rhsPairs[item.key, default: 0])
         }
-        let count = lhsPairs.values.reduce(0, +) + rhsPairs.values.reduce(0, +)
+        let count = lhsPairCount + rhsPairs.values.reduce(0, +)
         return count == 0 ? 0 : Double(2 * overlap) / Double(count)
     }
 

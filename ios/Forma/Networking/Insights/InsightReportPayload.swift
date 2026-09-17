@@ -77,7 +77,6 @@ enum BodyType: String, Codable, Equatable {
     var displayName: String { rawValue.capitalized }
 }
 
-
 struct InsightReportPayload: Equatable {
     let overview: InsightReportSection?
     let foundation: InsightReportSection?
@@ -118,7 +117,7 @@ struct InsightReportPayload: Equatable {
     }
 
     private static func metricSections(from json: JSONValue?) -> [String: InsightReportMetricSection] {
-        (json?.objectValue ?? [:]).compactMapValues(InsightReportMetricSection.init(json:))
+        (json?.objectValue ?? [:]).compactMapValues { InsightReportMetricSection(json: $0) }
     }
 
     private static func hasValidSchema(_ root: [String: JSONValue]) -> Bool {
@@ -512,7 +511,7 @@ struct InsightReportMetricSection: Equatable {
 
     static func trendSections(from json: JSONValue?) -> [String: [InsightReportTrendPoint]] {
         (json?.objectValue ?? [:]).compactMapValues { value in
-            value.arrayValue?.compactMap(InsightReportTrendPoint.init(json:))
+            value.arrayValue?.compactMap { InsightReportTrendPoint(json: $0) }
         }
     }
 }
@@ -520,6 +519,7 @@ struct InsightReportMetricSection: Equatable {
 struct InsightReportTrendPoint: Equatable {
     let createdAt: String
     let value: Double
+    private let parsedDate: Date?
 
     init?(json: JSONValue) {
         guard let object = json.objectValue,
@@ -530,24 +530,12 @@ struct InsightReportTrendPoint: Equatable {
 
         self.createdAt = createdAt
         self.value = value
-    }
-
-    var date: Date {
-        ISO8601DateFormatter.reportDateFormatter.date(from: createdAt)
+        parsedDate = ISO8601DateFormatter.reportDateFormatter.date(from: createdAt)
             ?? ISO8601DateFormatter.reportDateFormatterWithoutFractions.date(from: createdAt)
             ?? ISO8601DateFormatter.reportDateFormatterDateOnly.date(from: createdAt)
-            ?? Date()
     }
 
-    var shortDate: String {
-        Self.shortDateFormatter.string(from: date)
-    }
-
-    private static let shortDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
+    var date: Date { parsedDate ?? Date() }
 }
 
 private extension ISO8601DateFormatter {

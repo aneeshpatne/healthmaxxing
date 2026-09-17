@@ -10,7 +10,11 @@ import Foundation
 
 @MainActor
 final class MetricsReportStore: ObservableObject {
-    @Published private(set) var completedReport: InsightReport?
+    @Published private(set) var completedReport: InsightReport? {
+        didSet { payload = InsightReportPayload(data: completedReport?.data) }
+    }
+    // Parse only when the report changes, never during SwiftUI body evaluation.
+    private(set) var payload: InsightReportPayload?
     @Published private(set) var activeJob: InsightReportJob?
     @Published private(set) var latestReport: InsightReportJob?
     @Published private(set) var isLoading = false
@@ -22,20 +26,8 @@ final class MetricsReportStore: ObservableObject {
     private var cachedProfileId: UUID?
     private var pollTask: Task<Void, Never>?
 
-    var payload: InsightReportPayload? {
-        InsightReportPayload(data: completedReport?.data)
-    }
-
-    func loadLatestReport() async {
-        await loadAndPollReport()
-    }
-
-    func loadAndPollReport() async {
-        await loadAndPollReport(ignoringCache: false)
-    }
-
     func refreshReport() async {
-        await loadAndPollReport(ignoringCache: true)
+        await loadAndPollReport()
     }
 
     /// Starts the loading flow from the job returned by ingest.
@@ -55,10 +47,8 @@ final class MetricsReportStore: ObservableObject {
 
             await self.pollReport(profileId: profileId, jobId: jobId)
 
-            if !Task.isCancelled {
-                self.isLoading = false
-            }
-
+            guard !Task.isCancelled else { return }
+            self.isLoading = false
             self.pollTask = nil
         }
     }
@@ -87,7 +77,7 @@ final class MetricsReportStore: ObservableObject {
     }
     #endif
 
-    private func loadAndPollReport(ignoringCache _: Bool) async {
+    func loadAndPollReport() async {
         guard let profileId = PrimaryProfileStore.primaryProfileId else {
             errorMessage = "Create or select a primary profile to load reports."
             return
@@ -113,9 +103,13 @@ final class MetricsReportStore: ObservableObject {
         do {
             let activeResponse = try await apiClient.send(GetActiveInsightJobsRequest(profileId: profileId))
             let serverJobs = activeResponse.jobs ?? []
-            let jobIdToPoll = serverJobs.sorted { $0.createdAt > $1.createdAt }.first?.pollId
+            let newestJob = serverJobs.reduce(nil as InsightReportJob?) { newest, job in
+                guard let newest else { return job }
+                return job.createdAt > newest.createdAt ? job : newest
+            }
+            let jobIdToPoll = newestJob?.pollId
 
-            activeJob = serverJobs.first(where: { $0.pollId == jobIdToPoll }) ?? serverJobs.first
+            activeJob = newestJob
             isWaitingForReport = jobIdToPoll != nil
 
             if let jobIdToPoll {
@@ -167,6 +161,8 @@ final class MetricsReportStore: ObservableObject {
                 isWaitingForReport = false
                 return
             }
+
+            guard !Task.isCancelled else { return }
 
             if response.ok == false {
                 InsightReportJobStore.remove(jobId, for: profileId)
