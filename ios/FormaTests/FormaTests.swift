@@ -7,6 +7,7 @@
 
 import Testing
 import Foundation
+import SwiftUI
 @testable import Forma
 
 struct FormaChartStyleTests {
@@ -137,5 +138,64 @@ struct ProfileRequestTests {
         let json = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         #expect(json.count == 1)
         #expect(json["muscularityGoal"] as? String == "muscular")
+    }
+}
+
+
+@MainActor
+struct PerformanceSweepTests {
+    @Test func preparedChartPreservesSamplesAndFindsPerMetricEndpoints() {
+        let early = Date(timeIntervalSinceReferenceDate: 100)
+        let late = Date(timeIntervalSinceReferenceDate: 200)
+        let points = [
+            FormaChartPoint(date: late, value: 12, metric: "Fat", color: .red),
+            FormaChartPoint(date: early, value: 60, metric: "Muscle", color: .green),
+            FormaChartPoint(date: early, value: 14, metric: "Fat", color: .red)
+        ]
+        let prepared = FormaChartData(points: points, includeZero: true)
+        #expect(prepared.points == [points[2], points[1], points[0]])
+        #expect(prepared.sampleDates == [early, late])
+        #expect(prepared.latestDateByMetric == ["Fat": late, "Muscle": early])
+        #expect(prepared.groups["Fat"] == [points[2], points[0]])
+        #expect(prepared.domain.lowerBound < 0)
+        #expect(prepared.domain.upperBound > 60)
+        #expect(FormaChartData(points: prepared.points).points == prepared.points)
+    }
+
+    @Test func preparedChartHandlesEmptyAndSingleSample() {
+        let empty = FormaChartData(points: [])
+        #expect(empty.points.isEmpty)
+        #expect(empty.sampleDates.isEmpty)
+        #expect(empty.latestDateByMetric.isEmpty)
+        #expect(empty.domain == 0...1)
+        let point = FormaChartPoint(date: .distantPast, value: 72, metric: "Weight", color: .blue)
+        let single = FormaChartData(points: [point])
+        #expect(single.points == [point])
+        #expect(single.latestDateByMetric["Weight"] == point.date)
+        #expect(single.domain.contains(72))
+    }
+
+    @Test func trendDatesKeepSupportedTimestampFormats() throws {
+        let timestamps = ["2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00Z", "2026-01-01"]
+        let dates = try timestamps.map { timestamp in
+            let point = try #require(InsightReportTrendPoint(json: .object([
+                "createdAt": .string(timestamp), "value": .number(72)
+            ])))
+            return point.date
+        }
+        #expect(dates.allSatisfy { $0 == dates[0] })
+    }
+
+    @Test func reportPayloadTracksReplacementAndClearing() {
+        let store = MetricsReportStore()
+        #expect(store.payload == nil)
+        store.applyDebugScenario(.metricsPopulated)
+        #expect(store.payload == InsightReportPayload(data: FormaFixtures.populatedReport.data))
+        store.applyDebugScenario(.metricsLoading)
+        #expect(store.payload == nil)
+        store.applyDebugScenario(.metricsPopulated)
+        #expect(store.payload != nil)
+        store.applyDebugScenario(.metricsError)
+        #expect(store.payload == nil)
     }
 }
