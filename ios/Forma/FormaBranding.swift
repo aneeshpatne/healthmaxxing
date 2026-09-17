@@ -40,6 +40,7 @@ struct FormaBrandLockup: View {
     var body: some View {
         HStack(alignment: .center, spacing: variant.spacing) {
             Image("vectorized_019fd7b0-2531-7c0a-98f7-fb339b707a32")
+                .renderingMode(.original)
                 .resizable()
                 .scaledToFit()
                 .frame(width: variant.markSize.width, height: variant.markSize.height)
