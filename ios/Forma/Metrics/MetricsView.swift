@@ -278,14 +278,11 @@ struct MetricsSkeletonView: View {
     var body: some View {
         VStack(spacing: FormaSpacing.cardGap) {
             if let status, !status.isEmpty {
-                HStack(spacing: FormaSpacing.xs) {
-                    FormaLoadingIndicator()
-
-                    Text(status)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                FormaLoadingHero(message: status)
+            } else {
+                FormaLoadingIndicator(size: .large)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, FormaSpacing.md)
             }
 
             FormaSkeletonCard(kind: .gauge)

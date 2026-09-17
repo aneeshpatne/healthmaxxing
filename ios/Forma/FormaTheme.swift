@@ -902,59 +902,238 @@ struct FormaStatusView: View {
 enum FormaLoadingIndicatorSize: Equatable {
     case compact
     case medium
+    case large
 
-    fileprivate var frame: CGSize {
+    fileprivate var side: CGFloat {
         switch self {
-        case .compact: CGSize(width: 22, height: 28)
-        case .medium: CGSize(width: 42, height: 54)
+        case .compact: 36
+        case .medium: 80
+        case .large: 132
         }
     }
 
-    fileprivate var lineWidth: CGFloat {
+    /// How much of the Lottie enter/exit travel to keep. Compact sits in
+    /// tight rows, so the slide is shortened.
+    fileprivate var travel: CGFloat {
         switch self {
-        case .compact: 1.8
-        case .medium: 2.8
+        case .compact: 0.28
+        case .medium: 0.55
+        case .large: 0.85
         }
     }
 }
 
-/// A quiet expression of the Forma mark used consistently for loading.
+/// Cycling exercise poses from the shared Lottie, tinted with the brand accent.
 /// Loading copy belongs to the parent so VoiceOver hears one useful status.
-/// Uses a single opacity pulse — not staggered stroke thrash.
 struct FormaLoadingIndicator: View {
     var size: FormaLoadingIndicatorSize = .compact
     var tint: Color = .sleekAccent
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isAnimating = false
+    @State private var startedAt = Date()
 
     var body: some View {
-        ZStack {
-            ForEach(0..<3, id: \.self) { index in
-                FormaMarkContour(index: index)
-                    .trim(from: 0, to: 1)
-                    .stroke(
-                        tint,
-                        style: StrokeStyle(
-                            lineWidth: index == 0 ? size.lineWidth : size.lineWidth * 0.72,
-                            lineCap: .round,
-                            lineJoin: .round
-                        )
-                    )
+        Group {
+            if reduceMotion {
+                pose(FormaExerciseCycle.sample(frame: 12), poseIndex: 0)
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: false)) { context in
+                    let elapsed = context.date.timeIntervalSince(startedAt)
+                    let cycle = FormaExerciseCycle.snapshot(at: elapsed)
+                    pose(cycle.motion, poseIndex: cycle.poseIndex)
+                }
             }
         }
-        .opacity(reduceMotion ? 0.88 : (isAnimating ? 1.0 : 0.48))
-        .animation(FormaMotion.preferred(FormaMotion.pulse, reduceMotion: reduceMotion), value: isAnimating)
-        .frame(width: size.frame.width, height: size.frame.height)
-        .shadow(color: tint.opacity(reduceMotion ? 0.10 : 0.16), radius: size == .compact ? 3 : 5)
+        .frame(width: size.side, height: size.side)
+        .clipped()
         .accessibilityHidden(true)
         .onAppear {
-            guard !reduceMotion else { return }
-            isAnimating = true
+            startedAt = Date()
         }
         .onChange(of: reduceMotion) { _, shouldReduceMotion in
-            isAnimating = !shouldReduceMotion
+            if !shouldReduceMotion {
+                startedAt = Date()
+            }
         }
+    }
+
+    private func pose(_ motion: FormaExerciseCycle.Motion, poseIndex: Int) -> some View {
+        Image(FormaExerciseCycle.imageNames[poseIndex])
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .foregroundStyle(tint)
+            .padding(size.side * 0.06)
+            .scaleEffect(motion.scale)
+            .offset(y: motion.offsetY * size.side * size.travel)
+            .blur(radius: motion.blur * size.side * 0.10)
+            .opacity(motion.opacity)
+            .shadow(color: tint.opacity(reduceMotion ? 0.10 : 0.16), radius: size == .compact ? 2 : 5)
+            .frame(width: size.side, height: size.side)
+    }
+}
+
+/// Six-pose cycle matching the Exercise SVG Cycle Lottie (180 frames @ 30fps).
+private enum FormaExerciseCycle {
+    static let imageNames = [
+        "exercise-running",
+        "exercise-deadlift",
+        "exercise-lat-pulldown",
+        "exercise-squat",
+        "exercise-overhead-press",
+        "exercise-chest-press"
+    ]
+
+    static let poseCount = 6
+    static let poseDuration: TimeInterval = 1
+    static let framesPerPose = 30.0
+    static let compositionHeight = 1080.0
+
+    struct Motion {
+        var opacity: Double
+        var offsetY: Double
+        var scale: Double
+        var blur: Double
+    }
+
+    struct Snapshot {
+        var poseIndex: Int
+        var motion: Motion
+    }
+
+    static func snapshot(at elapsed: TimeInterval) -> Snapshot {
+        let cycle = elapsed.truncatingRemainder(dividingBy: Double(poseCount) * poseDuration)
+        let poseIndex = min(poseCount - 1, max(0, Int(cycle / poseDuration)))
+        let frame = (cycle - Double(poseIndex) * poseDuration) * framesPerPose
+        return Snapshot(poseIndex: poseIndex, motion: sample(frame: frame))
+    }
+
+    /// Local frame 0..<30 for a single pose, using the Lottie keyframes.
+    static func sample(frame: Double) -> Motion {
+        Motion(
+            opacity: sampleOpacity(frame),
+            offsetY: sampleOffsetY(frame),
+            scale: sampleScale(frame),
+            blur: sampleBlur(frame)
+        )
+    }
+
+    private static func sampleOpacity(_ frame: Double) -> Double {
+        sample(
+            frame,
+            keys: [
+                Keyframe(frame: 0, value: 0, outX: 0.12, outY: 0.92, inX: 0.12, inY: 0.92),
+                Keyframe(frame: 3, value: 1, outX: 0.333, outY: 0.333, inX: 0.333, inY: 0.333),
+                Keyframe(frame: 30, value: 1, outX: 0.333, outY: 0.333, inX: 0.333, inY: 0.333)
+            ]
+        )
+    }
+
+    /// Normalized Y offset in composition heights (positive is down).
+    private static func sampleOffsetY(_ frame: Double) -> Double {
+        sample(
+            frame,
+            keys: [
+                Keyframe(frame: 0, value: 850, outX: 0.12, outY: 0.92, inX: 0.12, inY: 0.92),
+                Keyframe(frame: 6, value: -25, outX: 0.72, outY: 0.08, inX: 0.12, inY: 0.92),
+                Keyframe(frame: 10, value: 0, outX: 0.333, outY: 0.333, inX: 0.333, inY: 0.333),
+                Keyframe(frame: 20, value: 0, outX: 0.72, outY: 0.08, inX: 0.333, inY: 0.333),
+                Keyframe(frame: 30, value: -235, outX: 0.333, outY: 0.333, inX: 0.72, inY: 0.08)
+            ]
+        ) / compositionHeight
+    }
+
+    private static func sampleScale(_ frame: Double) -> Double {
+        let rest = 60.60606060606061
+        return sample(
+            frame,
+            keys: [
+                Keyframe(frame: 0, value: 46.06060606060606, outX: 0.12, outY: 0.92, inX: 0.12, inY: 0.92),
+                Keyframe(frame: 6, value: 61.81818181818182, outX: 0.72, outY: 0.08, inX: 0.12, inY: 0.92),
+                Keyframe(frame: 10, value: rest, outX: 0.333, outY: 0.333, inX: 0.333, inY: 0.333),
+                Keyframe(frame: 20, value: rest, outX: 0.72, outY: 0.08, inX: 0.333, inY: 0.333),
+                Keyframe(frame: 30, value: 65.45454545454547, outX: 0.333, outY: 0.333, inX: 0.72, inY: 0.08)
+            ]
+        ) / rest
+    }
+
+    private static func sampleBlur(_ frame: Double) -> Double {
+        sample(
+            frame,
+            keys: [
+                Keyframe(frame: 0, value: 1, outX: 0.12, outY: 0.92, inX: 0.12, inY: 0.92),
+                Keyframe(frame: 6, value: 0, outX: 0.333, outY: 0.333, inX: 0.333, inY: 0.333),
+                Keyframe(frame: 20, value: 0, outX: 0.72, outY: 0.08, inX: 0.333, inY: 0.333),
+                Keyframe(frame: 30, value: 1, outX: 0.333, outY: 0.333, inX: 0.72, inY: 0.08)
+            ]
+        )
+    }
+
+    private struct Keyframe {
+        var frame: Double
+        var value: Double
+        var outX: Double
+        var outY: Double
+        var inX: Double
+        var inY: Double
+    }
+
+    private static func sample(_ frame: Double, keys: [Keyframe]) -> Double {
+        guard let first = keys.first, let last = keys.last else { return 0 }
+        if frame <= first.frame { return first.value }
+        if frame >= last.frame { return last.value }
+        for index in 0..<(keys.count - 1) {
+            let start = keys[index]
+            let end = keys[index + 1]
+            guard frame <= end.frame else { continue }
+            let span = max(end.frame - start.frame, .leastNonzeroMagnitude)
+            let t = (frame - start.frame) / span
+            let eased = UnitBezier(x1: start.outX, y1: start.outY, x2: end.inX, y2: end.inY).value(at: t)
+            return start.value + (end.value - start.value) * eased
+        }
+        return last.value
+    }
+}
+
+/// CSS-style cubic-bezier evaluator for Lottie temporal easing.
+private struct UnitBezier {
+    let x1: Double
+    let y1: Double
+    let x2: Double
+    let y2: Double
+
+    func value(at t: Double) -> Double {
+        if t <= 0 { return 0 }
+        if t >= 1 { return 1 }
+        var guess = t
+        for _ in 0..<8 {
+            let x = sampleX(guess) - t
+            let dx = sampleDX(guess)
+            if abs(x) < 1e-6 || dx == 0 { break }
+            guess = min(max(guess - x / dx, 0), 1)
+        }
+        return sampleY(guess)
+    }
+
+    private func sampleX(_ t: Double) -> Double {
+        let cx = 3 * x1
+        let bx = 3 * (x2 - x1) - cx
+        let ax = 1 - cx - bx
+        return ((ax * t + bx) * t + cx) * t
+    }
+
+    private func sampleDX(_ t: Double) -> Double {
+        let cx = 3 * x1
+        let bx = 3 * (x2 - x1) - cx
+        let ax = 1 - cx - bx
+        return (3 * ax * t + 2 * bx) * t + cx
+    }
+
+    private func sampleY(_ t: Double) -> Double {
+        let cy = 3 * y1
+        let by = 3 * (y2 - y1) - cy
+        let ay = 1 - cy - by
+        return ((ay * t + by) * t + cy) * t
     }
 }
 
@@ -978,6 +1157,36 @@ struct FormaRefreshStatus: View {
         .background(Color.appTertiaryBackground, in: Capsule())
         .accessibilityElement(children: .combine)
     }
+}
+
+/// Centered large exercise-cycle loader with status copy for full-page waits.
+struct FormaLoadingHero: View {
+    let message: String
+    var tint: Color = .sleekAccent
+
+    var body: some View {
+        VStack(spacing: FormaSpacing.sm) {
+            FormaLoadingIndicator(size: .large, tint: tint)
+
+            Text(message)
+                .font(FormaTypography.supporting.weight(.medium))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, FormaSpacing.md)
+    }
+}
+
+#Preview("Loading cycle") {
+    VStack(spacing: FormaSpacing.xl) {
+        FormaLoadingIndicator()
+        FormaLoadingIndicator(size: .medium)
+        FormaLoadingHero(message: "Preparing your report…")
+    }
+    .padding(FormaSpacing.xl)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(FormaBackground())
 }
 
 // MARK: - Transitions

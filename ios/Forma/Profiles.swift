@@ -115,13 +115,7 @@ struct Profiles: View {
 
     private var loadingProfilesView: some View {
         VStack(spacing: FormaSpacing.cardGap) {
-            HStack(spacing: FormaSpacing.sm) {
-                FormaLoadingIndicator()
-                Text("Loading profiles")
-                    .font(FormaTypography.supporting.weight(.medium))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-            }
+            FormaLoadingHero(message: "Loading profiles")
 
             ForEach(0..<3, id: \.self) { _ in
                 SkeletonCardView()
@@ -223,13 +217,7 @@ struct PrimaryProfileGate: View {
             switch loadState {
             case .checking:
                 VStack(spacing: FormaSpacing.cardGap) {
-                    HStack(spacing: FormaSpacing.sm) {
-                        FormaLoadingIndicator()
-                        Text("Checking your profile")
-                            .font(FormaTypography.supporting.weight(.medium))
-                            .foregroundStyle(.secondary)
-                        Spacer(minLength: 0)
-                    }
+                    FormaLoadingHero(message: "Checking your profile")
 
                     FormaSkeletonCard()
                     FormaSkeletonCard()
